@@ -14,6 +14,9 @@
 #include <exec/types.h>
 #include <compat.h>
 #include <pcie_brcmstb.h>
+#include <pci_types.h>
+#include <pci_ids.h>
+#include <pci_auto.h>
 
 #define PCI_CFG_SPACE_SIZE 256
 #define PCI_CFG_SPACE_EXP_SIZE 4096
@@ -570,23 +573,6 @@ static inline void pci_set_region(struct pci_region *reg,
 
 #define INDIRECT_TYPE_NO_PCIE_LINK 1
 
-void pciauto_region_align(struct pci_region *res, pci_size_t size);
-void pciauto_config_init(struct pci_controller *hose);
-
-/**
- * pciauto_region_allocate() - Allocate resources from a PCI resource region
- *
- * Allocates @size bytes from the PCI resource @res. If @supports_64bit is
- * false, the result will be guaranteed to fit in 32 bits.
- *
- * @res:		PCI region to allocate from
- * @size:		Amount of bytes to allocate
- * @bar:		Returns the PCI bus address of the allocated resource
- * @supports_64bit:	Whether to allow allocations above the 32-bit boundary
- * Return: 0 if successful, -1 on failure
- */
-int pciauto_region_allocate(struct pci_region *res, pci_size_t size,
-							pci_addr_t *bar, BOOL supports_64bit);
 int pci_skip_dev(struct pci_controller *hose, pci_dev_t dev);
 
 int pci_last_busno(void);
@@ -812,17 +798,6 @@ int dm_pci_write_config32(struct pci_device *dev, int offset, ULONG value);
 int dm_pci_clrset_config8(struct pci_device *dev, int offset, ULONG clr, ULONG set);
 int dm_pci_clrset_config16(struct pci_device *dev, int offset, ULONG clr, ULONG set);
 int dm_pci_clrset_config32(struct pci_device *dev, int offset, ULONG clr, ULONG set);
-
-/**
- * dm_pciauto_config_device() - configure a device ready for use
- *
- * Space is allocated for each PCI base address register (BAR) so that the
- * devices are mapped into memory and I/O space ready for use.
- *
- * @dev:	Device to configure
- * Return: 0 if OK, -ve on error
- */
-int dm_pciauto_config_device(struct pci_device *dev);
 
 /**
  * pci_conv_32_to_size() - convert a 32-bit read value to the given size
@@ -1176,8 +1151,6 @@ struct pci_driver_entry
 		.match = __match,                                                   \
 	}
 
-void dm_pciauto_prescan_setup_bridge(struct pci_bus *dev, int sub_bus);
-void dm_pciauto_postscan_setup_bridge(struct pci_bus *dev, int sub_bus);
 int device_probe(struct pci_device *dev);
 
 #endif /* _PCI_H */

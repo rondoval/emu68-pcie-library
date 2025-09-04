@@ -13,11 +13,9 @@
 #define ENOMEM 7
 #define EPERM 8
 
-#define SZ_1M				0x00100000
-
 typedef uint64_t u64;
-typedef ULONG phys_addr_t;
-typedef ULONG size_t;
+
+#define SZ_1M				0x00100000
 
 /**
  * upper_32_bits - return bits 32-63 of a number

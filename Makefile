@@ -3,7 +3,7 @@ INCLUDE := -Iinclude
 CFLAGS := -m68040 -O2 -fomit-frame-pointer -MMD -MP -Wall -Wno-unused-function -DDEBUG $(INCLUDE)
 OBJDIR := Build
 TARGET := pcie_list
-OBJS := pcie_list.o devtree.o pcie_brcmstb.o pci-uclass.o pci_auto.o pci_auto_common.o 
+OBJS := pcie_list.o devtree.o pcie_brcmstb.o pci-uclass.o pci_auto.o
 
 all: $(OBJDIR) $(OBJDIR)/$(TARGET)
 

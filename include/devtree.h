@@ -7,10 +7,6 @@
 #include <proto/devicetree.h>
 #endif
 
-#include <exec/types.h>
-
-#include <devtree.h>
-
 extern APTR DeviceTreeBase;
 
 uint64_t DT_GetNumber(ULONG *ptr, ULONG cells);
