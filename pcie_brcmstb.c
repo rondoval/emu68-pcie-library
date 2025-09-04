@@ -384,6 +384,52 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie,
 	writel(tmp, base + PCIE_MEM_WIN0_LIMIT_HI(win));
 }
 
+static int brcm_devtree_parse(struct pci_controller *ctrl)
+{
+	DT_Init();
+
+	ctrl->dt_node_name = DT_GetAlias("pcie0");
+	if (ctrl->dt_node_name == NULL)
+	{
+		Kprintf("[pcie] %s: Failed to get aliases from device tree\n", __func__);
+		return -1;
+	}
+
+	APTR key = DT_OpenKey(ctrl->dt_node_name);
+	if (key == NULL)
+	{
+		Kprintf("[pcie] %s: Failed to open key %s\n", __func__, ctrl->dt_node_name);
+		return -1;
+	}
+
+	ctrl->compatible = DT_GetPropValue(DT_FindProperty(key, (CONST_STRPTR) "compatible"));
+
+	ctrl->base = DT_GetBaseAddress(ctrl->dt_node_name);
+	if (ctrl->base == NULL)
+	{
+		Kprintf("[pcie] %s: Failed to get PCIe base address\n", __func__);
+		DT_CloseKey(key);
+		return -1;
+	}
+
+	Kprintf("[pcie] %s: Device tree info\n", __func__);
+	Kprintf("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
+	Kprintf("[pcie] %s: register base: %08lx\n", __func__, ctrl->base);
+
+
+	ULONG offset = DT_GetAddressTranslationOffset(ctrl->base);
+	ctrl->base = (APTR)((ULONG)ctrl->base + offset);
+	Kprintf("[pcie] %s: Found PCIe in CPU space, base address in CPU space: %08lx\n", __func__, ctrl->base);
+
+	//they're not in our dev tree...
+	ctrl->gen = 0;
+	ctrl->ssc = FALSE;
+
+	// We're done with the device tree
+	DT_CloseKey(key);
+	return 0;
+}
+
 int brcm_pcie_probe(struct pci_controller *ctlr)
 {
 	void *base = ctlr->base;
@@ -396,6 +442,12 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 	UWORD nlw, cls, lnksta;
 	ULONG tmp;
 
+    int res = brcm_devtree_parse(ctlr);
+    if (res < 0)
+    {
+        Printf((CONST_STRPTR) "ECAM not found (no PCIe)\n");
+        return 20;
+    }
 	/*
 	 * Reset the bridge, assert the fundamental reset. Note for some SoCs,
 	 * e.g. BCM7278, the fundamental reset should not be asserted here.
@@ -558,57 +610,12 @@ int brcm_pcie_remove(struct pci_controller *pcie)
 	return 0;
 }
 
-int DevTreeParse(struct pci_controller *ctrl)
-{
-	DT_Init();
-
-	ctrl->dt_node_name = DT_GetAlias("pcie0");
-	if (ctrl->dt_node_name == NULL)
-	{
-		Kprintf("[pcie] %s: Failed to get aliases from device tree\n", __func__);
-		return -1;
-	}
-
-	APTR key = DT_OpenKey(ctrl->dt_node_name);
-	if (key == NULL)
-	{
-		Kprintf("[pcie] %s: Failed to open key %s\n", __func__, ctrl->dt_node_name);
-		return -1;
-	}
-
-	ctrl->compatible = DT_GetPropValue(DT_FindProperty(key, (CONST_STRPTR) "compatible"));
-
-	ctrl->base = DT_GetBaseAddress(ctrl->dt_node_name);
-	if (ctrl->base == NULL)
-	{
-		Kprintf("[pcie] %s: Failed to get PCIe base address\n", __func__);
-		DT_CloseKey(key);
-		return -1;
-	}
-
-	Kprintf("[pcie] %s: Device tree info\n", __func__);
-	Kprintf("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
-	Kprintf("[pcie] %s: register base: %08lx\n", __func__, ctrl->base);
-
-
-	ULONG offset = DT_GetAddressTranslationOffset(ctrl->base);
-	ctrl->base = (APTR)((ULONG)ctrl->base + offset);
-	Kprintf("[pcie] %s: Found PCIe in CPU space, base address in CPU space: %08lx\n", __func__, ctrl->base);
-
-	//they're not in our dev tree...
-	ctrl->gen = 0;
-	ctrl->ssc = FALSE;
-
-	// We're done with the device tree
-	DT_CloseKey(key);
-	return 0;
-}
-
 void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags)
 {
 	void *virt_addr;
 
-	//TODO emu68 needs to map our BAR window to physical memory
+	//TODO emu68 needs to mmap our BAR window i think
+	// this is likely to be removed
 	virt_addr = (void *)(phys_addr + 0);
 
 	return virt_addr;

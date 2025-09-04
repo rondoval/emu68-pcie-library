@@ -47,13 +47,8 @@ int main(void)
         Printf((CONST_STRPTR) "Failed to allocate memory for PCIe controller\n");
         return 30;
     }
-    int res = DevTreeParse(pcie);
-    if (res < 0)
-    {
-        Printf((CONST_STRPTR) "ECAM not found (no PCIe)\n");
-        return 20;
-    }
-    res = brcm_pcie_probe(pcie);
+
+    int res = brcm_pcie_probe(pcie);
     if (res < 0)
     {
         Printf((CONST_STRPTR) "Failed to probe PCIe controller\n");

@@ -570,7 +570,6 @@ static inline void pci_set_region(struct pci_region *reg,
 
 #define INDIRECT_TYPE_NO_PCIE_LINK 1
 
-void pciauto_region_init(struct pci_region *res);
 void pciauto_region_align(struct pci_region *res, pci_size_t size);
 void pciauto_config_init(struct pci_controller *hose);
 
@@ -590,7 +589,6 @@ int pciauto_region_allocate(struct pci_region *res, pci_size_t size,
 							pci_addr_t *bar, BOOL supports_64bit);
 int pci_skip_dev(struct pci_controller *hose, pci_dev_t dev);
 
-const char *pci_class_str(UBYTE class);
 int pci_last_busno(void);
 
 /**
