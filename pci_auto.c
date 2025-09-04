@@ -6,15 +6,13 @@
  *
  * Copyright 2000 MontaVista Software Inc.
  * Copyright (c) 2021  Maciej W. Rozycki <macro@orcam.me.uk>
- * 
+ *
  * Modifications for driver model:
  * Copyright 2015 Google, Inc
  * Written by Simon Glass <sjg@chromium.org>
  */
 
 #include <pci.h>
-#include <time.h>
-#include <pcie_brcmstb.h>
 #include <debug.h>
 
 /* the user can define CFG_SYS_PCI_CACHE_LINE_SIZE to avoid problems */
@@ -52,8 +50,7 @@ static int pciauto_region_allocate(struct pci_region *res, pci_size_t size, pci_
 
 	if (addr - res->bus_start + size > res->size)
 	{
-		Kprintf("No room in resource, avail start=%llx / size=%llx, need=%llx\n",
-				(u64)res->bus_lower, (u64)res->size, (u64)size);
+		Kprintf("No room in resource, avail start=%llx / size=%llx, need=%llx\n", (u64)res->bus_lower, (u64)res->size, (u64)size);
 		goto error;
 	}
 
@@ -65,8 +62,7 @@ static int pciauto_region_allocate(struct pci_region *res, pci_size_t size, pci_
 
 	res->bus_lower = addr + size;
 
-	Kprintf("address=0x%llx bus_lower=0x%llx\n", (unsigned long long)addr,
-			(unsigned long long)res->bus_lower);
+	Kprintf("address=0x%llx bus_lower=0x%llx\n", (unsigned long long)addr, (unsigned long long)res->bus_lower);
 
 	*bar = addr;
 	return 0;
@@ -79,7 +75,7 @@ error:
 static void pciauto_show_region(const char *name, struct pci_region *region)
 {
 	pciauto_region_init(region);
-	Kprintf("PCI Autoconfig: Bus %s region: [%llx-%llx],\n"
+	Kprintf("[pcie] PCI Autoconfig: Bus %s region: [%llx-%llx],\n"
 			"\t\tPhysical Memory [%llx-%llx]\n",
 			name,
 			(unsigned long long)region->bus_start,
@@ -189,7 +185,7 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 
 			bar_res = io;
 
-			Kprintf("PCI Autoconfig: BAR %d, I/O, size=0x%llx, ", bar_nr, (unsigned long long)bar_size);
+			Kprintf("[pcie] PCI Autoconfig: BAR %d, I/O, size=0x%llx, ", bar_nr, (unsigned long long)bar_size);
 		}
 		else
 		{
@@ -310,14 +306,13 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
  */
 static BOOL dm_pciauto_exp_link_stable(struct pci_device *dev, int pcie_off)
 {
-	u64 loops = 0, trcount = 0, ntrcount = 0, flips = 0;
-	BOOL dllla, lnktr, plnktr;
+	ULONG loops = 0, trcount = 0, ntrcount = 0, flips = 0;
+	BOOL dllla, lnktr;
 	UWORD exp_lnksta;
-	pci_dev_t bdf;
-	u64 end;
+	ULONG end;
 
 	dm_pci_read_config16(dev, pcie_off + PCI_EXP_LNKSTA, &exp_lnksta);
-	plnktr = !!(exp_lnksta & PCI_EXP_LNKSTA_LT);
+	BOOL plnktr = !!(exp_lnksta & PCI_EXP_LNKSTA_LT);
 
 	end = get_time() + 200000;
 	do
@@ -342,8 +337,8 @@ static BOOL dm_pciauto_exp_link_stable(struct pci_device *dev, int pcie_off)
 		plnktr = lnktr;
 	} while (!dllla && get_time() < end);
 
-	bdf = dm_pci_get_bdf(dev);
-	Kprintf("PCI Autoconfig: %02x.%02x.%02x: Fixup link: DL active: %u; "
+	pci_dev_t bdf = dm_pci_get_bdf(dev);
+	Kprintf("[pcie] PCI Autoconfig: %02x.%02x.%02x: Fixup link: DL active: %u; "
 			"%3llu flips, %6llu loops of which %6llu while training, "
 			"final %6llu stable\n",
 			PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf),
@@ -425,20 +420,15 @@ static void dm_pciauto_exp_fixup_link(struct pci_device *dev, int pcie_off)
 		return;
 
 	dm_pci_read_config16(dev, pcie_off + PCI_EXP_LNKSTA, &exp_lnksta);
-	if ((exp_lnksta & (PCI_EXP_LNKSTA_LBMS | PCI_EXP_LNKSTA_DLLLA)) !=
-		PCI_EXP_LNKSTA_LBMS)
+	if ((exp_lnksta & (PCI_EXP_LNKSTA_LBMS | PCI_EXP_LNKSTA_DLLLA)) != PCI_EXP_LNKSTA_LBMS)
 		return;
 
 	if (dm_pciauto_exp_link_stable(dev, pcie_off))
 		return;
 
 	bdf = dm_pci_get_bdf(dev);
-	Kprintf("PCI Autoconfig: %02lx.%02lx.%02lx: "
-			"Downstream link non-functional\n",
-			PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
-	Kprintf("PCI Autoconfig: %02lx.%02lx.%02lx: "
-			"Retrying with speed restricted to 2.5GT/s...\n",
-			PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
+	Kprintf("[pcie] PCI Autoconfig: %02lx.%02lx.%02lx: Downstream link non-functional\n", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
+	Kprintf("[pcie] PCI Autoconfig: %02lx.%02lx.%02lx: Retrying with speed restricted to 2.5GT/s...\n", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 
 	dm_pci_read_config16(dev, pcie_off + PCI_EXP_LNKCTL, &exp_lnkctl);
 	dm_pci_read_config16(dev, pcie_off + PCI_EXP_LNKCTL2, &exp_lnkctl2);
@@ -451,12 +441,12 @@ static void dm_pciauto_exp_fixup_link(struct pci_device *dev, int pcie_off)
 
 	if (dm_pciauto_exp_link_stable(dev, pcie_off))
 	{
-		Kprintf("PCI Autoconfig: %02lx.%02lx.%02lx: Succeeded!\n",
+		Kprintf("[pcie] PCI Autoconfig: %02lx.%02lx.%02lx: Succeeded!\n",
 				PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 	}
 	else
 	{
-		Kprintf("PCI Autoconfig: %02lx.%02lx.%02lx: Failed!\n",
+		Kprintf("[pcie] PCI Autoconfig: %02lx.%02lx.%02lx: Failed!\n",
 				PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 
 		dm_pci_write_config16(dev, pcie_off + PCI_EXP_LNKCTL2,
@@ -489,9 +479,9 @@ void dm_pciauto_prescan_setup_bridge(struct pci_bus *brd, int sub_bus)
 	io_32 &= PCI_IO_RANGE_TYPE_MASK;
 
 	/* Configure bus number registers */
-	// dm_pci_write_config8(dev, PCI_PRIMARY_BUS,
-	// 					 PCI_BUS(dm_pci_get_bdf(dev)) - dev_seq(ctlr));
-	// dm_pci_write_config8(dev, PCI_SECONDARY_BUS, sub_bus - dev_seq(ctlr));
+	dm_pci_write_config8(dev, PCI_PRIMARY_BUS,
+						 PCI_BUS(dm_pci_get_bdf(dev)) - dev_seq(ctlr));
+	dm_pci_write_config8(dev, PCI_SECONDARY_BUS, sub_bus - dev_seq(ctlr));
 	dm_pci_write_config8(dev, PCI_SUBORDINATE_BUS, 0xff);
 
 	if (pci_mem)
@@ -595,7 +585,7 @@ void dm_pciauto_postscan_setup_bridge(struct pci_bus *bus, int sub_bus)
 	struct pci_device *dev = bus->pci_bridge;
 
 	/* Configure bus number registers */
-	dm_pci_write_config8(dev, PCI_SUBORDINATE_BUS, sub_bus - bus->bus_number);//(ctlr_hose));
+	dm_pci_write_config8(dev, PCI_SUBORDINATE_BUS, sub_bus - bus->bus_number); //(ctlr_hose));
 
 	if (pci_mem)
 	{
@@ -658,18 +648,15 @@ void dm_pciauto_postscan_setup_bridge(struct pci_bus *bus, int sub_bus)
  */
 int dm_pciauto_config_device(struct pci_device *dev)
 {
-	struct pci_region *pci_mem;
-	struct pci_region *pci_prefetch;
-	struct pci_region *pci_io;
-	unsigned int sub_bus = PCI_BUS(dm_pci_get_bdf(dev));
-	unsigned short class;
+	unsigned int sub_bus = dev->bus->bus_number;
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 	int ret;
 
-	pci_mem = ctlr->pci_mem;
-	pci_prefetch = ctlr->pci_prefetch;
-	pci_io = ctlr->pci_io;
+	struct pci_region *pci_mem = ctlr->pci_mem;
+	struct pci_region *pci_prefetch = ctlr->pci_prefetch;
+	struct pci_region *pci_io = ctlr->pci_io;
 
+	unsigned short class;
 	dm_pci_read_config16(dev, PCI_CLASS_DEVICE, &class);
 
 	switch (class)
@@ -679,8 +666,7 @@ int dm_pciauto_config_device(struct pci_device *dev)
 
 		dm_pciauto_setup_device(dev, pci_mem, pci_prefetch, pci_io);
 
-		// ret = dm_pci_hose_probe_bus(dev);
-		ret=0;
+		ret = dm_pci_hose_probe_bus(dev);
 		if (ret < 0)
 		{
 			Kprintf("PCI Autoconfig: Failed to probe bus %ld\n", sub_bus);

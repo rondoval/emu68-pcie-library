@@ -575,8 +575,6 @@ static inline void pci_set_region(struct pci_region *reg,
 
 int pci_skip_dev(struct pci_controller *hose, pci_dev_t dev);
 
-int pci_last_busno(void);
-
 /**
  * pci_write_bar32() - Write the address of a BAR including control bits
  *
@@ -849,8 +847,8 @@ struct pci_controller *pci_get_controller(const struct pci_bus *bus);
  */
 int pci_get_regions(struct pci_device *dev, struct pci_region **iop,
 					struct pci_region **memp, struct pci_region **prefp);
-int pci_get_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index);
-/**
+
+					/**
  * dm_pci_write_bar32() - Write the address of a BAR
  *
  * This writes a raw address to a bar
@@ -1152,5 +1150,6 @@ struct pci_driver_entry
 	}
 
 int device_probe(struct pci_device *dev);
+int pci_get_bus(int busnum, struct pci_bus **busp);
 
 #endif /* _PCI_H */

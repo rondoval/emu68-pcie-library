@@ -16,10 +16,10 @@
 #endif
 
 #include <debug.h>
+#include <compat.h>
+#include <pci.h>
 
 struct pci_bus *root_bus;
-#include <compat.h>
-#include <pcie_brcmstb.h>
 
 int device_probe(struct pci_device *dev)
 {
@@ -197,11 +197,6 @@ static int pci_get_bus_max(void)
 	return ret;
 }
 
-int pci_last_busno(void)
-{
-	return pci_get_bus_max();
-}
-
 int pci_get_ff(enum pci_size_t size)
 {
 	switch (size)
@@ -213,252 +208,6 @@ int pci_get_ff(enum pci_size_t size)
 	default:
 		return 0xffffffff;
 	}
-}
-
-int pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn, struct pci_device **devp)
-{
-	for (struct pci_device *dev = bus->devices; dev; dev = dev->next)
-	{
-		if (dev->devfn == find_devfn)
-		{
-			*devp = dev;
-			return 0;
-		}
-	}
-	return -ENODEV;
-}
-
-int dm_pci_bus_find_bdf(pci_dev_t bdf, struct pci_device **devp)
-{
-	struct pci_bus *bus;
-	int ret;
-
-	ret = pci_get_bus(PCI_BUS(bdf), &bus);
-	if (ret)
-		return ret;
-	return pci_bus_find_devfn(bus, PCI_MASK_BUS(bdf), devp);
-}
-
-static int pci_device_matches_ids(struct pci_device *dev, const struct pci_device_id *ids)
-{
-	for (int i = 0; ids[i].vendor != 0; i++)
-	{
-		if (dev->vendor == ids[i].vendor &&
-			dev->device == ids[i].device)
-			return i;
-	}
-
-	return -EINVAL;
-}
-
-int pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids, int *indexp, struct pci_device **devp)
-{
-	for (struct pci_device *dev = bus->devices; dev; dev = dev->next)
-	{
-		if (pci_device_matches_ids(dev, ids) >= 0)
-		{
-			if ((*indexp)-- <= 0)
-			{
-				*devp = dev;
-				return 0;
-			}
-		}
-	}
-	return -ENODEV;
-}
-
-int pci_find_device_id(const struct pci_device_id *ids, int index, struct pci_device **devp)
-{
-	for (struct pci_bus *bus = root_bus; bus; bus = bus->next)
-	{
-		if (!pci_bus_find_devices(bus, ids, &index, devp))
-			return 0;
-	}
-	*devp = NULL;
-
-	return -ENODEV;
-}
-
-static int dm_pci_bus_find_device(struct pci_bus *bus, unsigned int vendor, unsigned int device, int *indexp, struct pci_device **devp)
-{
-	for (struct pci_device *dev = bus->devices; dev; dev = dev->next)
-	{
-		if (dev->vendor == vendor && dev->device == device)
-		{
-			if (!(*indexp)--)
-			{
-				*devp = dev;
-				return 0;
-			}
-		}
-	}
-
-	return -ENODEV;
-}
-
-int dm_pci_find_device(unsigned int vendor, unsigned int device, int index, struct pci_device **devp)
-{
-	for (struct pci_bus *bus = root_bus; bus; bus = bus->next)
-	{
-		if (!dm_pci_bus_find_device(bus, vendor, device, &index, devp))
-			return device_probe(*devp);
-	}
-	*devp = NULL;
-
-	return -ENODEV;
-}
-
-int dm_pci_find_class(UWORD find_class, int index, struct pci_device **devp)
-{
-	for (struct pci_bus *bus = root_bus; bus; bus = bus->next)
-	{
-		for (struct pci_device *dev = bus->devices; dev; dev = dev->next)
-		{
-			if (dev->class == find_class && !index--)
-			{
-				*devp = dev;
-				return device_probe(*devp);
-			}
-		}
-	}
-	*devp = NULL;
-
-	return -ENODEV;
-}
-
-int pci_bus_clrset_config32(struct pci_bus *bus, pci_dev_t bdf, int offset, ULONG clr, ULONG set)
-{
-	struct pci_controller *ctlr = pci_get_controller(bus);
-
-	ULONG val;
-	int ret;
-
-	ret = brcm_pcie_read_config(ctlr, bdf, offset, &val, PCI_SIZE_32);
-	if (ret)
-		return ret;
-	val &= ~clr;
-	val |= set;
-
-	return brcm_pcie_write_config(ctlr, bdf, offset, val, PCI_SIZE_32);
-}
-
-int dm_pci_write_config(struct pci_device *dev, int offset, ULONG value, enum pci_size_t size)
-{
-	struct pci_controller *ctlr = pci_get_controller(dev->bus);
-
-	return brcm_pcie_write_config(ctlr, dm_pci_get_bdf(dev), offset, value, size);
-}
-
-int dm_pci_write_config8(struct pci_device *dev, int offset, UBYTE value)
-{
-	return dm_pci_write_config(dev, offset, value, PCI_SIZE_8);
-}
-
-int dm_pci_write_config16(struct pci_device *dev, int offset, UWORD value)
-{
-	return dm_pci_write_config(dev, offset, value, PCI_SIZE_16);
-}
-
-int dm_pci_write_config32(struct pci_device *dev, int offset, ULONG value)
-{
-	return dm_pci_write_config(dev, offset, value, PCI_SIZE_32);
-}
-
-int dm_pci_read_config(const struct pci_device *dev, int offset, ULONG *valuep, enum pci_size_t size)
-{
-	struct pci_controller *ctlr = pci_get_controller(dev->bus);
-
-	return brcm_pcie_read_config(ctlr, dm_pci_get_bdf(dev), offset, valuep, size);
-}
-
-int dm_pci_read_config8(const struct pci_device *dev, int offset, UBYTE *valuep)
-{
-	ULONG value;
-	int ret;
-
-	ret = dm_pci_read_config(dev, offset, &value, PCI_SIZE_8);
-	if (ret)
-	{
-		*valuep = 0xff;
-		return ret;
-	}
-	*valuep = value;
-
-	return 0;
-}
-
-int dm_pci_read_config16(const struct pci_device *dev, int offset, UWORD *valuep)
-{
-	ULONG value;
-	int ret;
-
-	ret = dm_pci_read_config(dev, offset, &value, PCI_SIZE_16);
-	if (ret)
-	{
-		*valuep = 0xffff;
-		return ret;
-	}
-	*valuep = value;
-
-	return 0;
-}
-
-int dm_pci_read_config32(const struct pci_device *dev, int offset, ULONG *valuep)
-{
-	ULONG value;
-	int ret;
-
-	ret = dm_pci_read_config(dev, offset, &value, PCI_SIZE_32);
-	if (ret)
-	{
-		*valuep = 0xffffffff;
-		return ret;
-	}
-	*valuep = value;
-
-	return 0;
-}
-
-int dm_pci_clrset_config8(struct pci_device *dev, int offset, ULONG clr, ULONG set)
-{
-	UBYTE val;
-	int ret;
-
-	ret = dm_pci_read_config8(dev, offset, &val);
-	if (ret)
-		return ret;
-	val &= ~clr;
-	val |= set;
-
-	return dm_pci_write_config8(dev, offset, val);
-}
-
-int dm_pci_clrset_config16(struct pci_device *dev, int offset, ULONG clr, ULONG set)
-{
-	UWORD val;
-	int ret;
-
-	ret = dm_pci_read_config16(dev, offset, &val);
-	if (ret)
-		return ret;
-	val &= ~clr;
-	val |= set;
-
-	return dm_pci_write_config16(dev, offset, val);
-}
-
-int dm_pci_clrset_config32(struct pci_device *dev, int offset, ULONG clr, ULONG set)
-{
-	ULONG val;
-	int ret;
-
-	ret = dm_pci_read_config32(dev, offset, &val);
-	if (ret)
-		return ret;
-	val &= ~clr;
-	val |= set;
-
-	return dm_pci_write_config32(dev, offset, val);
 }
 
 int pci_auto_config_devices(struct pci_bus *bus)
@@ -528,28 +277,6 @@ int dm_pci_hose_probe_bus(struct pci_bus *bus)
 	dm_pciauto_postscan_setup_bridge(bus, sub_bus);
 
 	return sub_bus;
-}
-
-/**
- * pci_match_one_device - Tell if a PCI device structure has a matching
- *                        PCI device id structure
- * @id: single PCI device id structure to match
- * @find: the PCI device id structure to match against
- *
- * Returns true if the finding pci_device_id structure matched or FALSE if
- * there is no match.
- */
-static BOOL pci_match_one_id(const struct pci_device_id *id,
-							 const struct pci_device_id *find)
-{
-	if ((id->vendor == PCI_ANY_ID || id->vendor == find->vendor) &&
-		(id->device == PCI_ANY_ID || id->device == find->device) &&
-		(id->subvendor == PCI_ANY_ID || id->subvendor == find->subvendor) &&
-		(id->subdevice == PCI_ANY_ID || id->subdevice == find->subdevice) &&
-		!((id->class ^ find->class) & id->class_mask))
-		return TRUE;
-
-	return FALSE;
 }
 
 static int device_bind_common(struct pci_bus *parent, 
@@ -918,65 +645,6 @@ static int pci_uclass_post_probe(struct pci_bus *bus)
 	return 0;
 }
 
-static int pci_uclass_child_post_bind(struct pci_device *dev)
-{
-	return 0;
-}
-
-static int pci_bridge_read_config(const struct pci_bus *bus, pci_dev_t bdf, UWORD offset, ULONG *valuep, enum pci_size_t size)
-{
-	return brcm_pcie_read_config(bus->controller, bdf, offset, valuep, size);
-}
-
-static int pci_bridge_write_config(struct pci_bus *bus, pci_dev_t bdf, UWORD offset, ULONG value, enum pci_size_t size)
-{
-	return brcm_pcie_write_config(bus->controller, bdf, offset, value, size);
-}
-
-static int skip_to_next_device(struct pci_bus *bus, struct pci_device **devp)
-{
-	struct pci_device *dev;
-
-	/*
-	 * Scan through all the PCI controllers. On x86 there will only be one
-	 * but that is not necessarily true on other hardware.
-	 */
-	for (; bus; bus = bus->next)
-	{
-		dev = bus->devices;
-		if (dev)
-		{
-			*devp = dev;
-			return 0;
-		}
-	}
-
-	return 0;
-}
-
-int pci_find_next_device(struct pci_device **devp)
-{
-	struct pci_device *child = *devp;
-	struct pci_bus *bus = child->bus;
-
-	/* First try all the siblings */
-	*devp = NULL;
-	if (child->next)
-	{
-		*devp = child->next;
-		return 0;
-	}
-
-	bus = bus->next;
-	return bus ? skip_to_next_device(bus, devp) : 0;
-}
-
-int pci_find_first_device(struct pci_device **devp)
-{
-	*devp = NULL;
-	return skip_to_next_device(root_bus, devp);
-}
-
 ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size)
 {
 	switch (size)
@@ -1017,50 +685,6 @@ ULONG pci_conv_size_to_32(ULONG old, ULONG value, UWORD offset, enum pci_size_t 
 	return value;
 }
 
-int pci_get_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
-{
-	int cells_per_record;
-	int i = 0;
-
-	APTR key = DT_OpenKey(ctlr->dt_node_name);
-	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "dma-ranges");
-	if (!prop)
-	{
-		Kprintf("PCI: Device '%s': Cannot decode dma-ranges\n", ctlr->dt_node_name);
-		DT_CloseKey(key);
-		return -EINVAL;
-	}
-
-	ULONG *dma_ranges = (ULONG *)DT_GetPropValue(prop);
-	int len = DT_GetPropLen(prop);
-
-	ULONG pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
-	ULONG addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
-	ULONG size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
-
-	/* PCI addresses are always 3-cells */
-	len /= sizeof(ULONG);
-	cells_per_record = pci_addr_cells + addr_cells + size_cells;
-	Kprintf("%s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
-
-	while (len)
-	{
-		memp->bus_start = DT_GetNumber(dma_ranges + 1, 2);
-		dma_ranges += pci_addr_cells;
-		memp->phys_start = DT_GetNumber(dma_ranges, addr_cells);
-		dma_ranges += addr_cells;
-		memp->size = DT_GetNumber(dma_ranges, size_cells);
-		dma_ranges += size_cells;
-
-		if (i == index)
-			return 0;
-		i++;
-		len -= cells_per_record;
-	}
-
-	return -EINVAL;
-}
-
 int pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_region **memp, struct pci_region **prefp)
 {
 	struct pci_controller *ctrl = pci_get_controller(dev->bus);
@@ -1089,34 +713,6 @@ int pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_
 	}
 
 	return (*iop != NULL) + (*memp != NULL) + (*prefp != NULL);
-}
-
-ULONG dm_pci_read_bar32(const struct pci_device *dev, int barnum)
-{
-	ULONG addr;
-	int bar;
-
-	bar = PCI_BASE_ADDRESS_0 + barnum * 4;
-	dm_pci_read_config32(dev, bar, &addr);
-
-	/*
-	 * If we get an invalid address, return this so that comparisons with
-	 * FDT_ADDR_T_NONE work correctly
-	 */
-	if (addr == 0xffffffff)
-		return addr;
-	else if (addr & PCI_BASE_ADDRESS_SPACE_IO)
-		return addr & PCI_BASE_ADDRESS_IO_MASK;
-	else
-		return addr & PCI_BASE_ADDRESS_MEM_MASK;
-}
-
-void dm_pci_write_bar32(struct pci_device *dev, int barnum, ULONG addr)
-{
-	int bar;
-
-	bar = PCI_BASE_ADDRESS_0 + barnum * 4;
-	dm_pci_write_config32(dev, bar, addr);
 }
 
 phys_addr_t dm_pci_bus_to_phys(struct pci_device *dev, pci_addr_t bus_addr, size_t len, ULONG mask, ULONG flags)
@@ -1224,97 +820,6 @@ void *dm_pci_map_bar(struct pci_device *dev, int bar, size_t offset, size_t len,
 	 * the bar and prevent overflow more locally.
 	 */
 	return dm_pci_bus_to_virt(udev, pci_bus_addr + offset, len, mask, flags, 0); //TODOMAP_NOCACHE);
-}
-
-static int _dm_pci_find_next_capability(struct pci_device *dev, UBYTE pos, int cap)
-{
-	int ttl = PCI_FIND_CAP_TTL;
-	UBYTE id;
-	UWORD ent;
-
-	dm_pci_read_config8(dev, pos, &pos);
-
-	while (ttl--)
-	{
-		if (pos < PCI_STD_HEADER_SIZEOF)
-			break;
-		pos &= ~3;
-		dm_pci_read_config16(dev, pos, &ent);
-
-		id = ent & 0xff;
-		if (id == 0xff)
-			break;
-		if (id == cap)
-			return pos;
-		pos = (ent >> 8);
-	}
-
-	return 0;
-}
-
-int dm_pci_find_next_capability(struct pci_device *dev, UBYTE start, int cap)
-{
-	return _dm_pci_find_next_capability(dev, start + PCI_CAP_LIST_NEXT,
-										cap);
-}
-
-int dm_pci_find_capability(struct pci_device *dev, int cap)
-{
-	UWORD status;
-	UBYTE header_type;
-	UBYTE pos;
-
-	dm_pci_read_config16(dev, PCI_STATUS, &status);
-	if (!(status & PCI_STATUS_CAP_LIST))
-		return 0;
-
-	dm_pci_read_config8(dev, PCI_HEADER_TYPE, &header_type);
-	if ((header_type & 0x7f) == PCI_HEADER_TYPE_CARDBUS)
-		pos = PCI_CB_CAPABILITY_LIST;
-	else
-		pos = PCI_CAPABILITY_LIST;
-
-	return _dm_pci_find_next_capability(dev, pos, cap);
-}
-
-int dm_pci_find_next_ext_capability(struct pci_device *dev, int start, int cap)
-{
-	ULONG header;
-	int ttl;
-	int pos = PCI_CFG_SPACE_SIZE;
-
-	/* minimum 8 bytes per capability */
-	ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;
-
-	if (start)
-		pos = start;
-
-	dm_pci_read_config32(dev, pos, &header);
-	/*
-	 * If we have no capabilities, this is indicated by cap ID,
-	 * cap version and next pointer all being 0.
-	 */
-	if (header == 0)
-		return 0;
-
-	while (ttl--)
-	{
-		if (PCI_EXT_CAP_ID(header) == cap)
-			return pos;
-
-		pos = PCI_EXT_CAP_NEXT(header);
-		if (pos < PCI_CFG_SPACE_SIZE)
-			break;
-
-		dm_pci_read_config32(dev, pos, &header);
-	}
-
-	return 0;
-}
-
-int dm_pci_find_ext_capability(struct pci_device *dev, int cap)
-{
-	return dm_pci_find_next_ext_capability(dev, 0, cap);
 }
 
 int dm_pci_flr(struct pci_device *dev)

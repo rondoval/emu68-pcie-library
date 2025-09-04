@@ -103,8 +103,7 @@ static BOOL brcm_pcie_link_up(const struct pci_controller *pcie)
 	return dla && plu;
 }
 
-static int brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t bdf,
-									UWORD offset, void **paddress)
+static int brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t bdf, UWORD offset, void **paddress)
 {
 
 	unsigned int pci_bus = PCI_BUS(bdf);
@@ -141,9 +140,7 @@ static int brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t
 	return 0;
 }
 
-int brcm_pcie_read_config(const struct pci_controller *ctrl, pci_dev_t bdf,
-						  UWORD offset, ULONG *valuep,
-						  enum pci_size_t size)
+int brcm_pcie_read_config(const struct pci_controller *ctrl, pci_dev_t bdf, UWORD offset, ULONG *valuep, enum pci_size_t size)
 {
 	if (offset < 0 || offset >= 4096)
 	{
@@ -175,9 +172,7 @@ int brcm_pcie_read_config(const struct pci_controller *ctrl, pci_dev_t bdf,
 	}
 }
 
-int brcm_pcie_write_config(struct pci_controller *ctrl, pci_dev_t bdf,
-						   UWORD offset, ULONG value,
-						   enum pci_size_t size)
+int brcm_pcie_write_config(struct pci_controller *ctrl, pci_dev_t bdf, UWORD offset, ULONG value, enum pci_size_t size)
 {
 	if (offset < 0 || offset >= 4096)
 		return -EINVAL;
@@ -220,8 +215,7 @@ static const char *link_speed_to_str(unsigned int cls)
 	return "??";
 }
 
-static ULONG brcm_pcie_mdio_form_pkt(unsigned int port, unsigned int regad,
-									 unsigned int cmd)
+static ULONG brcm_pcie_mdio_form_pkt(unsigned int port, unsigned int regad, unsigned int cmd)
 {
 	ULONG pkt;
 
@@ -242,8 +236,7 @@ static ULONG brcm_pcie_mdio_form_pkt(unsigned int port, unsigned int regad,
  * Return: 0 on success and register value in @val, negative error value
  *         on failure.
  */
-static int brcm_pcie_mdio_read(void *base, unsigned int port,
-							   unsigned int regad, ULONG *val)
+static int brcm_pcie_mdio_read(void *base, unsigned int port, unsigned int regad, ULONG *val)
 {
 	ULONG data, addr;
 	int ret;
@@ -269,8 +262,7 @@ static int brcm_pcie_mdio_read(void *base, unsigned int port,
  *
  * Return: 0 on success, negative error value on failure.
  */
-static int brcm_pcie_mdio_write(void *base, unsigned int port,
-								unsigned int regad, UWORD wrdata)
+static int brcm_pcie_mdio_write(void *base, unsigned int port, unsigned int regad, UWORD wrdata)
 {
 	ULONG data, addr;
 
@@ -342,12 +334,10 @@ static void brcm_pcie_set_gen(struct pci_controller *pcie, unsigned int gen)
 	writew(lnkctl2, cap_base + PCI_EXP_LNKCTL2);
 }
 
-static void brcm_pcie_set_outbound_win(struct pci_controller *pcie,
-									   unsigned int win, u64 phys_addr,
-									   u64 pcie_addr, u64 size)
+static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int win, u64 phys_addr, u64 pcie_addr, u64 size)
 {
 	Kprintf("Setting outbound win %ld: phys 0x%lx <-> pcie 0x%lx, size 0x%lx\n",
-		   win, phys_addr, pcie_addr, size);
+			win, phys_addr, pcie_addr, size);
 	void *base = pcie->base;
 	ULONG phys_addr_mb_high, limit_addr_mb_high;
 	phys_addr_t phys_addr_mb, limit_addr_mb;
@@ -416,18 +406,61 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	Kprintf("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
 	Kprintf("[pcie] %s: register base: %08lx\n", __func__, ctrl->base);
 
-
 	ULONG offset = DT_GetAddressTranslationOffset(ctrl->base);
 	ctrl->base = (APTR)((ULONG)ctrl->base + offset);
 	Kprintf("[pcie] %s: Found PCIe in CPU space, base address in CPU space: %08lx\n", __func__, ctrl->base);
 
-	//they're not in our dev tree...
+	// they're not in our dev tree...
 	ctrl->gen = 0;
 	ctrl->ssc = FALSE;
 
 	// We're done with the device tree
 	DT_CloseKey(key);
 	return 0;
+}
+
+static int pci_get_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
+{
+	int cells_per_record;
+	int i = 0;
+
+	APTR key = DT_OpenKey(ctlr->dt_node_name);
+	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "dma-ranges");
+	if (!prop)
+	{
+		Kprintf("PCI: Device '%s': Cannot decode dma-ranges\n", ctlr->dt_node_name);
+		DT_CloseKey(key);
+		return -EINVAL;
+	}
+
+	ULONG *dma_ranges = (ULONG *)DT_GetPropValue(prop);
+	int len = DT_GetPropLen(prop);
+
+	ULONG pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+	ULONG addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
+	ULONG size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
+
+	/* PCI addresses are always 3-cells */
+	len /= sizeof(ULONG);
+	cells_per_record = pci_addr_cells + addr_cells + size_cells;
+	Kprintf("%s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
+
+	while (len)
+	{
+		memp->bus_start = DT_GetNumber(dma_ranges + 1, 2);
+		dma_ranges += pci_addr_cells;
+		memp->phys_start = DT_GetNumber(dma_ranges, addr_cells);
+		dma_ranges += addr_cells;
+		memp->size = DT_GetNumber(dma_ranges, size_cells);
+		dma_ranges += size_cells;
+
+		if (i == index)
+			return 0;
+		i++;
+		len -= cells_per_record;
+	}
+
+	return -EINVAL;
 }
 
 int brcm_pcie_probe(struct pci_controller *ctlr)
@@ -442,12 +475,12 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 	UWORD nlw, cls, lnksta;
 	ULONG tmp;
 
-    int res = brcm_devtree_parse(ctlr);
-    if (res < 0)
-    {
-        Printf((CONST_STRPTR) "ECAM not found (no PCIe)\n");
-        return 20;
-    }
+	int res = brcm_devtree_parse(ctlr);
+	if (res < 0)
+	{
+		Printf((CONST_STRPTR) "ECAM not found (no PCIe)\n");
+		return 20;
+	}
 	/*
 	 * Reset the bridge, assert the fundamental reset. Note for some SoCs,
 	 * e.g. BCM7278, the fundamental reset should not be asserted here.
@@ -474,7 +507,12 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 						MISC_CTRL_CFG_READ_UR_MODE_MASK |
 						MISC_CTRL_MAX_BURST_SIZE_128);
 
-	pci_get_dma_regions(ctlr, &region, 0);
+	ret = pci_get_dma_regions(ctlr, &region, 0);
+	if (ret)
+	{
+		Kprintf("[pcie] PCIe BRCM: failed to get dma-ranges\n");
+		return ret;
+	}
 	rc_bar2_offset = region.bus_start - region.phys_start;
 	rc_bar2_size = 1ULL << fls64(region.size - 1);
 
@@ -614,8 +652,8 @@ void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags)
 {
 	void *virt_addr;
 
-	//TODO emu68 needs to mmap our BAR window i think
-	// this is likely to be removed
+	// TODO emu68 needs to mmap our BAR window i think. It will likely update DT address to match
+	//  this is likely to be removed
 	virt_addr = (void *)(phys_addr + 0);
 
 	return virt_addr;
