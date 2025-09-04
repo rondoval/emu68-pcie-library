@@ -12,6 +12,12 @@
  * Copyright (C) 2020 Nicolas Saenz Julienne <nsaenzjulienne@suse.de>
  */
 
+#ifdef __INTELLISENSE__
+#include <clib/exec_protos.h>
+#else
+#include <proto/exec.h>
+#endif
+
 #include <pcie_brcmstb.h>
 #include <bcm2711.h>
 #include <pci.h>
@@ -419,7 +425,7 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	return 0;
 }
 
-static int pci_get_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
+static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
 {
 	int cells_per_record;
 	int i = 0;
@@ -461,6 +467,130 @@ static int pci_get_dma_regions(struct pci_controller *ctlr, struct pci_region *m
 	}
 
 	return -EINVAL;
+}
+
+static int pci_get_devtree_regions(struct pci_controller *hose)
+{
+	int i;
+
+	APTR key = DT_OpenKey(hose->dt_node_name);
+	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "ranges");
+	if (!prop)
+	{
+		Kprintf("%s: Cannot find 'ranges' property in device tree\n", __func__);
+		DT_CloseKey(key);
+		return -EINVAL;
+	}
+
+	ULONG *ranges = (ULONG *)DT_GetPropValue(prop);
+	int len = DT_GetPropLen(prop);
+
+	ULONG pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+	ULONG addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
+	ULONG size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
+
+	/* PCI addresses are always 3-cells */
+	len /= sizeof(ULONG);
+	int cells_per_record = pci_addr_cells + addr_cells + size_cells;
+	hose->region_count = 0;
+	Kprintf("%s: len=%d, cells_per_record=%d\n", __func__, len, cells_per_record);
+
+	/* Dynamically allocate the regions array */
+	int max_regions = len / cells_per_record + CONFIG_NR_DRAM_BANKS;
+	hose->regions = (struct pci_region *)AllocVec(max_regions * sizeof(struct pci_region), MEMF_CLEAR);
+	if (!hose->regions)
+		return -ENOMEM;
+
+	for (int i = 0; i < max_regions; i++, len -= cells_per_record)
+	{
+		u64 pci_addr, addr, size;
+		int space_code;
+		ULONG flags;
+		int type;
+		int pos;
+
+		if (len < cells_per_record)
+			break;
+		flags = ranges[0]; // TODO BE->LE?
+		space_code = (flags >> 24) & 3;
+		pci_addr = DT_GetNumber(ranges + 1, 2);
+		prop += pci_addr_cells;
+		addr = DT_GetNumber(ranges, addr_cells);
+		prop += addr_cells;
+		size = DT_GetNumber(ranges, size_cells);
+		prop += size_cells;
+		Kprintf("%s: region %d, pci_addr=%llx, addr=%llx, size=%llx, space_code=%d\n",
+				__func__, hose->region_count, pci_addr, addr, size, space_code);
+		if (space_code & 2)
+		{
+			type = flags & (1U << 30) ? PCI_REGION_PREFETCH : PCI_REGION_MEM;
+		}
+		else if (space_code & 1)
+		{
+			type = PCI_REGION_IO;
+		}
+		else
+		{
+			continue;
+		}
+
+#ifndef CONFIG_SYS_PCI_64BIT
+		if (type == PCI_REGION_MEM && upper_32_bits(pci_addr))
+		{
+			Kprintf(" - pci_addr beyond the 32-bit boundary, ignoring\n");
+			continue;
+		}
+#endif
+
+#ifndef CONFIG_PHYS_64BIT
+		if (upper_32_bits(addr))
+		{
+			Kprintf(" - addr beyond the 32-bit boundary, ignoring\n");
+			continue;
+		}
+#endif
+
+		if (~((pci_addr_t)0) - pci_addr < size)
+		{
+			Kprintf(" - PCI range exceeds max address, ignoring\n");
+			continue;
+		}
+
+		if (~((phys_addr_t)0) - addr < size)
+		{
+			Kprintf(" - phys range exceeds max address, ignoring\n");
+			continue;
+		}
+
+		pos = hose->region_count++;
+		Kprintf(" - type=%d, pos=%d\n", type, pos);
+		pci_set_region(hose->regions + pos, pci_addr, addr, size, type);
+	}
+
+	/* Add a region for our local memory */
+	struct MemHeader *mh = (struct MemHeader *)SysBase->MemList.lh_Head;
+	for (i = 0; i < CONFIG_NR_DRAM_BANKS && mh != NULL; i++)
+	{
+		if (mh->mh_Attributes & MEMF_FAST)
+		{
+			phys_addr_t start = (phys_addr_t)mh->mh_Lower;
+			phys_addr_t end = (phys_addr_t)mh->mh_Upper;
+			phys_addr_t size = end - start + 1;
+
+			if (size == 0)
+				continue;
+			int pos = hose->region_count++;
+			Kprintf(" - DRAM region %d: start=%llx, size=%llx\n", pos, (u64)start, (u64)size);
+#ifdef CONFIG_PCI_MAP_SYSTEM_MEMORY
+			start = virt_to_phys((void *)(uintptr_t)bd->bi_dram[i].start);
+#endif
+			pci_set_region(hose->regions + pos, start, start, size,
+						   PCI_REGION_MEM | PCI_REGION_SYS_MEMORY);
+		}
+		mh = (struct MemHeader *)mh->mh_Node.ln_Succ;
+	}
+
+	return 0;
 }
 
 int brcm_pcie_probe(struct pci_controller *ctlr)
@@ -507,7 +637,14 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 						MISC_CTRL_CFG_READ_UR_MODE_MASK |
 						MISC_CTRL_MAX_BURST_SIZE_128);
 
-	ret = pci_get_dma_regions(ctlr, &region, 0);
+	ret = pci_get_devtree_regions(ctlr);
+	if (ret)
+	{
+		Kprintf("[pcie] PCIe BRCM: failed to get ranges\n");
+		return ret;
+	}
+
+	ret = pci_get_devtree_dma_regions(ctlr, &region, 0);
 	if (ret)
 	{
 		Kprintf("[pcie] PCIe BRCM: failed to get dma-ranges\n");
@@ -645,6 +782,10 @@ int brcm_pcie_remove(struct pci_controller *pcie)
 	/* Shutdown bridge */
 	setbits_le32(base + PCIE_RGR1_SW_INIT_1, PCIE_RGR1_SW_INIT_1_INIT_MASK);
 
+	if (pcie->regions)
+	{
+		FreeVec(pcie->regions);
+	}
 	return 0;
 }
 
