@@ -1152,4 +1152,6 @@ struct pci_driver_entry
 int device_probe(struct pci_device *dev);
 int pci_get_bus(int busnum, struct pci_bus **busp);
 
+void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags);
+
 #endif /* _PCI_H */

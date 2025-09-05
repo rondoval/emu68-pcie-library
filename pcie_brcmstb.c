@@ -788,14 +788,3 @@ int brcm_pcie_remove(struct pci_controller *pcie)
 	}
 	return 0;
 }
-
-void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags)
-{
-	void *virt_addr;
-
-	// TODO emu68 needs to mmap our BAR window i think. It will likely update DT address to match
-	//  this is likely to be removed
-	virt_addr = (void *)(phys_addr + 0);
-
-	return virt_addr;
-}

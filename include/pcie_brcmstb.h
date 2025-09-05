@@ -12,6 +12,4 @@ int brcm_pcie_read_config(const struct pci_controller *bus, pci_dev_t bdf,
 int brcm_pcie_write_config(struct pci_controller *bus, pci_dev_t bdf,
 						   UWORD offset, ULONG value,
 						   enum pci_size_t size);
-
-void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags);
 #endif // PCI_BRCMSTB_H

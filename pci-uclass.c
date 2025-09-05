@@ -132,33 +132,6 @@ fail:
 	return ret;
 }
 
-int pci_get_bus(int busnum, struct pci_bus **busp)
-{
-	if (root_bus == NULL)
-	{
-		device_probe(root_bus->pci_bridge); // TODO
-	}
-
-	struct pci_bus *bus;
-	for (bus = root_bus; bus; bus = bus->next)
-	{
-		if (bus->bus_number == busnum)
-		{
-			*busp = bus;
-			return 0;
-		}
-	}
-	return -ENODEV;
-}
-
-struct pci_controller *pci_get_controller(const struct pci_bus *bus)
-{
-	for (; bus->parent; bus = bus->parent)
-		;
-
-	return bus->controller;
-}
-
 pci_dev_t dm_pci_get_bdf(const struct pci_device *dev)
 {
 	/*
@@ -195,19 +168,6 @@ static int pci_get_bus_max(void)
 			ret = bus->bus_number;
 	}
 	return ret;
-}
-
-int pci_get_ff(enum pci_size_t size)
-{
-	switch (size)
-	{
-	case PCI_SIZE_8:
-		return 0xff;
-	case PCI_SIZE_16:
-		return 0xffff;
-	default:
-		return 0xffffffff;
-	}
 }
 
 int pci_auto_config_devices(struct pci_bus *bus)
@@ -462,8 +422,6 @@ int pci_bind_bus_devices(struct pci_bus *bus)
 
 static int pci_uclass_pre_probe(struct pci_bus *bus)
 {
-	int ret;
-
 	Kprintf("%s, bus=%d/%s, parent=%s\n", __func__, bus->bus_number, bus->name, bus->parent->name);
 
 	/*
@@ -478,13 +436,7 @@ static int pci_uclass_pre_probe(struct pci_bus *bus)
 	}
 
 	/* For bridges, use the top-level PCI controller */
-	if (bus->parent == NULL)
-	{
-		ret = decode_regions(bus->controller);
-		if (ret)
-			return ret;
-	}
-	else
+	if (bus->parent != NULL)
 	{
 		struct pci_controller *parent_hose;
 
@@ -514,207 +466,6 @@ static int pci_uclass_post_probe(struct pci_bus *bus)
 		Kprintf("%s: failed to configure devices on bus %d\n", __func__, bus->bus_number);
 		return ret;
 	}
-
-	return 0;
-}
-
-ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size)
-{
-	switch (size)
-	{
-	case PCI_SIZE_8:
-		return (value >> ((offset & 3) * 8)) & 0xff;
-	case PCI_SIZE_16:
-		return (value >> ((offset & 2) * 8)) & 0xffff;
-	default:
-		return value;
-	}
-}
-
-ULONG pci_conv_size_to_32(ULONG old, ULONG value, UWORD offset, enum pci_size_t size)
-{
-	UWORD off_mask;
-	UWORD val_mask, shift;
-	ULONG ldata, mask;
-
-	switch (size)
-	{
-	case PCI_SIZE_8:
-		off_mask = 3;
-		val_mask = 0xff;
-		break;
-	case PCI_SIZE_16:
-		off_mask = 2;
-		val_mask = 0xffff;
-		break;
-	default:
-		return value;
-	}
-	shift = (offset & off_mask) * 8;
-	ldata = (value & val_mask) << shift;
-	mask = val_mask << shift;
-	value = (old & ~mask) | ldata;
-
-	return value;
-}
-
-int pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_region **memp, struct pci_region **prefp)
-{
-	struct pci_controller *ctrl = pci_get_controller(dev->bus);
-	int i;
-
-	*iop = NULL;
-	*memp = NULL;
-	*prefp = NULL;
-	for (i = 0; i < ctrl->region_count; i++)
-	{
-		switch (ctrl->regions[i].flags)
-		{
-		case PCI_REGION_IO:
-			if (!*iop || (*iop)->size < ctrl->regions[i].size)
-				*iop = ctrl->regions + i;
-			break;
-		case PCI_REGION_MEM:
-			if (!*memp || (*memp)->size < ctrl->regions[i].size)
-				*memp = ctrl->regions + i;
-			break;
-		case (PCI_REGION_MEM | PCI_REGION_PREFETCH):
-			if (!*prefp || (*prefp)->size < ctrl->regions[i].size)
-				*prefp = ctrl->regions + i;
-			break;
-		}
-	}
-
-	return (*iop != NULL) + (*memp != NULL) + (*prefp != NULL);
-}
-
-phys_addr_t dm_pci_bus_to_phys(struct pci_device *dev, pci_addr_t bus_addr, size_t len, ULONG mask, ULONG flags)
-{
-	struct pci_region *res;
-	pci_addr_t offset;
-	int i;
-
-	/* The root controller has the region information */
-	struct pci_controller *bus = pci_get_controller(dev->bus);
-
-	if (bus->region_count == 0)
-		return bus_addr;
-
-	for (i = 0; i < bus->region_count; i++)
-	{
-		res = &bus->regions[i];
-
-		if ((res->flags & mask) != flags)
-			continue;
-
-		if (bus_addr < res->bus_start)
-			continue;
-
-		offset = bus_addr - res->bus_start;
-		if (offset >= res->size)
-			continue;
-
-		if (len > res->size - offset)
-			continue;
-
-		return res->phys_start + offset;
-	}
-
-	Kprintf("dm_pci_bus_to_phys: invalid physical address\n");
-	return 0;
-}
-
-pci_addr_t dm_pci_phys_to_bus(struct pci_device *dev, phys_addr_t phys_addr, size_t len, ULONG mask, ULONG flags)
-{
-	struct pci_region *res;
-	phys_addr_t offset;
-	int i;
-
-	/* The root controller has the region information */
-	struct pci_controller *bus = pci_get_controller(dev->bus);
-
-	if (bus->region_count == 0)
-		return phys_addr;
-
-	for (i = 0; i < bus->region_count; i++)
-	{
-		res = &bus->regions[i];
-
-		if ((res->flags & mask) != flags)
-			continue;
-
-		if (phys_addr < res->phys_start)
-			continue;
-
-		offset = phys_addr - res->phys_start;
-		if (offset >= res->size)
-			continue;
-
-		if (len > res->size - offset)
-			continue;
-
-		return res->bus_start + offset;
-	}
-
-	Kprintf("dm_pci_phys_to_bus: invalid physical address\n");
-	return 0;
-}
-
-void *dm_pci_map_bar(struct pci_device *dev, int bar, size_t offset, size_t len,
-					 ULONG mask, ULONG flags)
-{
-	struct pci_device *udev = dev;
-	pci_addr_t pci_bus_addr;
-	ULONG bar_response;
-
-	/* read BAR address */
-	dm_pci_read_config32(udev, bar, &bar_response);
-	pci_bus_addr = (pci_addr_t)(bar_response & ~0xf);
-
-	/* This has a lot of baked in assumptions, but essentially tries
-	 * to mirror the behavior of BAR assignment for 64 Bit enabled
-	 * hosts and 64 bit placeable BARs in the auto assign code.
-	 */
-#if defined(CONFIG_SYS_PCI_64BIT)
-	if (bar_response & PCI_BASE_ADDRESS_MEM_TYPE_64)
-	{
-		dm_pci_read_config32(udev, bar + 4, &bar_response);
-		pci_bus_addr |= (pci_addr_t)bar_response << 32;
-	}
-#endif /* CONFIG_SYS_PCI_64BIT */
-
-	if (~((pci_addr_t)0) - pci_bus_addr < offset)
-		return NULL;
-
-	/*
-	 * Forward the length argument to dm_pci_bus_to_virt. The length will
-	 * be used to check that the entire address range has been declared as
-	 * a PCI range, but a better check would be to probe for the size of
-	 * the bar and prevent overflow more locally.
-	 */
-	return dm_pci_bus_to_virt(udev, pci_bus_addr + offset, len, mask, flags, 0); //TODOMAP_NOCACHE);
-}
-
-int dm_pci_flr(struct pci_device *dev)
-{
-	int pcie_off;
-	ULONG cap;
-
-	/* look for PCI Express Capability */
-	pcie_off = dm_pci_find_capability(dev, PCI_CAP_ID_EXP);
-	if (!pcie_off)
-		return -ENOENT;
-
-	/* check FLR capability */
-	dm_pci_read_config32(dev, pcie_off + PCI_EXP_DEVCAP, &cap);
-	if (!(cap & PCI_EXP_DEVCAP_FLR))
-		return -ENOENT;
-
-	dm_pci_clrset_config16(dev, pcie_off + PCI_EXP_DEVCTL, 0,
-						   PCI_EXP_DEVCTL_BCR_FLR);
-
-	/* wait 100ms, per PCI spec */
-	delay_us(100 * 1000);
 
 	return 0;
 }
