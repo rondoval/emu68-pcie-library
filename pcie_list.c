@@ -31,6 +31,48 @@ static void print_device(struct pci_device *dev)
            (dev->class >> 16) & 0xff, (dev->class >> 8) & 0xff, dev->class & 0xff);
 }
 
+static void probe_xhci_mmio(void)
+{
+    struct pci_device *xhci = NULL;
+    if (dm_pci_find_device(0x1106, 0x3483, 0, &xhci) != 0)
+    {
+        Printf((CONST_STRPTR) "xHCI controller not found (class 0c:03:30).\n");
+        return;
+    }
+
+    // Ensure MEM + MASTER are enabled
+    dm_pci_clrset_config16(xhci, PCI_COMMAND, 0, PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+
+    // Map BAR0
+    void *bar0 = dm_pci_map_bar(xhci, PCI_BASE_ADDRESS_0, 0, 0x1000, PCI_REGION_TYPE, PCI_REGION_MEM);
+    if (!bar0)
+    {
+        Printf((CONST_STRPTR) "Failed to map xHCI BAR0.\n");
+        return;
+    }
+
+    volatile ULONG *regs = (volatile ULONG *)bar0;
+    ULONG cap = regs[0x00 / 4];
+    UBYTE caplen = (UBYTE)(cap & 0xff);
+    UWORD hciver = (UWORD)((cap >> 16) & 0xffff);
+    ULONG hcs1 = regs[0x04 / 4];
+    ULONG hcs2 = regs[0x08 / 4];
+    ULONG hcs3 = regs[0x0c / 4];
+    ULONG hcc1 = regs[0x10 / 4];
+    ULONG dboff = regs[0x14 / 4];
+    ULONG rtsoff = regs[0x18 / 4];
+
+    Printf((CONST_STRPTR) "xHCI @ %08lx: CAPLENGTH=%ld, HCIVERSION=%04lx, HCS1=%08lx, HCC1=%08lx, DBOFF=%08lx, RTSOFF=%08lx\n",
+           (ULONG)bar0, (LONG)caplen, (ULONG)hciver, hcs1, hcc1, dboff, rtsoff);
+
+    // Operational registers base = BAR + caplength
+    volatile ULONG *op = (volatile ULONG *)((UBYTE *)bar0 + caplen);
+    ULONG usbcmd = op[0x00 / 4];
+    ULONG usbsts = op[0x04 / 4];
+    ULONG pagesize = op[0x08 / 4];
+    Printf((CONST_STRPTR) "xHCI OP: USBCMD=%08lx, USBSTS=%08lx, PAGESIZE=%08lx\n", usbcmd, usbsts, pagesize);
+}
+
 int main(void)
 {
     SysBase = *(struct ExecBase **)4;
@@ -56,15 +98,12 @@ int main(void)
     pci_create_bus(&root_bus, NULL, root_bridge, pcie);
     pci_probe_bus(root_bus);
 
-    //TODO enumerate all buses and print devices on them
     int bus_max = pci_get_bus_max();
-    Printf((CONST_STRPTR) "Max bus number: %ld\n", bus_max);
     for(int i = 0; i <= bus_max; i++)
     {
         struct pci_bus *bus;
         if(pci_get_bus(i, &bus) == 0)
         {
-            Printf((CONST_STRPTR) "Bus %ld:\n", i);
             struct MinNode *node;
             for (node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
             {
@@ -74,51 +113,7 @@ int main(void)
         }
     }
 
-    // /* List root complex (bus 0) */
-    // print_device(pcie, PCI_BDF(0, 0, 0));
-
-    // /* Configure bus number registers */
-    // brcm_pcie_write_config(pcie, PCI_BDF(0, 0, 0), PCI_PRIMARY_BUS, 0, PCI_SIZE_8);
-    // brcm_pcie_write_config(pcie, PCI_BDF(0, 0, 0), PCI_SECONDARY_BUS, 1, PCI_SIZE_8);
-    // brcm_pcie_write_config(pcie, PCI_BDF(0, 0, 0), PCI_SUBORDINATE_BUS, 0xff, PCI_SIZE_8);
-
-    // Printf((CONST_STRPTR) "Set bridge bus numbers: 0 -> 1\n");
-
-    // /* Small delay so that secondary bus becomes active */
-    // delay_us(100 * 1000);
-
-    // /* Scan bus 1 */
-    // for (int dev = 0; dev < 32; ++dev)
-    // {
-    //     ULONG vendor;
-    //     pci_dev_t bdf0 = PCI_BDF(1, dev, 0);
-    //     if (brcm_pcie_read_config(pcie, bdf0, PCI_VENDOR_ID, &vendor, PCI_SIZE_16))
-    //         continue;
-    //     if (vendor == 0xffff || vendor == 0x0000)
-    //     {
-    //         /* No device present at this slot */
-    //         continue;
-    //     }
-    //     /* We found a device; print function 0 then check multi-function */
-    //     print_device(pcie, bdf0);
-    //     ULONG header_type;
-    //     if (!brcm_pcie_read_config(pcie, bdf0, PCI_HEADER_TYPE, &header_type, PCI_SIZE_8))
-    //     {
-    //         if (header_type & 0x80)
-    //         {
-    //             for (int fn = 1; fn < 8; ++fn)
-    //             {
-    //                 pci_dev_t bdf = PCI_BDF(1, dev, fn);
-    //                 ULONG v2;
-    //                 if (brcm_pcie_read_config(pcie, bdf, PCI_VENDOR_ID, &v2, PCI_SIZE_16))
-    //                     continue;
-    //                 if (v2 == 0xffff || v2 == 0x0000)
-    //                     continue;
-    //                 print_device(pcie, bdf);
-    //             }
-    //         }
-    //     }
-    // }
+    probe_xhci_mmio();
 
     brcm_pcie_remove(pcie);
 
