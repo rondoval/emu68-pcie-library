@@ -56,8 +56,6 @@ static void probe_xhci_mmio(void)
     UBYTE caplen = (UBYTE)(cap & 0xff);
     UWORD hciver = (UWORD)((cap >> 16) & 0xffff);
     ULONG hcs1 = regs[0x04 / 4];
-    ULONG hcs2 = regs[0x08 / 4];
-    ULONG hcs3 = regs[0x0c / 4];
     ULONG hcc1 = regs[0x10 / 4];
     ULONG dboff = regs[0x14 / 4];
     ULONG rtsoff = regs[0x18 / 4];

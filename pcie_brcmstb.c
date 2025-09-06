@@ -383,7 +383,7 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 {
 	DT_Init();
 
-	ctrl->dt_node_name = DT_GetAlias("pcie0");
+	ctrl->dt_node_name = DT_GetAlias((CONST_STRPTR)"pcie0");
 	if (ctrl->dt_node_name == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get aliases from device tree\n", __func__);
@@ -399,7 +399,7 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 
 	ctrl->compatible = DT_GetPropValue(DT_FindProperty(key, (CONST_STRPTR) "compatible"));
 
-	ctrl->base = DT_GetBaseAddress(ctrl->dt_node_name);
+	ctrl->base = DT_GetBaseAddressVirtual(ctrl->dt_node_name);
 	if (ctrl->base == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get PCIe base address\n", __func__);
@@ -410,10 +410,6 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	Kprintf("[pcie] %s: Device tree info\n", __func__);
 	Kprintf("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
 	Kprintf("[pcie] %s: register base: %08lx\n", __func__, ctrl->base);
-
-	ULONG offset = DT_GetAddressTranslationOffset(ctrl->base);
-	ctrl->base = (APTR)((ULONG)ctrl->base + offset);
-	Kprintf("[pcie] %s: Found PCIe controller in CPU space, base address in CPU space: %08lx\n", __func__, ctrl->base);
 
 	// they're not in our dev tree...
 	if(DT_FindProperty(key, (CONST_STRPTR)"brcm,enable-ssc"))
@@ -496,7 +492,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 
 	/* PCI addresses are always 3-cells */
 	len /= sizeof(ULONG);
-	int cells_per_record = pci_addr_cells + addr_cells + size_cells;
+	const int cells_per_record = pci_addr_cells + addr_cells + size_cells;
 	hose->region_count = 0;
 	Kprintf("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
