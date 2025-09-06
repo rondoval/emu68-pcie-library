@@ -43,7 +43,7 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 
 int pci_probe_bus(struct pci_bus *bus)
 {
-	Kprintf("[pcie] %s: probing bus %s\n", __func__, bus->name);
+	KprintfH("[pcie] %s: probing bus %s\n", __func__, bus->name);
 	int ret;
 
 	if (!bus)
@@ -108,7 +108,7 @@ int pci_auto_config_devices(struct pci_bus *bus)
 	// sub_bus = dev_seq(bus);
 	unsigned int sub_bus = bus->bus_number;
 
-	Kprintf("[pcie] %s: start\n", __func__);
+	KprintfH("[pcie] %s: start\n", __func__);
 	pciauto_config_init(bus->controller);
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -198,7 +198,7 @@ int pci_bind_bus_devices(struct pci_bus *bus)
 		if (PCI_FUNC(bdf) && !found_multi)
 			continue;
 
-		Kprintf("[pcie] %s: checking device %lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
+		KprintfH("[pcie] %s: checking device %lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
 
 		/* Check only the first access, we don't expect problems */
 		ULONG vendor;

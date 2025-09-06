@@ -413,11 +413,15 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 
 	ULONG offset = DT_GetAddressTranslationOffset(ctrl->base);
 	ctrl->base = (APTR)((ULONG)ctrl->base + offset);
-	Kprintf("[pcie] %s: Found PCIe in CPU space, base address in CPU space: %08lx\n", __func__, ctrl->base);
+	Kprintf("[pcie] %s: Found PCIe controller in CPU space, base address in CPU space: %08lx\n", __func__, ctrl->base);
 
 	// they're not in our dev tree...
+	if(DT_FindProperty(key, (CONST_STRPTR)"brcm,enable-ssc"))
+	{
+		ctrl->ssc = TRUE;
+		Kprintf("[pcie] %s: Found brcm,enable-ssc property\n", __func__);
+	}
 	ctrl->gen = 0;
-	ctrl->ssc = FALSE;
 
 	// We're done with the device tree
 	DT_CloseKey(key);
@@ -458,6 +462,8 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 		dma_ranges += addr_cells;
 		memp->size = DT_GetNumber(dma_ranges, size_cells);
 		dma_ranges += size_cells;
+		Kprintf("[pcie] %s: region %ld, bus_start=%lx, phys_start=%lx, size=%lx\n",
+				__func__, i, memp->bus_start, memp->phys_start, memp->size);
 
 		if (i == index)
 			return 0;
@@ -567,6 +573,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	}
 
 	/* Add a region for our local memory */
+	Kprintf("[pcie] %s: Adding system memory regions\n", __func__);
 	struct MemHeader *mh = (struct MemHeader *)SysBase->MemList.lh_Head;
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS && mh != NULL; i++)
 	{

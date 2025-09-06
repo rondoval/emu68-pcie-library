@@ -215,7 +215,7 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 
 		ret = pciauto_region_allocate(bar_res, bar_size, &bar_value, found_mem64);
 		if (ret)
-			Kprintf("[pcie] %s: Failed autoconfig bar %lx\n", __func__, bar);
+			Kprintf("[pcie] %s: Failed autoconfig bar %ld\n", __func__, bar_nr);
 
 		if (!ret)
 		{

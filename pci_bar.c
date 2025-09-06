@@ -4,6 +4,7 @@
  * Written by Simon Glass <sjg@chromium.org>
  */
 #include <pci.h>
+#include <debug.h>
 
 phys_addr_t dm_pci_bus_to_phys(struct pci_device *dev, pci_addr_t bus_addr, size_t len, ULONG mask, ULONG flags)
 {
