@@ -86,7 +86,7 @@ static int brcm_pcie_encode_ibar_size(u64 size)
 static BOOL brcm_pcie_rc_mode(struct pci_controller *pcie)
 {
 	ULONG val = readl(pcie->base + PCIE_MISC_PCIE_STATUS);
-	Kprintf("[pcie]PCIe status: 0x%lx\n", val);
+	Kprintf("[pcie] %s: PCIe status: 0x%lx\n", __func__, val);
 
 	return (val & STATUS_PCIE_PORT_MASK) >> STATUS_PCIE_PORT_SHIFT;
 }
@@ -104,7 +104,7 @@ static BOOL brcm_pcie_link_up(const struct pci_controller *pcie)
 	val = readl(pcie->base + PCIE_MISC_PCIE_STATUS);
 	dla = (val & STATUS_PCIE_DL_ACTIVE_MASK) >> STATUS_PCIE_DL_ACTIVE_SHIFT;
 	plu = (val & STATUS_PCIE_PHYLINKUP_MASK) >> STATUS_PCIE_PHYLINKUP_SHIFT;
-	Kprintf("[pcie] PCIe link %s\n", (dla && plu) ? "up" : "down");
+	KprintfH("[pcie] %s: PCIe link %s\n", __func__, (dla && plu) ? "up" : "down");
 
 	return dla && plu;
 }
@@ -117,8 +117,8 @@ static int brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t
 	unsigned int pci_func = PCI_FUNC(bdf);
 	int idx;
 
-	Kprintf("[pcie] %s: bus %ld dev %ld func %ld offset 0x%lx\n",
-			__func__, pci_bus, pci_dev, pci_func, offset);
+	KprintfH("[pcie] %s: bus %ld dev %ld func %ld offset 0x%lx\n",
+			 __func__, pci_bus, pci_dev, pci_func, offset);
 	/*
 	 * Busses 0 (host PCIe bridge) and 1 (its immediate child)
 	 * are limited to a single device each
@@ -327,7 +327,7 @@ static int brcm_pcie_set_ssc(void *base)
  */
 static void brcm_pcie_set_gen(struct pci_controller *pcie, unsigned int gen)
 {
-	Kprintf("[pcie] %s: gen %d\n", __func__, gen);
+	Kprintf("[pcie] %s: gen %ld\n", __func__, gen);
 	void *cap_base = pcie->base + BRCM_PCIE_CAP_REGS;
 
 	UWORD lnkctl2 = readw(cap_base + PCI_EXP_LNKCTL2);
@@ -342,8 +342,7 @@ static void brcm_pcie_set_gen(struct pci_controller *pcie, unsigned int gen)
 
 static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int win, u64 phys_addr, u64 pcie_addr, u64 size)
 {
-	Kprintf("Setting outbound win %ld: phys 0x%lx <-> pcie 0x%lx, size 0x%lx\n",
-			win, phys_addr, pcie_addr, size);
+	Kprintf("[pcie] %s: Setting outbound win %ld: phys 0x%lx <-> pcie 0x%lx, size 0x%lx\n", __func__, win, phys_addr, pcie_addr, size);
 	void *base = pcie->base;
 	ULONG phys_addr_mb_high, limit_addr_mb_high;
 	phys_addr_t phys_addr_mb, limit_addr_mb;
@@ -434,7 +433,7 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "dma-ranges");
 	if (!prop)
 	{
-		Kprintf("PCI: Device '%s': Cannot decode dma-ranges\n", ctlr->dt_node_name);
+		Kprintf("[pcie] %s: Device '%s': Cannot decode dma-ranges\n", __func__, ctlr->dt_node_name);
 		DT_CloseKey(key);
 		return -EINVAL;
 	}
@@ -449,7 +448,7 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 	/* PCI addresses are always 3-cells */
 	len /= sizeof(ULONG);
 	cells_per_record = pci_addr_cells + addr_cells + size_cells;
-	Kprintf("%s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
+	Kprintf("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
 	while (len)
 	{
@@ -477,13 +476,13 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "ranges");
 	if (!prop)
 	{
-		Kprintf("%s: Cannot find 'ranges' property in device tree\n", __func__);
+		Kprintf("[pcie] %s: Cannot find 'ranges' property in device tree\n", __func__);
 		DT_CloseKey(key);
 		return -EINVAL;
 	}
 
 	ULONG *ranges = (ULONG *)DT_GetPropValue(prop);
-	int len = DT_GetPropLen(prop);
+	ULONG len = DT_GetPropLen(prop);
 
 	ULONG pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
 	ULONG addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
@@ -493,7 +492,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	len /= sizeof(ULONG);
 	int cells_per_record = pci_addr_cells + addr_cells + size_cells;
 	hose->region_count = 0;
-	Kprintf("%s: len=%d, cells_per_record=%d\n", __func__, len, cells_per_record);
+	Kprintf("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
 	/* Dynamically allocate the regions array */
 	int max_regions = len / cells_per_record + CONFIG_NR_DRAM_BANKS;
@@ -519,7 +518,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 		prop += addr_cells;
 		size = DT_GetNumber(ranges, size_cells);
 		prop += size_cells;
-		Kprintf("%s: region %d, pci_addr=%llx, addr=%llx, size=%llx, space_code=%d\n",
+		Kprintf("[pcie] %s: region %ld, pci_addr=%lx, addr=%lx, size=%lx, space_code=%ld\n",
 				__func__, hose->region_count, pci_addr, addr, size, space_code);
 		if (space_code & 2)
 		{
@@ -537,7 +536,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 #ifndef CONFIG_SYS_PCI_64BIT
 		if (type == PCI_REGION_MEM && upper_32_bits(pci_addr))
 		{
-			Kprintf(" - pci_addr beyond the 32-bit boundary, ignoring\n");
+			Kprintf("[pcie] %s: - pci_addr beyond the 32-bit boundary, ignoring\n", __func__);
 			continue;
 		}
 #endif
@@ -545,25 +544,25 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 #ifndef CONFIG_PHYS_64BIT
 		if (upper_32_bits(addr))
 		{
-			Kprintf(" - addr beyond the 32-bit boundary, ignoring\n");
+			Kprintf("[pcie] %s: - addr beyond the 32-bit boundary, ignoring\n", __func__);
 			continue;
 		}
 #endif
 
 		if (~((pci_addr_t)0) - pci_addr < size)
 		{
-			Kprintf(" - PCI range exceeds max address, ignoring\n");
+			Kprintf("[pcie] %s: - PCI range exceeds max address, ignoring\n", __func__);
 			continue;
 		}
 
 		if (~((phys_addr_t)0) - addr < size)
 		{
-			Kprintf(" - phys range exceeds max address, ignoring\n");
+			Kprintf("[pcie] %s: - phys range exceeds max address, ignoring\n", __func__);
 			continue;
 		}
 
 		pos = hose->region_count++;
-		Kprintf(" - type=%d, pos=%d\n", type, pos);
+		Kprintf("[pcie] %s: - type=%ld, pos=%ld\n", __func__, type, pos);
 		pci_set_region(hose->regions + pos, pci_addr, addr, size, type);
 	}
 
@@ -580,7 +579,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 			if (size == 0)
 				continue;
 			int pos = hose->region_count++;
-			Kprintf(" - DRAM region %d: start=%llx, size=%llx\n", pos, (u64)start, (u64)size);
+			Kprintf("[pcie] %s: - DRAM region %ld: start=%lx, size=%lx\n", __func__, pos, start, size);
 #ifdef CONFIG_PCI_MAP_SYSTEM_MEMORY
 			start = virt_to_phys((void *)(uintptr_t)bd->bi_dram[i].start);
 #endif
@@ -593,24 +592,19 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	return 0;
 }
 
-int brcm_pcie_probe(struct pci_controller *ctlr)
+int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 {
-	void *base = ctlr->base;
-	struct pci_region region;
-	BOOL ssc_good = FALSE;
-	int num_out_wins = 0;
-	u64 rc_bar2_offset, rc_bar2_size;
-	unsigned int scb_size_val;
-	int i, ret;
-	UWORD nlw, cls, lnksta;
-	ULONG tmp;
-
 	int res = brcm_devtree_parse(ctlr);
 	if (res < 0)
 	{
 		Printf((CONST_STRPTR) "ECAM not found (no PCIe)\n");
 		return 20;
 	}
+
+	void *base = ctlr->base;
+	ctlr->bus_number_base = bus_number_base;
+	ctlr->bus_number_last = bus_number_base - 1;
+
 	/*
 	 * Reset the bridge, assert the fundamental reset. Note for some SoCs,
 	 * e.g. BCM7278, the fundamental reset should not be asserted here.
@@ -637,30 +631,31 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 						MISC_CTRL_CFG_READ_UR_MODE_MASK |
 						MISC_CTRL_MAX_BURST_SIZE_128);
 
-	ret = pci_get_devtree_regions(ctlr);
+	int ret = pci_get_devtree_regions(ctlr);
 	if (ret)
 	{
-		Kprintf("[pcie] PCIe BRCM: failed to get ranges\n");
+		Kprintf("[pcie] %s: failed to get ranges\n", __func__);
 		return ret;
 	}
 
+	struct pci_region region;
 	ret = pci_get_devtree_dma_regions(ctlr, &region, 0);
 	if (ret)
 	{
-		Kprintf("[pcie] PCIe BRCM: failed to get dma-ranges\n");
+		Kprintf("[pcie] %s: failed to get dma-ranges\n", __func__);
 		return ret;
 	}
-	rc_bar2_offset = region.bus_start - region.phys_start;
-	rc_bar2_size = 1ULL << fls64(region.size - 1);
+	u64 rc_bar2_offset = region.bus_start - region.phys_start;
+	u64 rc_bar2_size = 1ULL << fls64(region.size - 1);
 
-	tmp = lower_32_bits(rc_bar2_offset);
+	ULONG tmp = lower_32_bits(rc_bar2_offset);
 	u32p_replace_bits(&tmp, brcm_pcie_encode_ibar_size(rc_bar2_size),
 					  RC_BAR2_CONFIG_LO_SIZE_MASK);
 	writel(tmp, base + PCIE_MISC_RC_BAR2_CONFIG_LO);
 	writel(upper_32_bits(rc_bar2_offset),
 		   base + PCIE_MISC_RC_BAR2_CONFIG_HI);
 
-	scb_size_val = rc_bar2_size ? ilog2(rc_bar2_size) - 15 : 0xf; /* 0xf is 1GB */
+	unsigned int scb_size_val = rc_bar2_size ? ilog2(rc_bar2_size) - 15 : 0xf; /* 0xf is 1GB */
 
 	tmp = readl(base + PCIE_MISC_MISC_CTRL);
 	u32p_replace_bits(&tmp, scb_size_val,
@@ -693,22 +688,23 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 	/* Give the RC/EP time to wake up, before trying to configure RC.
 	 * Intermittently check status for link-up, up to a total of 100ms.
 	 */
-	for (i = 0; i < 100 && !brcm_pcie_link_up(ctlr); i += 5)
+	for (int i = 0; i < 100 && !brcm_pcie_link_up(ctlr); i += 5)
 		delay_us(5 * 1000);
 
 	if (!brcm_pcie_link_up(ctlr))
 	{
-		Kprintf("PCIe BRCM: link down\n");
+		Kprintf("[pcie] %s: link down\n", __func__);
 		return -EINVAL;
 	}
 
 	if (!brcm_pcie_rc_mode(ctlr))
 	{
-		Kprintf("PCIe misconfigured; is in EP mode\n");
+		Kprintf("[pcie] %s: PCIe misconfigured; is in EP mode\n", __func__);
 		return -EINVAL;
 	}
 
-	for (i = 0; i < ctlr->region_count; i++)
+	int num_out_wins = 0;
+	for (int i = 0; i < ctlr->region_count; i++)
 	{
 		struct pci_region *reg = &ctlr->regions[i];
 
@@ -718,8 +714,7 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 		if (num_out_wins >= BRCM_NUM_PCIE_OUT_WINS)
 			return -EINVAL;
 
-		brcm_pcie_set_outbound_win(ctlr, num_out_wins, reg->phys_start,
-								   reg->bus_start, reg->size);
+		brcm_pcie_set_outbound_win(ctlr, num_out_wins, reg->phys_start, reg->bus_start, reg->size);
 
 		num_out_wins++;
 	}
@@ -731,21 +726,21 @@ int brcm_pcie_probe(struct pci_controller *ctlr)
 	clrsetbits_le32(base + PCIE_RC_CFG_PRIV1_ID_VAL3,
 					PCIE_RC_CFG_PRIV1_ID_VAL3_CLASS_CODE_MASK, 0x060400);
 
+	BOOL ssc_good = FALSE;
 	if (ctlr->ssc)
 	{
 		ret = brcm_pcie_set_ssc(ctlr->base);
 		if (!ret)
 			ssc_good = TRUE;
 		else
-			Kprintf("PCIe BRCM: failed attempt to enter SSC mode\n");
+			Kprintf("[pcie] %s: failed attempt to enter SSC mode\n", __func__);
 	}
 
-	lnksta = readw(base + BRCM_PCIE_CAP_REGS + PCI_EXP_LNKSTA);
-	cls = lnksta & PCI_EXP_LNKSTA_CLS;
-	nlw = (lnksta & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
+	UWORD lnksta = readw(base + BRCM_PCIE_CAP_REGS + PCI_EXP_LNKSTA);
+	UWORD cls = lnksta & PCI_EXP_LNKSTA_CLS;
+	UWORD nlw = (lnksta & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
 
-	Kprintf("[pcie] PCIe BRCM: link up, %s Gbps x%lu %s\n", link_speed_to_str(cls),
-			nlw, ssc_good ? "(SSC)" : "(!SSC)");
+	Kprintf("[pcie] %s: link up, %s Gbps x%lu %s\n", __func__, link_speed_to_str(cls), nlw, ssc_good ? "(SSC)" : "(!SSC)");
 
 	/* PCIe->SCB endian mode for BAR */
 	// TODO change to big endian?

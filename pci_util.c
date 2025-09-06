@@ -5,34 +5,46 @@
  */
 
 #include <pci.h>
+#include <debug.h>
 
-extern struct pci_bus *root_bus;
+extern struct MinList pci_bus_list;
 
 int pci_get_bus(int busnum, struct pci_bus **busp)
 {
-	if (root_bus == NULL)
+	for(struct MinNode *node = pci_bus_list.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
-		device_probe(root_bus->pci_bridge); // TODO
-	}
-
-	struct pci_bus *bus;
-	for (bus = root_bus; bus; bus = bus->next)
-	{
+		struct pci_bus *bus = (struct pci_bus *)node;
 		if (bus->bus_number == busnum)
 		{
 			*busp = bus;
 			return 0;
 		}
 	}
+
 	return -ENODEV;
+}
+
+/**
+ * pci_get_bus_max() - returns the bus number of the last active bus
+ *
+ * Return: last bus number, or -1 if no active buses
+ */
+int pci_get_bus_max(void)
+{
+	int ret = -1;
+
+	for (struct MinNode *node = pci_bus_list.mlh_Head; node->mln_Succ; node = node->mln_Succ)
+	{
+		struct pci_bus *bus = (struct pci_bus *)node;
+		if (bus->bus_number > ret)
+			ret = bus->bus_number;
+	}
+	return ret;
 }
 
 struct pci_controller *pci_get_controller(const struct pci_bus *bus)
 {
-    //TODO just copy the controller to every bus
-	for (; bus->parent; bus = bus->parent)
-		;
-
+	/* we're copying the controller from the parent bus on bind */
 	return bus->controller;
 }
 
@@ -47,6 +59,25 @@ int pci_get_ff(enum pci_size_t size)
 	default:
 		return 0xffffffff;
 	}
+}
+
+pci_dev_t dm_pci_get_bdf(const struct pci_device *dev)
+{
+	/*
+	 * This error indicates that @dev is a device on an unprobed PCI bus.
+	 * The bus likely has bus=seq == -1, so the PCI_ADD_BUS() macro below
+	 * will produce a bad BDF>
+	 *
+	 * A common cause of this problem is that this function is called in the
+	 * of_to_plat() method of @dev. Accessing the PCI bus in that
+	 * method is not allowed, since it has not yet been probed. To fix this,
+	 * move that access to the probe() method of @dev instead.
+	 */
+	if (!(dev->bus->pci_bridge->flags & DM_FLAG_ACTIVATED))
+	{
+		Kprintf("[pcie] %s: Device '%s' on unprobed bus '%s'\n", __func__, dev->name, dev->bus->name);
+	}
+	return PCI_ADD_BUS(dev->bus->bus_number, dev->devfn);
 }
 
 ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size)

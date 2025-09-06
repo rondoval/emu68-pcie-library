@@ -1149,9 +1149,12 @@ struct pci_driver_entry
 		.match = __match,                                                   \
 	}
 
-int device_probe(struct pci_device *dev);
+int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr);
+int pci_probe_bus(struct pci_bus *bus);
 int pci_get_bus(int busnum, struct pci_bus **busp);
+int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp);
 
 void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags);
+int pci_get_bus_max(void);
 
 #endif /* _PCI_H */

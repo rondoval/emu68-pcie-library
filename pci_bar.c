@@ -37,7 +37,7 @@ phys_addr_t dm_pci_bus_to_phys(struct pci_device *dev, pci_addr_t bus_addr, size
 		return res->phys_start + offset;
 	}
 
-	Kprintf("dm_pci_bus_to_phys: invalid physical address\n");
+	Kprintf("[pcie] %s: invalid physical address\n", __func__);
 	return 0;
 }
 
@@ -73,7 +73,7 @@ pci_addr_t dm_pci_phys_to_bus(struct pci_device *dev, phys_addr_t phys_addr, siz
 		return res->bus_start + offset;
 	}
 
-	Kprintf("dm_pci_phys_to_bus: invalid physical address\n");
+	Kprintf("[pcie] %s: dm_pci_phys_to_bus: invalid physical address\n", __func__);
 	return 0;
 }
 
