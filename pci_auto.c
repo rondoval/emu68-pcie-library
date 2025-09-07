@@ -75,13 +75,15 @@ error:
 static void pciauto_show_region(const char *name, struct pci_region *region)
 {
 	pciauto_region_init(region);
-	Kprintf("[pcie] %s: Bus %s region: [%lx-%lx], Physical Memory [%lx-%lx]\n",
+	Kprintf("[pcie] %s: Bus %s region: [%lx-%lx], Physical Memory [%lx%08lx-%lx%08lx]\n",
 		__func__,
 		name,
 		region->bus_start,
 		(region->bus_start + region->size - 1),
-		region->phys_start,
-		(region->phys_start + region->size - 1));
+		(ULONG)(region->phys_start>>32),
+		(ULONG)(region->phys_start&0xffffffff),
+		(ULONG)((region->phys_start + region->size - 1)>>32),
+		(ULONG)((region->phys_start + region->size - 1)&0xffffffff));
 }
 
 void pciauto_config_init(struct pci_controller *ctrl)
@@ -210,7 +212,7 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 			else
 				bar_res = mem;
 
-			Kprintf("[pcie] %s: BAR %ld, %s%s, size=0x%lx, ", __func__, bar_nr, bar_res == prefetch ? "Prf" : "Mem", found_mem64 ? "64" : "", bar_size);
+			Kprintf("[pcie] %s: BAR %ld, %s%s, size=0x%lx\n", __func__, bar_nr, bar_res == prefetch ? "Prf" : "Mem", found_mem64 ? "64" : "", bar_size);
 		}
 
 		ret = pciauto_region_allocate(bar_res, bar_size, &bar_value, found_mem64);
@@ -241,8 +243,6 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 
 		cmdstat |= (bar_response & PCI_BASE_ADDRESS_SPACE) ? PCI_COMMAND_IO : PCI_COMMAND_MEMORY;
 
-		Kprintf("\n");
-
 		bar_nr++;
 	}
 
@@ -266,8 +266,6 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 			Kprintf("\n");
 		}
 	}
-
-	// TODO store BAR info in pci_device struct? i.e. allocated addresses
 
 	/* PCI_COMMAND_IO must be set for VGA device */
 	dm_pci_read_config16(dev, PCI_CLASS_DEVICE, &class);

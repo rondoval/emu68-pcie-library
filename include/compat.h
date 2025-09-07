@@ -16,6 +16,7 @@
 typedef uint64_t u64;
 
 #define SZ_1M				0x00100000
+#define SZ_64M				0x04000000
 
 /**
  * upper_32_bits - return bits 32-63 of a number

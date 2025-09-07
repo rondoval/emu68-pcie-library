@@ -419,6 +419,18 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	}
 	ctrl->gen = 0;
 
+	APTR mmio_window_phys_prop = DT_FindProperty(key, (CONST_STRPTR)"emu68,pci-mmio-phys");
+	if (!mmio_window_phys_prop)
+	{
+		Kprintf("[pcie] %s: Device '%s': No property emu68,pci-mmio-phys\n", __func__, ctrl->dt_node_name);
+		DT_CloseKey(key);
+		return -EINVAL;
+	}
+	int mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(ULONG);
+	ctrl->mmio_window_phys = DT_GetNumber(DT_GetPropValue(mmio_window_phys_prop), mmio_window_phys_cells);
+	ctrl->mmio_window_virtual = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-virt", 0, FALSE);
+	ctrl->mmio_window_size = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-size", SZ_64M, FALSE);
+
 	// We're done with the device tree
 	DT_CloseKey(key);
 	return 0;
@@ -512,16 +524,16 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 
 		if (len < cells_per_record)
 			break;
-		flags = ranges[0]; // TODO BE->LE?
+		flags = ranges[0];
 		space_code = (flags >> 24) & 3;
 		pci_addr = DT_GetNumber(ranges + 1, 2);
-		prop += pci_addr_cells;
+		ranges += pci_addr_cells;
 		addr = DT_GetNumber(ranges, addr_cells);
-		prop += addr_cells;
+		ranges += addr_cells;
 		size = DT_GetNumber(ranges, size_cells);
-		prop += size_cells;
-		Kprintf("[pcie] %s: region %ld, pci_addr=%lx, addr=%lx, size=%lx, space_code=%ld\n",
-				__func__, hose->region_count, pci_addr, addr, size, space_code);
+		ranges += size_cells;
+		Kprintf("[pcie] %s: region %ld, pci_addr=%lx, addr=%lx%08lx, size=%lx, space_code=%ld\n",
+				__func__, hose->region_count, (ULONG)pci_addr, (ULONG)(addr>>32), (ULONG)(addr&0xffffffff), (ULONG)size, space_code);
 		if (space_code & 2)
 		{
 			type = flags & (1U << 30) ? PCI_REGION_PREFETCH : PCI_REGION_MEM;
@@ -575,9 +587,9 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	{
 		if (mh->mh_Attributes & MEMF_FAST)
 		{
-			phys_addr_t start = (phys_addr_t)mh->mh_Lower;
-			phys_addr_t end = (phys_addr_t)mh->mh_Upper;
-			phys_addr_t size = end - start + 1;
+			ULONG start = (ULONG) mh->mh_Lower;
+			ULONG end = (ULONG) mh->mh_Upper;
+			ULONG size = end - start + 1;
 
 			if (size == 0)
 				continue;

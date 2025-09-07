@@ -605,22 +605,6 @@ void pci_write_bar32(struct pci_controller *hose, pci_dev_t dev, int barnum,
 ULONG pci_read_bar32(struct pci_controller *hose, pci_dev_t dev, int barnum);
 
 /**
- * pci_hose_find_devices() - Find devices by vendor/device ID
- *
- * This is only available if CONFIG_DM_PCI_COMPAT is enabled
- *
- * @hose:	PCI hose to search
- * @busnum:	Bus number to search
- * @ids:	PCI vendor/device IDs to look for, terminated by 0, 0 record
- * @indexp:	Pointer to device index to find. To find the first matching
- *		device, pass 0; to find the second, pass 1, etc. This
- *		parameter is decremented for each non-matching device so
- *		can be called repeatedly.
- */
-pci_dev_t pci_hose_find_devices(struct pci_controller *hose, int busnum,
-								struct pci_device_id *ids, int *indexp);
-
-/**
  * dm_pci_get_bdf() - Get the BDF value for a device
  *
  * @dev:	Device to check
@@ -1017,16 +1001,6 @@ int dm_pci_find_ext_capability(struct pci_device *dev, int cap);
  */
 int dm_pci_flr(struct pci_device *dev);
 
-#define dm_pci_virt_to_bus(dev, addr, flags) \
-	dm_pci_phys_to_bus(dev, (virt_to_phys(addr)), 0, PCI_REGION_TYPE, (flags))
-#define dm_pci_bus_to_virt(dev, addr, len, mask, flags, map_flags)      \
-	({                                                                  \
-		size_t _len = (len);                                            \
-		phys_addr_t phys_addr = dm_pci_bus_to_phys((dev), (addr), _len, \
-												   (mask), (flags));    \
-		map_physmem(phys_addr, _len, (map_flags));                      \
-	})
-
 #define dm_pci_phys_to_mem(dev, addr) \
 	dm_pci_phys_to_bus((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_MEM)
 #define dm_pci_mem_to_phys(dev, addr) \
@@ -1067,14 +1041,6 @@ int dm_pci_find_device(unsigned int vendor, unsigned int device, int index, stru
  * Return: 0 if found, -ve on error
  */
 int dm_pci_find_class(UWORD find_class, int index, struct pci_device **devp);
-
-/**
- * board_pci_fixup_dev() - Board callback for PCI device fixups
- *
- * @bus:	PCI bus
- * @dev:	PCI device
- */
-extern void board_pci_fixup_dev(struct pci_bus *bus, struct pci_device *dev);
 
 /**
  * PCI_DEVICE - macro used to describe a specific pci device
@@ -1132,29 +1098,10 @@ extern void board_pci_fixup_dev(struct pci_bus *bus, struct pci_device *dev);
 	.vendor = PCI_VENDOR_ID_##vend, .device = (dev), \
 	.subvendor = PCI_ANY_ID, .subdevice = PCI_ANY_ID, 0, 0
 
-/**
- * struct pci_driver_entry - Matches a driver to its pci_device_id list
- * @driver: Driver to use
- * @match: List of match records for this driver, terminated by {}
- */
-struct pci_driver_entry
-{
-	struct driver *driver;
-	const struct pci_device_id *match;
-};
-
-#define U_BOOT_PCI_DEVICE(__name, __match)                                  \
-	ll_entry_declare(struct pci_driver_entry, __name, pci_driver_entry) = { \
-		.driver = llsym(struct driver, __name, driver),                     \
-		.match = __match,                                                   \
-	}
-
 int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr);
 int pci_probe_bus(struct pci_bus *bus);
 int pci_get_bus(int busnum, struct pci_bus **busp);
 int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp);
-
-void *map_physmem(phys_addr_t phys_addr, size_t len, int map_flags);
 int pci_get_bus_max(void);
 
 #endif /* _PCI_H */

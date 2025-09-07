@@ -50,6 +50,7 @@ static void probe_xhci_mmio(void)
         Printf((CONST_STRPTR) "Failed to map xHCI BAR0.\n");
         return;
     }
+    Kprintf("xHCI BAR0 mapped at %lx\n", bar0);
 
     volatile ULONG *regs = (volatile ULONG *)bar0;
     ULONG cap = regs[0x00 / 4];
