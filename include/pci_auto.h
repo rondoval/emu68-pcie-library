@@ -16,7 +16,7 @@ void pciauto_config_init(struct pci_controller *hose);
  */
 int dm_pciauto_config_device(struct pci_device *dev);
 
-void dm_pciauto_prescan_setup_bridge(struct pci_bus *dev, int sub_bus);
+void dm_pciauto_prescan_setup_bridge(struct pci_bus *dev);
 void dm_pciauto_postscan_setup_bridge(struct pci_bus *dev);
 
 #endif

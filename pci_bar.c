@@ -84,30 +84,30 @@ void *dm_pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr, size_t len
 	if (!phys_addr)
 		return NULL;
 
-	Kprintf("[pcie] %s: bus_addr %lx -> phys_addr %lx%08lx\n", __func__, bus_addr, (ULONG)(phys_addr>>32), (ULONG)(phys_addr&0xffffffff));
+	Kprintf("[pcie] %s: bus_addr 0x%lx%08lx -> phys_addr 0x%lx%08lx\n", __func__, (ULONG)(bus_addr >> 32), (ULONG)(bus_addr & 0xffffffff), (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff));
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 
-	if(phys_addr < ctlr->mmio_window_phys || phys_addr >= ctlr->mmio_window_phys + ctlr->mmio_window_size)
+	if (phys_addr < ctlr->mmio_window_phys || phys_addr >= ctlr->mmio_window_phys + ctlr->mmio_window_size)
 	{
-		Kprintf("[pcie] %s: address 0x%lx not in MMIO window (0x%lx-0x%lx)\n", __func__, phys_addr,
-				ctlr->mmio_window_phys, ctlr->mmio_window_phys + ctlr->mmio_window_size);
+		Kprintf("[pcie] %s: address 0x%lx%08lx not in MMIO window (0x%lx%08lx-0x%lx%08lx)\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff),
+				(ULONG)(ctlr->mmio_window_phys >> 32), (ULONG)(ctlr->mmio_window_phys & 0xffffffff),
+				(ULONG)((ctlr->mmio_window_phys + ctlr->mmio_window_size) >> 32), (ULONG)((ctlr->mmio_window_phys + ctlr->mmio_window_size) & 0xffffffff));
 		return NULL;
 	}
 
 	if (phys_addr + len > ctlr->mmio_window_phys + ctlr->mmio_window_size)
 	{
-		Kprintf("[pcie] %s: address 0x%lx+0x%lx exceeds MMIO window (0x%lx-0x%lx)\n", __func__, phys_addr, len,
-				ctlr->mmio_window_phys, ctlr->mmio_window_phys + ctlr->mmio_window_size);
+		Kprintf("[pcie] %s: address 0x%lx%08lx+0x%lx%08lx exceeds MMIO window (0x%lx%08lx-0x%lx%08lx)\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff), (ULONG)(len >> 32), (ULONG)(len & 0xffffffff), (ULONG)(ctlr->mmio_window_phys >> 32), (ULONG)(ctlr->mmio_window_phys & 0xffffffff), (ULONG)((ctlr->mmio_window_phys + ctlr->mmio_window_size) >> 32), (ULONG)((ctlr->mmio_window_phys + ctlr->mmio_window_size) & 0xffffffff));
 		return NULL;
 	}
 
-	Kprintf("[pcie] %s: phys_addr %lx%08lx -> virt_addr %lx\n", __func__, (ULONG)(phys_addr>>32), (ULONG)(phys_addr&0xffffffff),
+	Kprintf("[pcie] %s: phys_addr 0x%lx%08lx -> virt_addr 0x%lx\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff),
 			(ULONG)(ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys)));
 
-	return (void*)ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys);
+	return (void *)ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys);
 }
 
-pci_addr_t dm_pci_virt_to_bus(struct pci_device *dev, void *virt_addr, size_t len, ULONG mask,ULONG flags)
+pci_addr_t dm_pci_virt_to_bus(struct pci_device *dev, void *virt_addr, size_t len, ULONG mask, ULONG flags)
 {
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 
@@ -132,7 +132,7 @@ void *dm_pci_map_bar(struct pci_device *dev, int bar, size_t offset, size_t len,
 	/* read BAR address */
 	dm_pci_read_config32(udev, bar, &bar_response);
 	pci_bus_addr = (pci_addr_t)(bar_response & ~0xf);
-	Kprintf("[pcie] %s: BAR%ld response %lx, addr %lx\n", __func__, (bar - PCI_BASE_ADDRESS_0) / 4, bar_response, pci_bus_addr);
+	Kprintf("[pcie] %s: BAR%ld response %lx, addr %lx%08lx\n", __func__, (bar - PCI_BASE_ADDRESS_0) / 4, bar_response, (ULONG)(pci_bus_addr >> 32), (ULONG)(pci_bus_addr & 0xffffffff));
 
 	/* This has a lot of baked in assumptions, but essentially tries
 	 * to mirror the behavior of BAR assignment for 64 Bit enabled

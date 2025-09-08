@@ -31,7 +31,7 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 		return -ENOMEM;
 
 	_NewMinList(&bus->devices);
-	SNPrintf(bus->name, 30, (STRPTR) "pci_bus_%lx:%lx.%lx", PCI_BUS(bridge->bdf), PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
+	SNPrintf(bus->name, 30, (CONST_STRPTR) "pci_bus_%lx:%lx.%lx", PCI_BUS(bridge->bdf), PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	bus->parent = parent;
 	bus->pci_bridge = bridge;
 	bus->controller = ctlr;
@@ -43,7 +43,6 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 
 int pci_probe_bus(struct pci_bus *bus)
 {
-	KprintfH("[pcie] %s: probing bus %s\n", __func__, bus->name);
 	int ret;
 
 	if (!bus)
@@ -87,7 +86,6 @@ int pci_probe_bus(struct pci_bus *bus)
 		goto fail;
 	}
 
-	Kprintf("[pcie] %s: configuring devices on bus %ld\n", __func__, bus->bus_number);
 	ret = pci_auto_config_devices(bus);
 	if (ret < 0)
 	{
@@ -105,9 +103,6 @@ fail:
 
 int pci_auto_config_devices(struct pci_bus *bus)
 {
-	// sub_bus = dev_seq(bus);
-	unsigned int sub_bus = bus->bus_number;
-
 	KprintfH("[pcie] %s: start\n", __func__);
 	pciauto_config_init(bus->controller);
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
@@ -121,22 +116,15 @@ int pci_auto_config_devices(struct pci_bus *bus)
 			Kprintf("[pcie] %s: Failed to configure device %s: %ld\n", __func__, device->name, ret);
 			return ret;
 		}
-		unsigned int max_bus = ret;
-		sub_bus = sub_bus < max_bus ? max_bus : sub_bus;
+		bus->bus_number_last_sub = bus->bus_number_last_sub < ret ? ret : bus->bus_number_last_sub;
 	}
 
-	if (bus->bus_number_last_sub < sub_bus)
-		bus->bus_number_last_sub = sub_bus;
-
-	Kprintf("[pcie] %s: done, sub bus = %ld\n", __func__, sub_bus);
-	return sub_bus;
+	Kprintf("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
+	return 0;
 }
 
 int dm_pci_hose_probe_bus(struct pci_bus *bus)
 {
-	int sub_bus;
-	int ret;
-
 	UBYTE header_type;
 	dm_pci_read_config8(bus->pci_bridge, PCI_HEADER_TYPE, &header_type);
 	header_type &= 0x7f;
@@ -146,11 +134,12 @@ int dm_pci_hose_probe_bus(struct pci_bus *bus)
 		return -EINVAL;
 	}
 
-	sub_bus = bus->controller->bus_number_last+1;
-	Kprintf("[pcie] %s: bus = %ld/%s\n", __func__, sub_bus, bus->name);
-	dm_pciauto_prescan_setup_bridge(bus, sub_bus);
+	// TODO merge this with pci_probe_bus
+	bus->bus_number = bus->controller->bus_number_last + 1;
+	Kprintf("[pcie] %s: bus = %ld/%s\n", __func__, bus->bus_number, bus->name);
+	dm_pciauto_prescan_setup_bridge(bus);
 
-	ret = pci_probe_bus(bus);
+	int ret = pci_probe_bus(bus);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: Cannot probe bus %s: %ld\n", __func__, bus->name, ret);
@@ -158,13 +147,12 @@ int dm_pci_hose_probe_bus(struct pci_bus *bus)
 	}
 
 	dm_pciauto_postscan_setup_bridge(bus);
-
-	return sub_bus;
+	return bus->bus_number_last_sub;
 }
 
 int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp)
 {
-	Kprintf("[pcie] %s: creating pci_device %lx:%ld (vendor %lx device %lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
+	Kprintf("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
 	*devp = NULL;
 	struct pci_device *dev = AllocMem(sizeof(struct pci_device), MEMF_CLEAR);
 	if (!dev)
@@ -172,7 +160,7 @@ int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD de
 
 	dev->bus = bus;
 	dev->flags |= DM_FLAG_BOUND;
-	SNPrintf(dev->name, 30, (CONST_STRPTR) "pci_%lx:%lx.%lx", bus->bus_number, PCI_DEV(bdf), PCI_FUNC(bdf));
+	SNPrintf(dev->name, 30, (CONST_STRPTR) "pci_%lx:%lx.%lx", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 	dev->bdf = bdf;
 	dev->devfn = PCI_MASK_BUS(bdf);
 	dev->vendor = vendor;
@@ -198,7 +186,7 @@ int pci_bind_bus_devices(struct pci_bus *bus)
 		if (PCI_FUNC(bdf) && !found_multi)
 			continue;
 
-		KprintfH("[pcie] %s: checking device %lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
+		KprintfH("[pcie] %s: checking device 0x%lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
 
 		/* Check only the first access, we don't expect problems */
 		ULONG vendor;

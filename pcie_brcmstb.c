@@ -342,48 +342,51 @@ static void brcm_pcie_set_gen(struct pci_controller *pcie, unsigned int gen)
 
 static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int win, u64 phys_addr, u64 pcie_addr, u64 size)
 {
-	Kprintf("[pcie] %s: Setting outbound win %ld: phys 0x%lx <-> pcie 0x%lx, size 0x%lx\n", __func__, win, phys_addr, pcie_addr, size);
+	Kprintf("[pcie] %s: Setting outbound win %ld: phys 0x%lx%08lx <-> pcie 0x%lx, size 0x%lx\n", __func__, win, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff), (ULONG)pcie_addr, (ULONG)size);
 	void *base = pcie->base;
-	ULONG phys_addr_mb_high, limit_addr_mb_high;
-	phys_addr_t phys_addr_mb, limit_addr_mb;
-	int high_addr_shift;
-	ULONG tmp;
 
 	/* Set the base of the pcie_addr window */
 	writel(lower_32_bits(pcie_addr), base + PCIE_MEM_WIN0_LO(win));
 	writel(upper_32_bits(pcie_addr), base + PCIE_MEM_WIN0_HI(win));
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_LO(%ld) = 0x%lx\n", __func__, win, readl(base + PCIE_MEM_WIN0_LO(win)));
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_HI(%ld) = 0x%lx\n", __func__, win, readl(base + PCIE_MEM_WIN0_HI(win)));
 
 	/* Write the addr base & limit lower bits (in MBs) */
-	phys_addr_mb = phys_addr / SZ_1M;
-	limit_addr_mb = (phys_addr + size - 1) / SZ_1M;
+	phys_addr_t phys_addr_mb = phys_addr / SZ_1M;
+	phys_addr_t limit_addr_mb = (phys_addr + size - 1) / SZ_1M;
+	KprintfH("[pcie] %s: phys_addr_mb = 0x%lx, limit_addr_mb = 0x%lx\n", __func__, (ULONG)phys_addr_mb, (ULONG)limit_addr_mb);
 
-	tmp = readl(base + PCIE_MEM_WIN0_BASE_LIMIT(win));
-	u32p_replace_bits(&tmp, phys_addr_mb,
-					  MEM_WIN0_BASE_LIMIT_BASE_MASK);
-	u32p_replace_bits(&tmp, limit_addr_mb,
-					  MEM_WIN0_BASE_LIMIT_LIMIT_MASK);
+	ULONG tmp = readl(base + PCIE_MEM_WIN0_BASE_LIMIT(win));
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_LIMIT(%ld) before = 0x%lx\n", __func__, win, tmp);
+	u32p_replace_bits(&tmp, phys_addr_mb, MEM_WIN0_BASE_LIMIT_BASE_MASK);
+	u32p_replace_bits(&tmp, limit_addr_mb, MEM_WIN0_BASE_LIMIT_LIMIT_MASK);
 	writel(tmp, base + PCIE_MEM_WIN0_BASE_LIMIT(win));
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_LIMIT(%ld) after = 0x%lx\n", __func__, win, readl(base + PCIE_MEM_WIN0_BASE_LIMIT(win)));
 
 	/* Write the cpu & limit addr upper bits */
-	high_addr_shift = MEM_WIN0_BASE_LIMIT_BASE_HI_SHIFT;
-	phys_addr_mb_high = phys_addr_mb >> high_addr_shift;
+	int high_addr_shift = MEM_WIN0_BASE_LIMIT_BASE_HI_SHIFT;
+	ULONG phys_addr_mb_high = phys_addr_mb >> high_addr_shift;
+	KprintfH("[pcie] %s: phys_addr_mb_high = 0x%lx\n", __func__, (ULONG)phys_addr_mb_high);
 	tmp = readl(base + PCIE_MEM_WIN0_BASE_HI(win));
-	u32p_replace_bits(&tmp, phys_addr_mb_high,
-					  MEM_WIN0_BASE_HI_BASE_MASK);
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_HI(%ld) before = 0x%lx\n", __func__, win, tmp);
+	u32p_replace_bits(&tmp, phys_addr_mb_high, MEM_WIN0_BASE_HI_BASE_MASK);
 	writel(tmp, base + PCIE_MEM_WIN0_BASE_HI(win));
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_HI(%ld) after = 0x%lx\n", __func__, win, readl(base + PCIE_MEM_WIN0_BASE_HI(win)));
 
-	limit_addr_mb_high = limit_addr_mb >> high_addr_shift;
+	ULONG limit_addr_mb_high = limit_addr_mb >> high_addr_shift;
+	KprintfH("[pcie] %s: limit_addr_mb_high = 0x%lx\n", __func__, (ULONG)limit_addr_mb_high);
 	tmp = readl(base + PCIE_MEM_WIN0_LIMIT_HI(win));
-	u32p_replace_bits(&tmp, limit_addr_mb_high,
-					  PCIE_MEM_WIN0_LIMIT_HI_LIMIT_MASK);
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_LIMIT_HI(%ld) before = 0x%lx\n", __func__, win, tmp);
+	u32p_replace_bits(&tmp, limit_addr_mb_high, PCIE_MEM_WIN0_LIMIT_HI_LIMIT_MASK);
 	writel(tmp, base + PCIE_MEM_WIN0_LIMIT_HI(win));
+	KprintfH("[pcie] %s: PCIE_MEM_WIN0_LIMIT_HI(%ld) after = 0x%lx\n", __func__, win, readl(base + PCIE_MEM_WIN0_LIMIT_HI(win)));
 }
 
 static int brcm_devtree_parse(struct pci_controller *ctrl)
 {
 	DT_Init();
 
-	ctrl->dt_node_name = DT_GetAlias((CONST_STRPTR)"pcie0");
+	ctrl->dt_node_name = DT_GetAlias((CONST_STRPTR) "pcie0");
 	if (ctrl->dt_node_name == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get aliases from device tree\n", __func__);
@@ -409,17 +412,17 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 
 	Kprintf("[pcie] %s: Device tree info\n", __func__);
 	Kprintf("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
-	Kprintf("[pcie] %s: register base: %08lx\n", __func__, ctrl->base);
+	Kprintf("[pcie] %s: register base: 0x%08lx\n", __func__, ctrl->base);
 
 	// they're not in our dev tree...
-	if(DT_FindProperty(key, (CONST_STRPTR)"brcm,enable-ssc"))
+	if (DT_FindProperty(key, (CONST_STRPTR) "brcm,enable-ssc"))
 	{
 		ctrl->ssc = TRUE;
 		Kprintf("[pcie] %s: Found brcm,enable-ssc property\n", __func__);
 	}
 	ctrl->gen = 0;
 
-	APTR mmio_window_phys_prop = DT_FindProperty(key, (CONST_STRPTR)"emu68,pci-mmio-phys");
+	APTR mmio_window_phys_prop = DT_FindProperty(key, (CONST_STRPTR) "emu68,pci-mmio-phys");
 	if (!mmio_window_phys_prop)
 	{
 		Kprintf("[pcie] %s: Device '%s': No property emu68,pci-mmio-phys\n", __func__, ctrl->dt_node_name);
@@ -470,8 +473,8 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 		dma_ranges += addr_cells;
 		memp->size = DT_GetNumber(dma_ranges, size_cells);
 		dma_ranges += size_cells;
-		Kprintf("[pcie] %s: region %ld, bus_start=%lx, phys_start=%lx, size=%lx\n",
-				__func__, i, memp->bus_start, memp->phys_start, memp->size);
+		Kprintf("[pcie] %s: region %ld, bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n",
+				__func__, i, (ULONG)(memp->bus_start >> 32), (ULONG)(memp->bus_start & 0xffffffff), (ULONG)(memp->phys_start >> 32), (ULONG)(memp->phys_start & 0xffffffff), (ULONG)(memp->size >> 32), (ULONG)(memp->size & 0xffffffff));
 
 		if (i == index)
 			return 0;
@@ -532,8 +535,8 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 		ranges += addr_cells;
 		size = DT_GetNumber(ranges, size_cells);
 		ranges += size_cells;
-		Kprintf("[pcie] %s: region %ld, pci_addr=%lx, addr=%lx%08lx, size=%lx, space_code=%ld\n",
-				__func__, hose->region_count, (ULONG)pci_addr, (ULONG)(addr>>32), (ULONG)(addr&0xffffffff), (ULONG)size, space_code);
+		Kprintf("[pcie] %s: region %ld, pci_addr=0x%lx%08lx, addr=0x%lx%08lx, size=0x%lx%08lx, space_code=%ld\n",
+				__func__, hose->region_count, (ULONG)(pci_addr >> 32), (ULONG)(pci_addr & 0xffffffff), (ULONG)(addr >> 32), (ULONG)(addr & 0xffffffff), (ULONG)(size >> 32), (ULONG)(size & 0xffffffff), space_code);
 		if (space_code & 2)
 		{
 			type = flags & (1U << 30) ? PCI_REGION_PREFETCH : PCI_REGION_MEM;
@@ -587,14 +590,14 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	{
 		if (mh->mh_Attributes & MEMF_FAST)
 		{
-			ULONG start = (ULONG) mh->mh_Lower;
-			ULONG end = (ULONG) mh->mh_Upper;
+			ULONG start = (ULONG)mh->mh_Lower;
+			ULONG end = (ULONG)mh->mh_Upper;
 			ULONG size = end - start + 1;
 
 			if (size == 0)
 				continue;
 			int pos = hose->region_count++;
-			Kprintf("[pcie] %s: - DRAM region %ld: start=%lx, size=%lx\n", __func__, pos, start, size);
+			Kprintf("[pcie] %s: - DRAM region %ld: start=0x%lx, size=0x%lx\n", __func__, pos, start, size);
 #ifdef CONFIG_PCI_MAP_SYSTEM_MEMORY
 			start = virt_to_phys((void *)(uintptr_t)bd->bi_dram[i].start);
 #endif
@@ -612,13 +615,12 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	int res = brcm_devtree_parse(ctlr);
 	if (res < 0)
 	{
-		Printf((CONST_STRPTR) "ECAM not found (no PCIe)\n");
-		return 20;
+		return res;
 	}
 
 	void *base = ctlr->base;
 	ctlr->bus_number_base = bus_number_base;
-	ctlr->bus_number_last = bus_number_base - 1;
+	ctlr->bus_number_last = bus_number_base;
 
 	/*
 	 * Reset the bridge, assert the fundamental reset. Note for some SoCs,
