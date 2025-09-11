@@ -209,14 +209,14 @@ inline void _memset(APTR dst, UBYTE val, ULONG len)
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-inline static APTR roundup(APTR x, ULONG y)
+inline static ULONG roundup(ULONG x, ULONG y)
 {
-    return (APTR)((((ULONG)x + y - 1) / y) * y);
+    return ((x + y - 1) / y) * y;
 }
 
-inline static APTR rounddown(APTR x, ULONG y)
+inline static ULONG rounddown(ULONG x, ULONG y)
 {
-    return (APTR)((ULONG)x - ((ULONG)x % y));
+    return x - (x % y);
 }
 
 #define BIT(nr) (1UL << (nr))
