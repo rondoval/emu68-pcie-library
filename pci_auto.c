@@ -497,6 +497,7 @@ void dm_pciauto_prescan_setup_bridge(struct pci_bus *brd)
 		 * I/O space
 		 */
 		dm_pci_write_config16(dev, PCI_PREF_MEMORY_BASE, (((pci_prefetch->bus_lower & 0xfff00000) >> 16) & PCI_PREF_RANGE_MASK) | prefechable_64);
+		Kprintf("[pcie] %s: Bus %ld prefetchable memory base set to 0x%lx%08lx\n", __func__, brd->bus_number, (ULONG)(pci_prefetch->bus_lower >> 32), (ULONG)(pci_prefetch->bus_lower & 0xffffffff));
 		if (prefechable_64 == PCI_PREF_RANGE_TYPE_64)
 #ifdef CONFIG_SYS_PCI_64BIT
 			dm_pci_write_config32(dev, PCI_PREF_BASE_UPPER32,
@@ -584,6 +585,7 @@ void dm_pciauto_postscan_setup_bridge(struct pci_bus *bus)
 		pciauto_region_align(pci_prefetch, CONFIG_PCI_BRIDGE_MEM_ALIGNMENT);
 
 		dm_pci_write_config16(dev, PCI_PREF_MEMORY_LIMIT, (((pci_prefetch->bus_lower - 1) >> 16) & PCI_PREF_RANGE_MASK) | prefechable_64);
+		Kprintf("[pcie] %s: Bus %ld prefetchable memory limit set to 0x%lx%08lx\n", __func__, bus->bus_number, (ULONG)((pci_prefetch->bus_lower - 1) >> 32), (ULONG)((pci_prefetch->bus_lower - 1) & 0xffffffff));
 		if (prefechable_64 == PCI_PREF_RANGE_TYPE_64)
 #ifdef CONFIG_SYS_PCI_64BIT
 			dm_pci_write_config32(dev, PCI_PREF_LIMIT_UPPER32,

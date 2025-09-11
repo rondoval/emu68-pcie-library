@@ -15,6 +15,8 @@
 
 typedef uint64_t u64;
 
+#define ARCH_DMA_MINALIGN	64
+
 #define SZ_1M				0x00100000
 #define SZ_64M				0x04000000
 

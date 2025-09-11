@@ -91,6 +91,7 @@ APTR DT_GetBaseAddressVirtual(CONST_STRPTR alias)
 	const ULONG address_cells_parent = DT_GetPropertyValueULONG(parent, "#address-cells", 2, FALSE);
 	APTR address = (APTR)(ULONG)DT_GetNumber(DT_GetPropValue(DT_FindProperty(key, (CONST_STRPTR) "reg")), address_cells_parent);
 	DT_TranslateAddress(&address, parent);
+	DT_CloseKey(key);
 
 	return address;
 }

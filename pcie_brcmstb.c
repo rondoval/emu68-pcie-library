@@ -433,6 +433,9 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	ctrl->mmio_window_phys = DT_GetNumber(DT_GetPropValue(mmio_window_phys_prop), mmio_window_phys_cells);
 	ctrl->mmio_window_virtual = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-virt", 0, FALSE);
 	ctrl->mmio_window_size = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-size", SZ_64M, FALSE);
+	Kprintf("[pcie] %s: emu68,pci-mmio-phys = 0x%lx%08lx\n", __func__, (ULONG)(ctrl->mmio_window_phys >> 32), (ULONG)(ctrl->mmio_window_phys & 0xffffffff));
+	Kprintf("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_virtual));
+	Kprintf("[pcie] %s: emu68,pci-mmio-size = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_size));
 
 	// We're done with the device tree
 	DT_CloseKey(key);
@@ -627,16 +630,14 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	 * e.g. BCM7278, the fundamental reset should not be asserted here.
 	 * This will need to be changed when support for other SoCs is added.
 	 */
-	setbits_le32(base + PCIE_RGR1_SW_INIT_1,
-				 PCIE_RGR1_SW_INIT_1_INIT_MASK | PCIE_RGR1_SW_INIT_1_PERST_MASK);
+	setbits_le32(base + PCIE_RGR1_SW_INIT_1, PCIE_RGR1_SW_INIT_1_INIT_MASK | PCIE_RGR1_SW_INIT_1_PERST_MASK);
 	/* Small safety delay so the reset doesn't look like a glitch */
 	delay_us(100);
 
 	/* Take the bridge logic (but not PERST#) out of reset */
 	clrbits_le32(base + PCIE_RGR1_SW_INIT_1, PCIE_RGR1_SW_INIT_1_INIT_MASK);
 
-	clrbits_le32(base + PCIE_MISC_HARD_PCIE_HARD_DEBUG,
-				 PCIE_HARD_DEBUG_SERDES_IDDQ_MASK);
+	clrbits_le32(base + PCIE_MISC_HARD_PCIE_HARD_DEBUG, PCIE_HARD_DEBUG_SERDES_IDDQ_MASK);
 
 	/* Wait for SerDes to be stable */
 	delay_us(100);
@@ -664,6 +665,9 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	}
 	u64 rc_bar2_offset = region.bus_start - region.phys_start;
 	u64 rc_bar2_size = 1ULL << fls64(region.size - 1);
+	Kprintf("[pcie] %s: DMA region: bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(region.bus_start >> 32), (ULONG)(region.bus_start & 0xffffffff), (ULONG)(region.phys_start >> 32), (ULONG)(region.phys_start & 0xffffffff), (ULONG)(region.size >> 32), (ULONG)(region.size & 0xffffffff));
+	Kprintf("[pcie] %s: RC BAR2: offset=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff), (ULONG)(rc_bar2_size >> 32), (ULONG)(rc_bar2_size & 0xffffffff));
+	Kprintf("[pcie] %s: RC BAR2 size encoded = 0x%lx\n", __func__, (ULONG)brcm_pcie_encode_ibar_size(rc_bar2_size));
 
 	ULONG tmp = lower_32_bits(rc_bar2_offset);
 	u32p_replace_bits(&tmp, brcm_pcie_encode_ibar_size(rc_bar2_size),
@@ -678,6 +682,8 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	u32p_replace_bits(&tmp, scb_size_val,
 					  MISC_CTRL_SCB0_SIZE_MASK);
 	writel(tmp, base + PCIE_MISC_MISC_CTRL);
+	Kprintf("[pcie] %s: RC BAR2 size=0x%lx, offset=0x%lx%08lx\n", __func__, (ULONG)rc_bar2_size, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff));
+	Kprintf("[pcie] %s: SCB0_SIZE=%ld (0x%lx)\n", __func__, scb_size_val, readl(base + PCIE_MISC_MISC_CTRL) & MISC_CTRL_SCB0_SIZE_MASK);
 
 	/* Disable the PCIe->GISB memory window (RC_BAR1) */
 	clrbits_le32(base + PCIE_MISC_RC_BAR1_CONFIG_LO,
