@@ -31,8 +31,6 @@ struct DosLibrary *DOSBase;
 
 extern struct MinList pci_bus_list;
 
-struct pci_controller *debug_pcie_ctrl = NULL;
-
 static void print_device(struct pci_device *dev)
 {
     Printf((CONST_STRPTR) "Bus %ld Dev %ld Func %ld: Vendor %04lx Device %04lx Class %02x:%02x:%02x\n",
@@ -75,27 +73,6 @@ static void probe_xhci_mmio(void)
         Printf((CONST_STRPTR) "VL805 not responding to config space reads!\n");
         return;
     }
-    
-    UBYTE cacheline;
-    dm_pci_read_config8(xhci, PCI_CACHE_LINE_SIZE, &cacheline);
-    Printf((CONST_STRPTR) "Cache Line Size: 0x%02lx\n", cacheline);
-
-    UBYTE latency;
-    dm_pci_read_config8(xhci, PCI_LATENCY_TIMER, &latency);
-    Printf((CONST_STRPTR) "Latency Timer: 0x%02lx\n", latency);
-
-    UBYTE bist;
-    dm_pci_read_config8(xhci, PCI_BIST, &bist);
-    Printf((CONST_STRPTR) "BIST register: 0x%02lx\n", bist);
-
-    // Check if BAR is properly configured
-    ULONG bar0_val;
-    dm_pci_read_config32(xhci, PCI_BASE_ADDRESS_0, &bar0_val);
-    Printf((CONST_STRPTR) "BAR0 low base address: 0x%08lx\n", bar0_val);
-
-    ULONG bar0_high;
-    dm_pci_read_config32(xhci, PCI_BASE_ADDRESS_1, &bar0_high);
-    Printf((CONST_STRPTR) "BAR0 high base address: 0x%08lx\n", bar0_high);
 
     UBYTE capability_pointer;
     dm_pci_read_config8(xhci, PCI_CAPABILITY_LIST, (UBYTE *)&capability_pointer);
@@ -109,10 +86,6 @@ static void probe_xhci_mmio(void)
     dm_pci_read_config8(xhci, PCI_INTERRUPT_PIN, &interrupt_pin);
     Printf((CONST_STRPTR) "Interrupt Pin: 0x%02lx\n", interrupt_pin);
 
-    ULONG crcr_mirror_low;
-    dm_pci_read_config32(xhci, 0x48, &crcr_mirror_low);
-    Printf((CONST_STRPTR) "CRCR Mirror Low: 0x%08lx\n", crcr_mirror_low);
-
     ULONG mcu_firmware;
     dm_pci_read_config32(xhci, 0x50, &mcu_firmware);
     Printf((CONST_STRPTR) "MCU Firmware Version: 0x%08lx\n", mcu_firmware);
@@ -120,20 +93,6 @@ static void probe_xhci_mmio(void)
     UWORD pm_status;
     dm_pci_read_config16(xhci, 0x84, &pm_status);
     Printf((CONST_STRPTR) "Power Management Status: 0x%04lx\n", pm_status);
- 
-    // Check bridge memory windows
-    struct pci_device *bridge = xhci->bus->pci_bridge;
-    if (bridge) {
-        UWORD mem_base, mem_limit;
-        dm_pci_read_config16(bridge, PCI_MEMORY_BASE, &mem_base);
-        dm_pci_read_config16(bridge, PCI_MEMORY_LIMIT, &mem_limit);
-        Printf((CONST_STRPTR) "Bridge memory window: base=0x%04lx limit=0x%04lx\n", mem_base, mem_limit);
-        
-        UWORD pref_base, pref_limit;
-        dm_pci_read_config16(bridge, PCI_PREF_MEMORY_BASE, &pref_base);
-        dm_pci_read_config16(bridge, PCI_PREF_MEMORY_LIMIT, &pref_limit);
-        Printf((CONST_STRPTR) "Bridge prefetch window: base=0x%04lx limit=0x%04lx\n", pref_base, pref_limit);
-    }
 
     // Map BAR0
     void *bar0 = dm_pci_map_bar(xhci, PCI_BASE_ADDRESS_0, 0, 0x1000, PCI_REGION_TYPE, PCI_REGION_MEM);
@@ -144,75 +103,102 @@ static void probe_xhci_mmio(void)
     }
     Printf((CONST_STRPTR)"xHCI BAR0 mapped at %lx\n", (ULONG)bar0);
 
-    // Debug: Check PCIe controller outbound windows
-    extern struct pci_controller *debug_pcie_ctrl;
-    if (debug_pcie_ctrl && debug_pcie_ctrl->base) {
-        void *base = debug_pcie_ctrl->base;
-        Printf((CONST_STRPTR) "PCIe Controller Debug:\n");
+    volatile UBYTE *regs = (volatile UBYTE *)bar0;   
+    volatile ULONG *regs32 = (volatile ULONG *)bar0;
+
+    // Capability Registers (Section 5.3 of xHCI spec)
+    UBYTE caplen = regs[0];
+    UWORD hci_version = *(UWORD*)(regs + 2);
+    ULONG hcs_params1 = regs32[1];
+    ULONG hcs_params2 = regs32[2]; 
+    ULONG hcs_params3 = regs32[3];
+    ULONG hcc_params1 = regs32[4];
+    ULONG db_offset = regs32[5];
+    ULONG rts_offset = regs32[6];
+    ULONG hcc_params2 = regs32[7];
+    
+    Printf((CONST_STRPTR)"=== xHCI Capability Registers ===\n");
+    Printf((CONST_STRPTR)"CAPLENGTH: 0x%02lx\n", caplen);
+    Printf((CONST_STRPTR)"HCIVERSION: 0x%04lx\n", hci_version);
+    Printf((CONST_STRPTR)"HCSPARAMS1: 0x%08lx (MaxSlots=%ld, MaxIntrs=%ld, MaxPorts=%ld)\n", 
+           hcs_params1, hcs_params1 & 0xFF, (hcs_params1 >> 8) & 0x7FF, (hcs_params1 >> 24) & 0xFF);
+    Printf((CONST_STRPTR)"HCSPARAMS2: 0x%08lx (IST=%ld, ERST_Max=%ld, MaxScratch=%ld)\n", 
+           hcs_params2, hcs_params2 & 0xF, (hcs_params2 >> 4) & 0xF, (hcs_params2 >> 27) & 0x1F);
+    Printf((CONST_STRPTR)"HCSPARAMS3: 0x%08lx (U1_Exit_Latency=%ld, U2_Exit_Latency=%ld)\n", 
+           hcs_params3, hcs_params3 & 0xFF, (hcs_params3 >> 16) & 0xFFFF);
+    Printf((CONST_STRPTR)"HCCPARAMS1: 0x%08lx\n", hcc_params1);
+    Printf((CONST_STRPTR)"DBOFF: 0x%08lx (Doorbell Array Offset)\n", db_offset);
+    Printf((CONST_STRPTR)"RTSOFF: 0x%08lx (Runtime Registers Offset)\n", rts_offset);
+    Printf((CONST_STRPTR)"HCCPARAMS2: 0x%08lx\n", hcc_params2);
+
+    // Operational Registers (Section 5.4 of xHCI spec)
+    volatile ULONG *op_regs = (volatile ULONG *)(regs + caplen);
+    ULONG usbcmd = op_regs[0];
+    ULONG usbsts = op_regs[1]; 
+    ULONG pagesize = op_regs[2];
+    ULONG dnctrl = op_regs[3];
+    ULONG crcr_lo = op_regs[4];
+    ULONG crcr_hi = op_regs[5];
+    ULONG dcbaap_lo = op_regs[6];
+    ULONG dcbaap_hi = op_regs[7];
+    ULONG config = op_regs[8];
+    
+    Printf((CONST_STRPTR)"\n=== xHCI Operational Registers (offset 0x%02lx) ===\n", caplen);
+    Printf((CONST_STRPTR)"USBCMD: 0x%08lx (Run=%ld, Reset=%ld, IntEn=%ld, HSErr=%ld)\n", 
+           usbcmd, usbcmd & 1, (usbcmd >> 1) & 1, (usbcmd >> 2) & 1, (usbcmd >> 3) & 1);
+    Printf((CONST_STRPTR)"USBSTS: 0x%08lx (HCHalted=%ld, HSE=%ld, EINT=%ld, PCD=%ld, CNR=%ld)\n", 
+           usbsts, usbsts & 1, (usbsts >> 2) & 1, (usbsts >> 3) & 1, (usbsts >> 4) & 1, (usbsts >> 11) & 1);
+    Printf((CONST_STRPTR)"PAGESIZE: 0x%08lx (Page Size = %ld bytes)\n", pagesize, pagesize << 12);
+    Printf((CONST_STRPTR)"DNCTRL: 0x%08lx (Notification Enable)\n", dnctrl);
+    Printf((CONST_STRPTR)"CRCR: 0x%08lx%08lx (Command Ring Control)\n", crcr_hi, crcr_lo);
+    Printf((CONST_STRPTR)"DCBAAP: 0x%08lx%08lx (Device Context Base Address Array Pointer)\n", dcbaap_hi, dcbaap_lo);
+    Printf((CONST_STRPTR)"CONFIG: 0x%08lx (Max Device Slots Enabled = %ld)\n", config, config & 0xFF);
+
+    // Port Status and Control Registers
+    volatile ULONG *port_regs = (volatile ULONG *)(regs + caplen + 0x400);
+    ULONG max_ports = (hcs_params1 >> 24) & 0xFF;
+    
+    Printf((CONST_STRPTR)"\n=== xHCI Port Registers (offset 0x%02lx) ===\n", caplen + 0x400);
+    for (ULONG port = 0; port < max_ports && port < 4; port++) {
+        ULONG portsc = port_regs[port * 4];
+        ULONG portpmsc = port_regs[port * 4 + 1];
+        ULONG portli = port_regs[port * 4 + 2];
+        ULONG porthlpmc = port_regs[port * 4 + 3];
         
-        // Read raw register values
-        ULONG win0_lo = readl(base + 0x400C);
-        ULONG win0_hi = readl(base + 0x4010);
-        ULONG win0_base_limit = readl(base + 0x4070);
-        ULONG win0_base_hi = readl(base + 0x4080);
-        ULONG win0_limit_hi = readl(base + 0x4084);
-        ULONG misc_ctrl = readl(base + 0x4008);
-        
-        Printf((CONST_STRPTR) "  PCIE_MEM_WIN0_LO(0) = 0x%08lx\n", win0_lo);
-        Printf((CONST_STRPTR) "  PCIE_MEM_WIN0_HI(0) = 0x%08lx\n", win0_hi);
-        Printf((CONST_STRPTR) "  PCIE_MEM_WIN0_BASE_LIMIT(0) = 0x%08lx\n", win0_base_limit);
-        Printf((CONST_STRPTR) "  PCIE_MEM_WIN0_BASE_HI(0) = 0x%08lx\n", win0_base_hi);
-        Printf((CONST_STRPTR) "  PCIE_MEM_WIN0_LIMIT_HI(0) = 0x%08lx\n", win0_limit_hi);
-        Printf((CONST_STRPTR) "  PCIE_MISC_MISC_CTRL = 0x%08lx\n", misc_ctrl);
-        
-        // Reassemble window configuration
-        u64 pcie_start = ((u64)win0_hi << 32) | win0_lo;
-        
-        // Extract base and limit from BASE_LIMIT register (in MB)
-        ULONG phys_base_mb = win0_base_limit & 0xFFF;
-        ULONG phys_limit_mb = (win0_base_limit >> 20) & 0xFFF;
-        
-        // Add high bits (bits 31:20 of the MB address become bits 43:32 of byte address)
-        u64 phys_base = ((u64)(win0_base_hi & 0xFFF) << 32) | ((u64)phys_base_mb << 20);
-        u64 phys_limit = ((u64)(win0_limit_hi & 0xFFF) << 32) | ((u64)phys_limit_mb << 20) | 0xFFFFF;
-        u64 window_size = phys_limit - phys_base + 1;
-        
-        Printf((CONST_STRPTR) "  Window 0 Translation:\n");
-        Printf((CONST_STRPTR) "    PCIe Range: 0x%lx%08lx\n", (ULONG)(pcie_start >> 32), (ULONG)(pcie_start & 0xFFFFFFFF));
-        Printf((CONST_STRPTR) "    Phys Range: 0x%lx%08lx - 0x%lx%08lx\n", 
-            (ULONG)(phys_base >> 32), (ULONG)(phys_base & 0xFFFFFFFF),
-            (ULONG)(phys_limit >> 32), (ULONG)(phys_limit & 0xFFFFFFFF));
-        Printf((CONST_STRPTR) "    Window Size: 0x%lx%08lx (%ld MB)\n", 
-            (ULONG)(window_size >> 32), (ULONG)(window_size & 0xFFFFFFFF), 
-            (ULONG)(window_size >> 20));
-        
-        // Check if our BAR address falls within this window
-        ULONG bar0_addr = 0x0C0000000ULL;  // From the logs
-        if (bar0_addr >= pcie_start && bar0_addr < (pcie_start + window_size)) {
-            u64 translated_addr = phys_base + (bar0_addr - pcie_start);
-            Printf((CONST_STRPTR) "    BAR 0x%lx translates to phys 0x%lx%08lx\n", 
-                bar0_addr, (ULONG)(translated_addr >> 32), (ULONG)(translated_addr & 0xFFFFFFFF));
-        } else {
-            Printf((CONST_STRPTR) "    BAR 0x%lx is OUTSIDE window range!\n", bar0_addr);
-        }
-        
-        // Check MISC_CTRL bits
-        Printf((CONST_STRPTR) "  MISC_CTRL Analysis:\n");
-        Printf((CONST_STRPTR) "    SCB_ACCESS_EN: %s\n", (LONG)((misc_ctrl & (1<<12)) ? "YES" : "NO"));
-        Printf((CONST_STRPTR) "    CFG_READ_UR_MODE: %s\n", (LONG)((misc_ctrl & (1<<13)) ? "YES" : "NO"));
-        Printf((CONST_STRPTR) "    MAX_BURST_SIZE: %ld\n", (misc_ctrl >> 20) & 0x3);
-        Printf((CONST_STRPTR) "    SCB_MAX_BURST_SIZE: %ld\n", (misc_ctrl >> 22) & 0x3);
+        Printf((CONST_STRPTR)"Port %ld:\n", port + 1);
+        Printf((CONST_STRPTR)"  PORTSC: 0x%08lx (CCS=%ld, PED=%ld, PP=%ld, Speed=%ld, PIC=%ld)\n", 
+               portsc, portsc & 1, (portsc >> 1) & 1, (portsc >> 9) & 1, 
+               (portsc >> 10) & 0xF, (portsc >> 14) & 3);
+        Printf((CONST_STRPTR)"  PORTPMSC: 0x%08lx\n", portpmsc);
+        Printf((CONST_STRPTR)"  PORTLI: 0x%08lx\n", portli);
+        Printf((CONST_STRPTR)"  PORTHLPMC: 0x%08lx\n", porthlpmc);
     }
 
-    volatile UBYTE *regs = (volatile UBYTE *)bar0;
+    // Runtime Registers
+    volatile ULONG *rt_regs = (volatile ULONG *)(regs + (rts_offset & 0xFFFF));
+    ULONG mfindex = rt_regs[0];
     
+    Printf((CONST_STRPTR)"\n=== xHCI Runtime Registers (offset 0x%04lx) ===\n", rts_offset & 0xFFFF);
+    Printf((CONST_STRPTR)"MFINDEX: 0x%08lx (Microframe Index)\n", mfindex);
 
-    // UBYTE caplen = regs[0];
-    // UWORD hci_version = *(UWORD*)(regs + 2);
-    ULONG reg0 = *(ULONG*)regs;
-    // Printf((CONST_STRPTR)"CAPLENGTH %lx\n", caplen);
-    // Printf((CONST_STRPTR)"HCIVERSION %lx\n", hci_version);
-    Printf((CONST_STRPTR)"REG0 %lx\n", reg0);
+    // Show first few interrupter registers
+    volatile ULONG *iman = &rt_regs[8];  // First interrupter at offset 0x20
+    Printf((CONST_STRPTR)"Interrupter 0:\n");
+    Printf((CONST_STRPTR)"  IMAN: 0x%08lx (IP=%ld, IE=%ld)\n", iman[0], iman[0] & 1, (iman[0] >> 1) & 1);
+    Printf((CONST_STRPTR)"  IMOD: 0x%08lx\n", iman[1]);
+    Printf((CONST_STRPTR)"  ERSTSZ: 0x%08lx (Table Size = %ld)\n", iman[2], iman[2] & 0xFFFF);
+    Printf((CONST_STRPTR)"  ERSTBA: 0x%08lx%08lx\n", iman[4], iman[3]);
+    Printf((CONST_STRPTR)"  ERDP: 0x%08lx%08lx\n", iman[6], iman[5]);
+
+    // Doorbell Array  
+    volatile ULONG *db_regs = (volatile ULONG *)(regs + (db_offset & 0xFFFF));
+    Printf((CONST_STRPTR)"\n=== xHCI Doorbell Array (offset 0x%04lx) ===\n", db_offset & 0xFFFF);
+    Printf((CONST_STRPTR)"DB[0] (Host Controller): 0x%08lx\n", db_regs[0]);
+    for (ULONG i = 1; i <= 4 && i <= max_ports; i++) {
+        Printf((CONST_STRPTR)"DB[%ld]: 0x%08lx\n", i, db_regs[i]);
+    }
+
+
  }
 
 int main(void)
@@ -254,19 +240,6 @@ int main(void)
         return 10;
     }
     Printf((CONST_STRPTR) "PCIe controller probed successfully\n");
-    debug_pcie_ctrl = pcie;  // Store for debugging
-
-    ret = bcm2711_notify_vl805_reset();
-    if (ret != 0)
-    {
-        Printf((CONST_STRPTR) "Failed to notify VL805 reset\n");
-        // Not a fatal error, continue
-    }
-    else
-    {
-        Printf((CONST_STRPTR) "VL805 reset notified successfully\n");
-    }
-    // delay_us(5*1000*1000);
     
     _NewMinList(&pci_bus_list);
 
@@ -315,13 +288,21 @@ int main(void)
         }
     }
  
-    delay_us(1000 * 1000);
+
+    ret = bcm2711_notify_vl805_reset();
+    if (ret != 0)
+    {
+        Printf((CONST_STRPTR) "Failed to notify VL805 reset\n");
+        // Not a fatal error, continue
+    }
+    delay_us(1000);
 
     probe_xhci_mmio();
 
     brcm_pcie_remove(pcie);
 
     CloseLibrary((struct Library *)UtilityBase);
+    CloseLibrary((struct Library *)DOSBase);
 
     return 0;
 }
