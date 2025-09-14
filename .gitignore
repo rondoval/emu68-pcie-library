@@ -54,6 +54,8 @@ dkms.conf
 # debug information files
 *.dwo
 
+# pcielib specific
+.vscode/
 rom/
 openpci/
 build/
