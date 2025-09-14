@@ -25,7 +25,7 @@ struct MinList pci_bus_list;
 
 int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr)
 {
-	Kprintf("[pcie] %s: creating bus for bridge %lx, function %ld\n", __func__, PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
+	KprintfH("[pcie] %s: creating bus for bridge %lx, function %ld\n", __func__, PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	struct pci_bus *bus = AllocMem(sizeof(*bus), MEMF_CLEAR);
 	if (!bus)
 		return -ENOMEM;
@@ -77,7 +77,6 @@ int pci_probe_bus(struct pci_bus *bus)
 	// ret = device_get_dma_constraints(dev);
 	// if (ret)
 	// 	goto fail;
-	Kprintf("[pcie] %s: bus=%ld/%s\n", __func__, bus->bus_number, bus->name);
 
 	ret = pci_bind_bus_devices(bus);
 	if (ret)
@@ -103,7 +102,6 @@ fail:
 
 int pci_auto_config_devices(struct pci_bus *bus)
 {
-	KprintfH("[pcie] %s: start\n", __func__);
 	pciauto_config_init(bus->controller);
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -119,7 +117,7 @@ int pci_auto_config_devices(struct pci_bus *bus)
 		bus->bus_number_last_sub = bus->bus_number_last_sub < ret ? ret : bus->bus_number_last_sub;
 	}
 
-	Kprintf("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
+	KprintfH("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
 	return 0;
 }
 
@@ -152,7 +150,7 @@ int dm_pci_hose_probe_bus(struct pci_bus *bus)
 
 int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp)
 {
-	Kprintf("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
+	KprintfH("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
 	*devp = NULL;
 	struct pci_device *dev = AllocMem(sizeof(struct pci_device), MEMF_CLEAR);
 	if (!dev)
@@ -209,7 +207,7 @@ int pci_bind_bus_devices(struct pci_bus *bus)
 		struct pci_device *dev;
 		/* Find this device in the device tree */
 		ret = pci_bus_find_devfn(bus, PCI_MASK_BUS(bdf), &dev);
-		Kprintf("[pcie] %s: find ret=%ld\n", __func__, ret);
+		KprintfH("[pcie] %s: find ret=%ld\n", __func__, ret);
 
 		/* If nothing in the device tree, bind a device */
 		if (ret == -ENODEV)

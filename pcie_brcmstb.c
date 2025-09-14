@@ -86,7 +86,7 @@ static int brcm_pcie_encode_ibar_size(u64 size)
 static BOOL brcm_pcie_rc_mode(struct pci_controller *pcie)
 {
 	ULONG val = readl(pcie->base + PCIE_MISC_PCIE_STATUS);
-	Kprintf("[pcie] %s: PCIe status: 0x%lx\n", __func__, val);
+	KprintfH("[pcie] %s: PCIe status: 0x%lx\n", __func__, val);
 
 	return (val & STATUS_PCIE_PORT_MASK) >> STATUS_PCIE_PORT_SHIFT;
 }
@@ -289,7 +289,7 @@ static int brcm_pcie_mdio_write(void *base, unsigned int port, unsigned int rega
  */
 static int brcm_pcie_set_ssc(void *base)
 {
-	Kprintf("[pcie] %s\n", __func__);
+	KprintfH("[pcie] %s\n", __func__);
 	int pll, ssc;
 	int ret;
 	ULONG tmp;
@@ -410,7 +410,6 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 		return -1;
 	}
 
-	Kprintf("[pcie] %s: Device tree info\n", __func__);
 	Kprintf("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
 	Kprintf("[pcie] %s: register base: 0x%08lx\n", __func__, ctrl->base);
 
@@ -466,7 +465,7 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 	/* PCI addresses are always 3-cells */
 	len /= sizeof(ULONG);
 	cells_per_record = pci_addr_cells + addr_cells + size_cells;
-	Kprintf("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
+	KprintfH("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
 	while (len)
 	{
@@ -512,7 +511,7 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	len /= sizeof(ULONG);
 	const int cells_per_record = pci_addr_cells + addr_cells + size_cells;
 	hose->region_count = 0;
-	Kprintf("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
+	KprintfH("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
 	/* Dynamically allocate the regions array */
 	int max_regions = len / cells_per_record + CONFIG_NR_DRAM_BANKS;
@@ -665,9 +664,9 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	}
 	u64 rc_bar2_offset = region.bus_start - region.phys_start;
 	u64 rc_bar2_size = 1ULL << fls64(region.size - 1);
-	Kprintf("[pcie] %s: DMA region: bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(region.bus_start >> 32), (ULONG)(region.bus_start & 0xffffffff), (ULONG)(region.phys_start >> 32), (ULONG)(region.phys_start & 0xffffffff), (ULONG)(region.size >> 32), (ULONG)(region.size & 0xffffffff));
-	Kprintf("[pcie] %s: RC BAR2: offset=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff), (ULONG)(rc_bar2_size >> 32), (ULONG)(rc_bar2_size & 0xffffffff));
-	Kprintf("[pcie] %s: RC BAR2 size encoded = 0x%lx\n", __func__, (ULONG)brcm_pcie_encode_ibar_size(rc_bar2_size));
+	KprintfH("[pcie] %s: DMA region: bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(region.bus_start >> 32), (ULONG)(region.bus_start & 0xffffffff), (ULONG)(region.phys_start >> 32), (ULONG)(region.phys_start & 0xffffffff), (ULONG)(region.size >> 32), (ULONG)(region.size & 0xffffffff));
+	KprintfH("[pcie] %s: RC BAR2: offset=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff), (ULONG)(rc_bar2_size >> 32), (ULONG)(rc_bar2_size & 0xffffffff));
+	KprintfH("[pcie] %s: RC BAR2 size encoded = 0x%lx\n", __func__, (ULONG)brcm_pcie_encode_ibar_size(rc_bar2_size));
 
 	ULONG tmp = lower_32_bits(rc_bar2_offset);
 	u32p_replace_bits(&tmp, brcm_pcie_encode_ibar_size(rc_bar2_size),
@@ -682,8 +681,8 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	u32p_replace_bits(&tmp, scb_size_val,
 					  MISC_CTRL_SCB0_SIZE_MASK);
 	writel(tmp, base + PCIE_MISC_MISC_CTRL);
-	Kprintf("[pcie] %s: RC BAR2 size=0x%lx, offset=0x%lx%08lx\n", __func__, (ULONG)rc_bar2_size, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff));
-	Kprintf("[pcie] %s: SCB0_SIZE=%ld (0x%lx)\n", __func__, scb_size_val, readl(base + PCIE_MISC_MISC_CTRL) & MISC_CTRL_SCB0_SIZE_MASK);
+	KprintfH("[pcie] %s: RC BAR2 size=0x%lx, offset=0x%lx%08lx\n", __func__, (ULONG)rc_bar2_size, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff));
+	KprintfH("[pcie] %s: SCB0_SIZE=%ld (0x%lx)\n", __func__, scb_size_val, readl(base + PCIE_MISC_MISC_CTRL) & MISC_CTRL_SCB0_SIZE_MASK);
 
 	/* Disable the PCIe->GISB memory window (RC_BAR1) */
 	clrbits_le32(base + PCIE_MISC_RC_BAR1_CONFIG_LO,
@@ -766,7 +765,6 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	Kprintf("[pcie] %s: link up, %s Gbps x%lu %s\n", __func__, link_speed_to_str(cls), nlw, ssc_good ? "(SSC)" : "(!SSC)");
 
 	/* PCIe->SCB endian mode for BAR */
-	// TODO change to big endian?
 	clrsetbits_le32(base + PCIE_RC_CFG_VENDOR_VENDOR_SPECIFIC_REG1,
 					PCIE_RC_CFG_VENDOR_VENDOR_SPECIFIC_REG1_ENDIAN_MODE_BAR2_MASK,
 					VENDOR_SPECIFIC_REG1_LITTLE_ENDIAN);

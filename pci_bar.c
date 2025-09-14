@@ -84,7 +84,7 @@ void *dm_pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr, size_t len
 	if (!phys_addr)
 		return NULL;
 
-	Kprintf("[pcie] %s: bus_addr 0x%lx%08lx -> phys_addr 0x%lx%08lx\n", __func__, (ULONG)(bus_addr >> 32), (ULONG)(bus_addr & 0xffffffff), (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff));
+	KprintfH("[pcie] %s: bus_addr 0x%lx%08lx -> phys_addr 0x%lx%08lx\n", __func__, (ULONG)(bus_addr >> 32), (ULONG)(bus_addr & 0xffffffff), (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff));
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 
 	if (phys_addr < ctlr->mmio_window_phys || phys_addr >= ctlr->mmio_window_phys + ctlr->mmio_window_size)
@@ -101,7 +101,7 @@ void *dm_pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr, size_t len
 		return NULL;
 	}
 
-	Kprintf("[pcie] %s: phys_addr 0x%lx%08lx -> virt_addr 0x%lx\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff),
+	KprintfH("[pcie] %s: phys_addr 0x%lx%08lx -> virt_addr 0x%lx\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff),
 			(ULONG)(ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys)));
 
 	return (void *)ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys);
@@ -132,7 +132,7 @@ void *dm_pci_map_bar(struct pci_device *dev, int bar, size_t offset, size_t len,
 	/* read BAR address */
 	dm_pci_read_config32(udev, bar, &bar_response);
 	pci_bus_addr = (pci_addr_t)(bar_response & ~0xf);
-	Kprintf("[pcie] %s: BAR%ld response %lx, addr %lx%08lx\n", __func__, (bar - PCI_BASE_ADDRESS_0) / 4, bar_response, (ULONG)(pci_bus_addr >> 32), (ULONG)(pci_bus_addr & 0xffffffff));
+	KprintfH("[pcie] %s: BAR%ld response %lx, addr %lx%08lx\n", __func__, (bar - PCI_BASE_ADDRESS_0) / 4, bar_response, (ULONG)(pci_bus_addr >> 32), (ULONG)(pci_bus_addr & 0xffffffff));
 
 	/* This has a lot of baked in assumptions, but essentially tries
 	 * to mirror the behavior of BAR assignment for 64 Bit enabled
