@@ -64,13 +64,13 @@ WORD DT_TranslateAddress(APTR *address, APTR node)
 		ULONG phys_vc4 = DT_GetNumber(i, address_cells_child);
 		ULONG phys_cpu = DT_GetNumber(i + address_cells_child, address_cells_parent);
 		ULONG size = DT_GetNumber(i + address_cells_child + address_cells_parent, size_cells);
-		Kprintf("[devtree] %s: phys_vc4=0x%08lx phys_cpu=0x%08lx size=0x%08lx\n", __func__, phys_vc4, phys_cpu, size);
+		KprintfH("[devtree] %s: phys_vc4=0x%08lx phys_cpu=0x%08lx size=0x%08lx\n", __func__, phys_vc4, phys_cpu, size);
 
 		if ((ULONG)*address >= phys_vc4 && (ULONG)*address < phys_vc4 + size)
 		{
 			ULONG offset = phys_cpu - phys_vc4;
 			*address += offset;
-			Kprintf("[devtree] %s: Virtual address=0x%08lx\n", __func__, *address);
+			KprintfH("[devtree] %s: Virtual address=0x%08lx\n", __func__, *address);
 			return 0;
 		}
 	}

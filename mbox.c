@@ -42,7 +42,7 @@ int bcm2835_mbox_call_raw(ULONG chan, ULONG send, ULONG *recv)
 	ULONG endtime = get_time() + TIMEOUT * 1000;
 	ULONG val;
 
-	Kprintf("time: %lu timeout: %lu\n", get_time(), endtime);
+	KprintfH("time: %lu timeout: %lu\n", get_time(), endtime);
 
 	if (send & BCM2835_CHAN_MASK)
 	{
@@ -82,7 +82,7 @@ int bcm2835_mbox_call_raw(ULONG chan, ULONG send, ULONG *recv)
 	/* Send the request */
 
 	val = BCM2835_MBOX_PACK(chan, send);
-	Kprintf("mbox: TX raw: 0x%08lx\n", val);
+	KprintfH("mbox: TX raw: 0x%08lx\n", val);
 	writel(val, &regs->write);
 
 	/* Wait for the response */
@@ -102,7 +102,7 @@ int bcm2835_mbox_call_raw(ULONG chan, ULONG send, ULONG *recv)
 	/* Read the response */
 
 	val = readl(&regs->read);
-	Kprintf("mbox: RX raw: 0x%08lx\n", val);
+	KprintfH("mbox: RX raw: 0x%08lx\n", val);
 
 	/* Validate the response */
 
@@ -117,7 +117,7 @@ int bcm2835_mbox_call_raw(ULONG chan, ULONG send, ULONG *recv)
 	return 0;
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_HIGH
 void dump_buf(struct bcm2835_mbox_hdr *buffer)
 {
 	ULONG *p;
@@ -133,8 +133,8 @@ void dump_buf(struct bcm2835_mbox_hdr *buffer)
 
 int bcm2835_mbox_call_prop(ULONG chan, struct bcm2835_mbox_hdr *buffer)
 {
-#ifdef DEBUG
-	Kprintf("mbox: TX buffer\n");
+#ifdef DEBUG_HIGH
+	KprintfH("mbox: TX buffer\n");
 	dump_buf(buffer);
 #endif
 	ULONG size_aligned = roundup(buffer->buf_size, ARCH_DMA_MINALIGN);
@@ -170,8 +170,8 @@ int bcm2835_mbox_call_prop(ULONG chan, struct bcm2835_mbox_hdr *buffer)
 		return -1;
 	}
 
-#ifdef DEBUG
-	Kprintf("mbox: RX buffer\n");
+#ifdef DEBUG_HIGH
+	KprintfH("mbox: RX buffer\n");
 	dump_buf(buffer);
 #endif
 
@@ -191,8 +191,7 @@ int bcm2835_mbox_call_prop(ULONG chan, struct bcm2835_mbox_hdr *buffer)
 	{
 		if (!(tag->val_len & BCM2835_MBOX_TAG_VAL_LEN_RESPONSE))
 		{
-			Kprintf("mbox: Tag %d missing val_len response bit\n",
-					tag_index);
+			Kprintf("mbox: Tag %ld missing val_len response bit\n", tag_index);
 			return -1;
 		}
 		/*
