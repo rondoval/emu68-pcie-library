@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(pcie.library VERSION 0.5.0)
+project(pcie.library VERSION ${CMAKE_PROJECT_VERSION})
 
-add_compile_options(-Os -Wall -Wno-unused-function -Wno-shift-count-overflow -DDEBUG)
+add_compile_options(-Os -m68040 -fomit-frame-pointer -Wall -Wno-unused-function -Wno-shift-count-overflow -DDEBUG)
 file(GLOB_RECURSE pcie_sources src/*.c include/*.h)
 add_library(pcie.library STATIC ${pcie_sources})
 target_include_directories(pcie.library PUBLIC include)

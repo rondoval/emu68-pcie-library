@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(lspci VERSION 1.0.0)
+project(lspci VERSION ${CMAKE_PROJECT_VERSION})
 
 add_compile_options(-Os -Wall -Wno-unused-function -Wno-shift-count-overflow -DDEBUG)
 add_link_options(-s)
