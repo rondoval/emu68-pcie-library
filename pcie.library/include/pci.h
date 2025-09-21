@@ -1040,7 +1040,7 @@ int dm_pci_find_device(unsigned int vendor, unsigned int device, int index, stru
  * @devp:	Returns pointer to the device, if found
  * Return: 0 if found, -ve on error
  */
-int dm_pci_find_class(UWORD find_class, int index, struct pci_device **devp);
+int dm_pci_find_class(ULONG find_class, int index, struct pci_device **devp);
 
 /**
  * PCI_DEVICE - macro used to describe a specific pci device

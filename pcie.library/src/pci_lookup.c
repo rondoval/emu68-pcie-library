@@ -100,7 +100,7 @@ int dm_pci_find_device(unsigned int vendor, unsigned int device, int index, stru
 	return -ENODEV;
 }
 
-int dm_pci_find_class(UWORD find_class, int index, struct pci_device **devp)
+int dm_pci_find_class(ULONG find_class, int index, struct pci_device **devp)
 {
 	for (struct MinNode *node = pci_bus_list.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
