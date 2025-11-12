@@ -347,15 +347,44 @@
 #define PCI_EA_NUM_ENT 2		 /* Number of Capability Entries */
 #define PCI_EA_NUM_ENT_MASK 0x3f /* Num Entries Mask */
 #define PCI_EA_FIRST_ENT 4		 /* First EA Entry in List */
+#define PCI_EA_FIRST_ENT_BRIDGE 8 /* First EA Entry for Bridges */
 #define PCI_EA_ES 0x00000007	 /* Entry Size */
 #define PCI_EA_BEI 0x000000f0	 /* BAR Equivalent Indicator */
+
+#define PCI_EA_SEC_BUS_MASK 0xff
+#define PCI_EA_SUB_BUS_MASK 0xff00
+#define PCI_EA_SUB_BUS_SHIFT 8
+
+#define PCI_EA_BEI_BAR0 0
+#define PCI_EA_BEI_BAR5 5
+#define PCI_EA_BEI_BRIDGE 6
+#define PCI_EA_BEI_ENI 7
+#define PCI_EA_BEI_ROM 8
 /* 9-14 map to VF BARs 0-5 respectively */
 #define PCI_EA_BEI_VF_BAR0 9
 #define PCI_EA_BEI_VF_BAR5 14
+#define PCI_EA_BEI_RESERVED 15
+
+#define PCI_EA_PP 0x0000ff00		 /* Primary Properties */
+#define PCI_EA_SP 0x00ff0000		 /* Secondary Properties */
+#define PCI_EA_WRITABLE 0x40000000	 /* Writable flag */
+#define PCI_EA_ENABLE 0x80000000	 /* Enable flag */
 /* Base, MaxOffset registers */
 /* bit 0 is reserved */
 #define PCI_EA_IS_64 0x00000002		 /* 64-bit field flag */
 #define PCI_EA_FIELD_MASK 0xfffffffc /* For Base & Max Offset */
+
+#define PCI_EA_P_MEM 0x00
+#define PCI_EA_P_MEM_PREFETCH 0x01
+#define PCI_EA_P_IO 0x02
+#define PCI_EA_P_VF_MEM_PREFETCH 0x03
+#define PCI_EA_P_VF_MEM 0x04
+#define PCI_EA_P_BRIDGE_MEM 0x05
+#define PCI_EA_P_BRIDGE_MEM_PREFETCH 0x06
+#define PCI_EA_P_BRIDGE_IO 0x07
+#define PCI_EA_P_MEM_RESERVED 0xfd
+#define PCI_EA_P_IO_RESERVED 0xfe
+#define PCI_EA_P_UNAVAILABLE 0xff
 
 /* PCI Express capabilities */
 #define PCI_EXP_FLAGS 2						/* Capabilities register */

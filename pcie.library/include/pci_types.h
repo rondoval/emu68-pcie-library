@@ -66,6 +66,7 @@ struct pci_controller
 	int gen;				 /* PCI gen to use */
 	BOOL ssc;				 /* should spread spectrum be enabled */
 	CONST_STRPTR compatible; /* compatible string */
+	ULONG hw_rev;			 /* hardware revision */
 
 	phys_addr_t mmio_window_phys; /* physical address of MMIO window */
 	ULONG mmio_window_virtual;	  /* virtual address of MMIO window */
@@ -82,6 +83,8 @@ struct pci_controller
 
 	int bus_number_base; /* root bus number. This is in case there are multiple controllers/root buses */
 	int bus_number_last; /* last assigned bus number */
+
+	pci_addr_t msi_target_addr; /* MSI target address */
 };
 
 struct pci_bus

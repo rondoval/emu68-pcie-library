@@ -55,6 +55,8 @@
 #define  MISC_CTRL_MAX_BURST_SIZE_MASK            0x300000
 #define  MISC_CTRL_MAX_BURST_SIZE_128             0x0
 #define  MISC_CTRL_SCB0_SIZE_MASK                 0xf8000000
+#define  MISC_CTRL_PCIE_RCB_MPS_MODE_MASK		  0x400
+#define  MISC_CTRL_PCIE_RCB_64B_MODE_MASK         0x80
 
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_LO          0x400c
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_HI          0x4010
@@ -78,6 +80,7 @@
 #define  STATUS_PCIE_PHYLINKUP_MASK                 0x10
 #define  STATUS_PCIE_PHYLINKUP_SHIFT                   4
 #define PCIE_MISC_REVISION                        0x406c
+#define   BRCM_PCIE_HW_REV_33					  0x0303
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_BASE_LIMIT  0x4070
 #define  MEM_WIN0_BASE_LIMIT_LIMIT_MASK           0xfff00000
 #define  MEM_WIN0_BASE_LIMIT_BASE_MASK            0xfff0
@@ -103,8 +106,10 @@
 #define PCIE_INTR2_CPU_MASK_SET               0x4310
 #define PCIE_INTR2_CPU_MASK_CLR               0x4314
 
+#define PCIE_MSI_INTR2_STATUS			  	  0x4500
 #define PCIE_MSI_INTR2_CLR                    0x4508
 #define PCIE_MSI_INTR2_MASK_SET               0x4510
+#define PCIE_MSI_INTR2_MASK_CLR	  			  0x4514
 
 #define PCIE_RGR1_SW_INIT_1                   0x9210
 #define PCIE_EXT_CFG_INDEX                    0x9000
