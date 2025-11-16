@@ -26,35 +26,38 @@
  * of which the first 64 bytes are standardized as follows:
  */
 #define PCI_STD_HEADER_SIZEOF 64
-#define PCI_VENDOR_ID 0x00			 /* 16 bits */
-#define PCI_DEVICE_ID 0x02			 /* 16 bits */
-#define PCI_COMMAND 0x04			 /* 16 bits */
-#define PCI_COMMAND_IO 0x1			 /* Enable response in I/O space */
-#define PCI_COMMAND_MEMORY 0x2		 /* Enable response in Memory space */
-#define PCI_COMMAND_MASTER 0x4		 /* Enable bus mastering */
-#define PCI_COMMAND_SPECIAL 0x8		 /* Enable response to special cycles */
-#define PCI_COMMAND_INVALIDATE 0x10	 /* Use memory write and invalidate */
-#define PCI_COMMAND_VGA_PALETTE 0x20 /* Enable palette snooping */
-#define PCI_COMMAND_PARITY 0x40		 /* Enable parity checking */
-#define PCI_COMMAND_WAIT 0x80		 /* Enable address/data stepping */
-#define PCI_COMMAND_SERR 0x100		 /* Enable SERR */
-#define PCI_COMMAND_FAST_BACK 0x200	 /* Enable back-to-back writes */
+#define PCI_VENDOR_ID 0x00			  	/* 16 bits */
+#define PCI_DEVICE_ID 0x02			  	/* 16 bits */
+#define PCI_COMMAND 0x04			  	/* 16 bits */
+#define  PCI_COMMAND_IO 0x1			  	/* Enable response in I/O space */
+#define  PCI_COMMAND_MEMORY 0x2		  	/* Enable response in Memory space */
+#define  PCI_COMMAND_MASTER 0x4		  	/* Enable bus mastering */
+#define  PCI_COMMAND_SPECIAL 0x8	  	/* Enable response to special cycles */
+#define  PCI_COMMAND_INVALIDATE 0x10  	/* Use memory write and invalidate */
+#define  PCI_COMMAND_VGA_PALETTE 0x20 	/* Enable palette snooping */
+#define  PCI_COMMAND_PARITY 0x40	  	/* Enable parity checking */
+#define  PCI_COMMAND_WAIT 0x80		  	/* Enable address/data stepping */
+#define  PCI_COMMAND_SERR 0x100		  	/* Enable SERR */
+#define  PCI_COMMAND_FAST_BACK 0x200  	/* Enable back-to-back writes */
+#define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
 
-#define PCI_STATUS 0x06				 /* 16 bits */
-#define PCI_STATUS_CAP_LIST 0x10	 /* Support Capability List */
-#define PCI_STATUS_66MHZ 0x20		 /* Support 66 Mhz PCI 2.1 bus */
-#define PCI_STATUS_UDF 0x40			 /* Support User Definable Features [obsolete] */
-#define PCI_STATUS_FAST_BACK 0x80	 /* Accept fast-back to back */
-#define PCI_STATUS_PARITY 0x100		 /* Detected parity error */
-#define PCI_STATUS_DEVSEL_MASK 0x600 /* DEVSEL timing */
-#define PCI_STATUS_DEVSEL_FAST 0x000
-#define PCI_STATUS_DEVSEL_MEDIUM 0x200
-#define PCI_STATUS_DEVSEL_SLOW 0x400
-#define PCI_STATUS_SIG_TARGET_ABORT 0x800  /* Set on target abort */
-#define PCI_STATUS_REC_TARGET_ABORT 0x1000 /* Master ack of " */
-#define PCI_STATUS_REC_MASTER_ABORT 0x2000 /* Set on master abort */
-#define PCI_STATUS_SIG_SYSTEM_ERROR 0x4000 /* Set when we drive SERR */
-#define PCI_STATUS_DETECTED_PARITY 0x8000  /* Set on parity error */
+#define PCI_STATUS 0x06				 	/* 16 bits */
+#define  PCI_STATUS_IMM_READY	0x01	/* Immediate Readiness */
+#define  PCI_STATUS_INTERRUPT	0x08	/* Interrupt status */
+#define  PCI_STATUS_CAP_LIST 0x10	 	/* Support Capability List */
+#define  PCI_STATUS_66MHZ 0x20		 	/* Support 66 Mhz PCI 2.1 bus */
+#define  PCI_STATUS_UDF 0x40			/* Support User Definable Features [obsolete] */
+#define  PCI_STATUS_FAST_BACK 0x80	 	/* Accept fast-back to back */
+#define  PCI_STATUS_PARITY 0x100		/* Detected parity error */
+#define  PCI_STATUS_DEVSEL_MASK 0x600 	/* DEVSEL timing */
+#define  PCI_STATUS_DEVSEL_FAST 0x000
+#define  PCI_STATUS_DEVSEL_MEDIUM 0x200
+#define  PCI_STATUS_DEVSEL_SLOW 0x400
+#define  PCI_STATUS_SIG_TARGET_ABORT 0x800  /* Set on target abort */
+#define  PCI_STATUS_REC_TARGET_ABORT 0x1000 /* Master ack of " */
+#define  PCI_STATUS_REC_MASTER_ABORT 0x2000 /* Set on master abort */
+#define  PCI_STATUS_SIG_SYSTEM_ERROR 0x4000 /* Set when we drive SERR */
+#define  PCI_STATUS_DETECTED_PARITY 0x8000  /* Set on parity error */
 
 #define PCI_CLASS_REVISION 0x08 /* High 24 bits are class, low 8 \
 				   revision */
@@ -288,17 +291,21 @@
 
 /* Message Signalled Interrupts registers */
 
-#define PCI_MSI_FLAGS 2				 /* Various flags */
-#define PCI_MSI_FLAGS_64BIT 0x80	 /* 64-bit addresses allowed */
-#define PCI_MSI_FLAGS_QSIZE 0x70	 /* Message queue size configured */
-#define PCI_MSI_FLAGS_QMASK 0x0e	 /* Maximum queue size available */
-#define PCI_MSI_FLAGS_ENABLE 0x01	 /* MSI feature enabled */
-#define PCI_MSI_FLAGS_MASKBIT 0x0100 /* Per-vector masking capable */
-#define PCI_MSI_RFU 3				 /* Rest of capability flags */
-#define PCI_MSI_ADDRESS_LO 4		 /* Lower 32 bits */
-#define PCI_MSI_ADDRESS_HI 8		 /* Upper 32 bits (if PCI_MSI_FLAGS_64BIT set) */
-#define PCI_MSI_DATA_32 8			 /* 16 bits of data for 32-bit devices */
-#define PCI_MSI_DATA_64 12			 /* 16 bits of data for 64-bit devices */
+#define PCI_MSI_FLAGS		0x02	/* Message Control */
+#define  PCI_MSI_FLAGS_ENABLE	0x0001	/* MSI feature enabled */
+#define  PCI_MSI_FLAGS_QMASK	0x000e	/* Maximum queue size available */
+#define  PCI_MSI_FLAGS_QSIZE	0x0070	/* Message queue size configured */
+#define  PCI_MSI_FLAGS_64BIT	0x0080	/* 64-bit addresses allowed */
+#define  PCI_MSI_FLAGS_MASKBIT	0x0100	/* Per-vector masking capable */
+#define PCI_MSI_RFU		3	/* Rest of capability flags */
+#define PCI_MSI_ADDRESS_LO	0x04	/* Lower 32 bits */
+#define PCI_MSI_ADDRESS_HI	0x08	/* Upper 32 bits (if PCI_MSI_FLAGS_64BIT set) */
+#define PCI_MSI_DATA_32		0x08	/* 16 bits of data for 32-bit devices */
+#define PCI_MSI_MASK_32		0x0c	/* Mask bits register for 32-bit devices */
+#define PCI_MSI_PENDING_32	0x10	/* Pending intrs for 32-bit devices */
+#define PCI_MSI_DATA_64		0x0c	/* 16 bits of data for 64-bit devices */
+#define PCI_MSI_MASK_64		0x10	/* Mask bits register for 64-bit devices */
+#define PCI_MSI_PENDING_64	0x14	/* Pending intrs for 64-bit devices */
 
 #define PCI_MAX_PCI_DEVICES 32
 #define PCI_MAX_PCI_FUNCTIONS 8

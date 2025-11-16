@@ -72,6 +72,10 @@
 #define PCIE_MISC_RC_BAR2_CONFIG_HI               0x4038
 #define PCIE_MISC_RC_BAR3_CONFIG_LO               0x403c
 #define  RC_BAR3_CONFIG_LO_SIZE_MASK                0x1f
+#define PCIE_MISC_MSI_BAR_CONFIG_LO               0x4044
+#define PCIE_MISC_MSI_BAR_CONFIG_HI               0x4048
+#define PCIE_MISC_MSI_DATA_CONFIG                 0x404c
+#define PCIE_MISC_MSI_DATA_CONFIG_VAL_32      0xffe06540
 #define PCIE_MISC_PCIE_STATUS                     0x4068
 #define  STATUS_PCIE_PORT_MASK                      0x80
 #define  STATUS_PCIE_PORT_SHIFT                        7
