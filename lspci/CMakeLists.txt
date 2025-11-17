@@ -8,6 +8,10 @@ add_executable(lspci
     src/pcie_list.c
 )
 
-target_link_libraries(lspci common pcie.library)
+target_link_libraries(lspci
+    Emu68Common::common
+    GIC400::gic400_headers
+    pcie.library
+)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lspci DESTINATION .)
