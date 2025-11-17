@@ -14,4 +14,4 @@ target_link_libraries(lspci
     pcie.library
 )
 
-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lspci DESTINATION .)
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lspci DESTINATION C)

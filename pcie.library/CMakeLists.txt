@@ -16,3 +16,16 @@ target_link_libraries(pcie.library
 		Emu68Common::common
 		GIC400::gic400_headers
 )
+
+set_target_properties(pcie.library PROPERTIES
+	EXPORT_NAME pcie
+)
+
+install(TARGETS pcie.library
+	EXPORT Emu68PCIeTargets
+	ARCHIVE DESTINATION lib
+)
+
+install(DIRECTORY include/
+	DESTINATION include
+)

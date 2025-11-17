@@ -42,6 +42,11 @@ int pci_get_bus_max(void)
 	return ret;
 }
 
+BOOL pci_is_root_bus(const struct pci_bus *bus)
+{
+	return bus->parent == NULL;
+}
+
 struct pci_controller *pci_get_controller(const struct pci_bus *bus)
 {
 	/* we're copying the controller from the parent bus on bind */
