@@ -612,35 +612,6 @@ static inline void pci_set_region(struct pci_region *reg,
 int pci_skip_dev(struct pci_controller *hose, pci_dev_t dev);
 
 /**
- * pci_write_bar32() - Write the address of a BAR including control bits
- *
- * This writes a raw address (with control bits) to a bar. This can be used
- * with devices which require hard-coded addresses, not part of the normal
- * PCI enumeration process.
- *
- * This is only available if CONFIG_DM_PCI_COMPAT is enabled
- *
- * @hose:	PCI hose to use
- * @dev:	PCI device to update
- * @barnum:	BAR number (0-5)
- * @addr:	BAR address with control bits
- */
-void pci_write_bar32(struct pci_controller *hose, pci_dev_t dev, int barnum,
-					 ULONG addr);
-
-/**
- * pci_read_bar32() - read the address of a bar
- *
- * This is only available if CONFIG_DM_PCI_COMPAT is enabled
- *
- * @hose:	PCI hose to use
- * @dev:	PCI device to inspect
- * @barnum:	BAR number (0-5)
- * Return: address of the bar, masking out any control bits
- * */
-ULONG pci_read_bar32(struct pci_controller *hose, pci_dev_t dev, int barnum);
-
-/**
  * dm_pci_get_bdf() - Get the BDF value for a device
  *
  * @dev:	Device to check
@@ -1139,5 +1110,14 @@ int pci_probe_bus(struct pci_bus *bus);
 int pci_get_bus(int busnum, struct pci_bus **busp);
 int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp);
 int pci_get_bus_max(void);
+BOOL pci_is_root_bus(const struct pci_bus *bus);
+
+
+/* Legacy INTx */
+void pci_intx(struct pci_device *pdev, int enable);
+void pci_assign_irq(struct pci_device *dev); //TODO call it in initialization of device
+BOOL pci_check_and_set_intx_mask(struct pci_device *dev, BOOL mask);
+
+/*MSI interrupt handling */
 
 #endif /* _PCI_H */

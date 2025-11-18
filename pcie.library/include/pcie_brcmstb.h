@@ -12,4 +12,7 @@ int brcm_pcie_read_config(const struct pci_controller *bus, pci_dev_t bdf,
 int brcm_pcie_write_config(struct pci_controller *bus, pci_dev_t bdf,
 						   UWORD offset, ULONG value,
 						   enum pci_size_t size);
+
+int brcm_pcie_enable_msi(struct pci_controller *pcie);
+void brcm_msi_remove(struct pci_controller *pcie);
 #endif // PCI_BRCMSTB_H

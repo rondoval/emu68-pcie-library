@@ -51,6 +51,12 @@
 #define SSC_STATUS_PLL_LOCK_MASK 0x800
 #define SSC_STATUS_PLL_LOCK_SHIFT 11
 
+/* MSI target addresses */
+#define BRCM_MSI_TARGET_ADDR_LT_4GB 0x0fffffffcULL
+#define BRCM_MSI_TARGET_ADDR_GT_4GB 0xffffffffcULL
+
+extern struct ExecBase *SysBase;
+
 /**
  * brcm_pcie_encode_ibar_size() - Encode the inbound "BAR" region size
  * @size: The inbound region size
@@ -436,6 +442,45 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	Kprintf("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_virtual));
 	Kprintf("[pcie] %s: emu68,pci-mmio-size = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_size));
 
+	APTR int_map_prop = DT_FindProperty(key, (CONST_STRPTR) "interrupt-map");
+	if (int_map_prop)
+	{
+		//TODO cleanup
+		APTR root = DT_OpenKey((CONST_STRPTR) "/");
+		APTR interrupt_parent_phandle = DT_GetPropertyValueULONG(root, "interrupt-parent", 0, TRUE);
+		DT_CloseKey(root);
+
+		const ULONG interrupt_cells = DT_GetPropertyValueULONG(key, "#interrupt-cells", 1, FALSE);
+		const ULONG addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+
+		ULONG *int_map = (ULONG *)DT_GetPropValue(int_map_prop);
+		ULONG len = DT_GetPropLen(int_map_prop);
+
+		 // child_addr + child_interrupt + phandle + int_type + parent_interrupt + interrupt flags
+		int entry_size = (addr_cells + 1 + 1 + 1 + interrupt_cells + 1);
+		int entries = len / (sizeof(ULONG) * entry_size);
+
+		Kprintf("[pcie] %s: Found interrupt-map with %ld entries\n", __func__, entries);
+
+		for (int i = 0; i < entries; i++)
+		{
+			// child addr cells + child interrupt cells + parent phandle + parent interrupt cells + interrupt flags
+			ULONG child_interrupt = DT_GetNumber(int_map + i * entry_size + addr_cells, 1);
+			ULONG parent_interrupt = DT_GetNumber(int_map + i * entry_size + addr_cells + 3, interrupt_cells);
+			ULONG flags = DT_GetNumber(int_map + i * entry_size + addr_cells + 3 + interrupt_cells, 1);
+			//TODO check phandle matches GIC-400 phandle
+			Kprintf("[pcie] %s: interrupt-map entry %ld: child=%ld parent=%ld flags=0x%lx\n", __func__, i, child_interrupt, parent_interrupt, flags);
+
+			if (child_interrupt >= 1 && child_interrupt <= 4)
+			{
+				ctrl->INT_x_mapping[child_interrupt - 1] = parent_interrupt;
+			}
+		}
+	}
+	
+	ctrl->msi.irq = DT_GetInterrupt(key, 1); // first interrupt is for the host controller; second interrupt is MSI
+	Kprintf("[pcie] %s: MSI IRQ = %ld\n", __func__, ctrl->msi.irq);
+
 	// We're done with the device tree
 	DT_CloseKey(key);
 	return 0;
@@ -646,7 +691,9 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 					MISC_CTRL_MAX_BURST_SIZE_MASK,
 					MISC_CTRL_SCB_ACCESS_EN_MASK |
 						MISC_CTRL_CFG_READ_UR_MODE_MASK |
-						MISC_CTRL_MAX_BURST_SIZE_128);
+						MISC_CTRL_MAX_BURST_SIZE_128 |
+						MISC_CTRL_PCIE_RCB_MPS_MODE_MASK |
+						MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 
 	int ret = pci_get_devtree_regions(ctlr);
 	if (ret)
@@ -656,12 +703,14 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	}
 
 	struct pci_region region;
+	/* This takes only first region */
 	ret = pci_get_devtree_dma_regions(ctlr, &region, 0);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: failed to get dma-ranges\n", __func__);
 		return ret;
 	}
+
 	u64 rc_bar2_offset = region.bus_start - region.phys_start;
 	u64 rc_bar2_size = 1ULL << fls64(region.size - 1);
 	KprintfH("[pcie] %s: DMA region: bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(region.bus_start >> 32), (ULONG)(region.bus_start & 0xffffffff), (ULONG)(region.phys_start >> 32), (ULONG)(region.phys_start & 0xffffffff), (ULONG)(region.size >> 32), (ULONG)(region.size & 0xffffffff));
@@ -674,6 +723,20 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	writel(tmp, base + PCIE_MISC_RC_BAR2_CONFIG_LO);
 	writel(upper_32_bits(rc_bar2_offset),
 		   base + PCIE_MISC_RC_BAR2_CONFIG_HI);
+
+#ifdef CONFIG_SYS_PCI_64BIT
+	if (rc_bar2_offset >= SZ_4G || rc_bar2_size + rc_bar2_offset < SZ_4G)
+	{
+		ctlr->msi_target_addr = BRCM_MSI_TARGET_ADDR_LT_4GB;
+	}
+	else
+	{
+		ctlr->msi_target_addr = BRCM_MSI_TARGET_ADDR_GT_4GB;
+	}
+#else
+	ctlr->msi.msi_target_addr = BRCM_MSI_TARGET_ADDR_LT_4GB;
+#endif
+	Kprintf("[pcie] %s: MSI target address set to 0x%lx\n", __func__, ctlr->msi.msi_target_addr);
 
 	unsigned int scb_size_val = rc_bar2_size ? ilog2(rc_bar2_size) - 15 : 0xf; /* 0xf is 1GB */
 
@@ -770,6 +833,18 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 					VENDOR_SPECIFIC_REG1_LITTLE_ENDIAN);
 
 	/*
+	 * RootCtl bits are reset by perst_n, which undoes pci_enable_crs()
+	 * called prior to pci_add_new_bus() during probe. Re-enable here.
+	 */
+	UWORD capreg = readw(base + BRCM_PCIE_CAP_REGS + PCI_EXP_RTCAP);
+	if (capreg & PCI_EXP_RTCAP_CRSVIS)
+	{
+		KprintfH("[pcie] %s: enabling CRS\n", __func__);
+		setbits_le16(base + BRCM_PCIE_CAP_REGS + PCI_EXP_RTCTL,
+						PCI_EXP_RTCTL_CRSSVE);
+	}
+
+	/*
 	 * We used to enable the CLKREQ# input here, but a few PCIe cards don't
 	 * attach anything to the CLKREQ# line, so we shouldn't assume that
 	 * it's connected and working. The controller does allow detecting
@@ -781,11 +856,30 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	clrbits_le32(base + PCIE_RC_CFG_PRIV1_LINK_CAPABILITY,
 				 LINK_CAPABILITY_ASPM_SUPPORT_MASK);
 
+	ctlr->hw_rev = readl(base + PCIE_MISC_REVISION);
+	Kprintf("[pcie] %s: controller hw_rev=0x%lx\n", __func__, ctlr->hw_rev);
+	if (ctlr->hw_rev < BRCM_PCIE_HW_REV_33)
+	{
+		Kprintf("[pcie] %s: controller is pre-3.3 revision, unsupported\n", __func__);
+		return -ENODEV;
+	}
+
+	// Configure MSI
+	// ret = brcm_pcie_enable_msi(ctlr);
+	// if (ret)
+	// {
+	// 	Kprintf("[pcie] %s: failed to enable MSI\n", __func__);
+	// 	brcm_pcie_remove(ctlr);
+	// 	return ret;
+	// }
+
 	return 0;
 }
 
 int brcm_pcie_remove(struct pci_controller *pcie)
 {
+	brcm_msi_remove(pcie);
+
 	void *base = pcie->base;
 
 	/* Assert fundamental reset */

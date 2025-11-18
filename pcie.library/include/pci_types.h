@@ -3,12 +3,14 @@
 
 #include <exec/types.h>
 #include <exec/lists.h>
+#include <exec/interrupts.h>
 
 #define CONFIG_PCI_BRIDGE_MEM_ALIGNMENT 0x100000
 // #define CONFIG_SYS_PCI_64BIT
-#define CONFIG_PHYS_64BIT 			 	// physical address is 64bit
+#define CONFIG_PHYS_64BIT // physical address is 64bit
 // #define CONFIG_PCI_MAP_SYSTEM_MEMORY // there's a 1:1 mapping of virt to phys for Fast RAM I think
-#define CONFIG_NR_DRAM_BANKS 4 			// There are 3 hunks of Fast RAM on Pi4
+#define CONFIG_NR_DRAM_BANKS 4 // There are 3 hunks of Fast RAM on Pi4
+#define MSI_MAX_VECTORS 32
 
 typedef uint64_t u64;
 
@@ -20,10 +22,9 @@ typedef ULONG pci_addr_t;
 typedef ULONG pci_size_t;
 #endif
 
-
 #ifdef CONFIG_PHYS_64BIT
 typedef u64 phys_addr_t;
-typedef u64 size_t;		 // TODO check all occurences
+typedef u64 size_t; // TODO check all occurences
 #else
 typedef ULONG phys_addr_t;
 typedef ULONG size_t;
@@ -84,7 +85,17 @@ struct pci_controller
 	int bus_number_base; /* root bus number. This is in case there are multiple controllers/root buses */
 	int bus_number_last; /* last assigned bus number */
 
-	pci_addr_t msi_target_addr; /* MSI target address */
+	struct pcie_msi
+	{
+		pci_addr_t msi_target_addr; /* MSI target address */
+		struct Interrupt *msi_vectors[MSI_MAX_VECTORS];
+		int vectors_used;
+		int irq; /* MSI IRQ at GIC-400 */
+		struct Interrupt irq_isr;
+		BOOL enabled;
+	} msi;
+
+	int INT_x_mapping[4]; /* mapping for INT A-D */
 };
 
 struct pci_bus
@@ -116,6 +127,26 @@ struct pci_device
 	unsigned short vendor;
 	unsigned short device;
 	unsigned int class;
+
+	struct flags_msi {
+		BOOL is_64;
+		BOOL can_mask;
+		int default_irq;
+		int multi_cap;
+		int multiple;
+		int mask_pos;
+	} msi_flags;
+
+	struct device_msi {
+		int cap;	 	   /* offset of MSI capability, or 0 if none */
+		BOOL no_64bit_msi; /* true if device does not support 64bit MSI */
+		BOOL enabled;
+		int irq; //TODO more than one MSI per device... we're assuming this is the first one and this is in one block
+		ULONG msi_mask;
+	} msi;
+
+	int irq;
+	BOOL irq_enabled;
 };
 
 #endif

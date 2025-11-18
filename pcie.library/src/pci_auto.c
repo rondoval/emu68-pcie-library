@@ -281,6 +281,8 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 	dm_pci_write_config8(dev, PCI_CACHE_LINE_SIZE,
 						 CFG_SYS_PCI_CACHE_LINE_SIZE);
 	dm_pci_write_config8(dev, PCI_LATENCY_TIMER, 0x80);
+
+	pci_assign_irq(dev);
 }
 
 /*
