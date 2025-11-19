@@ -15,6 +15,7 @@ target_link_libraries(pcie.library
 	PUBLIC
 		Emu68Common::common
 		GIC400::gic400_headers
+		gcc
 )
 
 set_target_properties(pcie.library PROPERTIES
