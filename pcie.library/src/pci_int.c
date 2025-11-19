@@ -62,6 +62,8 @@ static UBYTE pci_swizzle_interrupt_pin(const struct pci_device *dev, UBYTE pin)
 
 void pci_assign_irq(struct pci_device *dev)
 {
+	struct pci_device *target = dev;
+	struct pci_device *walker = dev;
 	UBYTE pin;
 	int irq = 0;
 
@@ -82,22 +84,22 @@ void pci_assign_irq(struct pci_device *dev)
 	Kprintf("[pcie] %s: initial pin %ld\n", __func__, pin);
 
 	/* Follow the chain of bridges, swizzling as we go. */
-	while (!pci_is_root_bus(dev->bus)) {
-		pin = pci_swizzle_interrupt_pin(dev, pin);
+	while (!pci_is_root_bus(walker->bus)) {
+		pin = pci_swizzle_interrupt_pin(walker, pin);
 		Kprintf("[pcie] %s: swizzle to pin %ld\n", __func__, pin);
-		dev = dev->bus->pci_bridge;
+		walker = walker->bus->pci_bridge;
 	}
 
 	/* Map the pin to INT line */
-	irq = pci_get_controller(dev->bus)->INT_x_mapping[pin - 1];
-	dev->irq = irq;
+	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
+	target->irq = irq;
 	Kprintf("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
 
 	/*
 	 * Always tell the device, so the driver knows what is the real IRQ
 	 * to use; the device does not use it.
 	 */
-	dm_pci_write_config8(dev, PCI_INTERRUPT_LINE, irq);
+	dm_pci_write_config8(target, PCI_INTERRUPT_LINE, irq);
 }
 
 BOOL pci_check_and_set_intx_mask(struct pci_device *dev, BOOL mask)
