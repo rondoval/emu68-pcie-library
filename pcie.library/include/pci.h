@@ -1115,9 +1115,19 @@ BOOL pci_is_root_bus(const struct pci_bus *bus);
 
 /* Legacy INTx */
 void pci_intx(struct pci_device *pdev, int enable);
-void pci_assign_irq(struct pci_device *dev); //TODO call it in initialization of device
+void pci_assign_irq(struct pci_device *dev); // called it in initialization of device
 BOOL pci_check_and_set_intx_mask(struct pci_device *dev, BOOL mask);
 
 /*MSI interrupt handling */
+int add_int_server(struct pci_device *dev, struct Interrupt *isr);
+int rem_int_server(struct pci_device *dev);
+int pci_msi_vec_count(struct pci_device *dev);
+void pci_msi_mask_irq(struct pci_device *dev, int irq);
+void pci_msi_unmask_irq(struct pci_device *dev, int irq);
+
+void pci_write_msg_msi(struct pci_device *dev); // for discovery purpose
+void pci_msi_init(struct pci_device *dev); // for discovery purpose
+int msi_capability_init(struct pci_device *dev, int nvec); // for add_int_server
+void pci_msi_shutdown(struct pci_device *dev); // for rem_int_server
 
 #endif /* _PCI_H */

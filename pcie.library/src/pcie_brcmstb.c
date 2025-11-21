@@ -447,7 +447,7 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	{
 		//TODO cleanup
 		APTR root = DT_OpenKey((CONST_STRPTR) "/");
-		APTR interrupt_parent_phandle = DT_GetPropertyValueULONG(root, "interrupt-parent", 0, TRUE);
+		// ULONG interrupt_parent_phandle = DT_GetPropertyValueULONG(root, "interrupt-parent", 0, TRUE);
 		DT_CloseKey(root);
 
 		const ULONG interrupt_cells = DT_GetPropertyValueULONG(key, "#interrupt-cells", 1, FALSE);
@@ -865,20 +865,20 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	}
 
 	// Configure MSI
-	// ret = brcm_pcie_enable_msi(ctlr);
-	// if (ret)
-	// {
-	// 	Kprintf("[pcie] %s: failed to enable MSI\n", __func__);
-	// 	brcm_pcie_remove(ctlr);
-	// 	return ret;
-	// }
+	ret = brcm_pcie_enable_msi(ctlr);
+	if (ret)
+	{
+		Kprintf("[pcie] %s: failed to enable MSI\n", __func__);
+		brcm_pcie_disable_msi(ctlr);
+		return ret;
+	}
 
 	return 0;
 }
 
 int brcm_pcie_remove(struct pci_controller *pcie)
 {
-	brcm_msi_remove(pcie);
+	brcm_pcie_disable_msi(pcie);
 
 	void *base = pcie->base;
 

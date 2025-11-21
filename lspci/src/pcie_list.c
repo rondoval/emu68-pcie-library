@@ -5,11 +5,13 @@
 #include <clib/dos_protos.h>
 #include <clib/utility_protos.h>
 #include <clib/devicetree_protos.h>
+#include <clib/gic400_protos.h>
 #else
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/utility.h>
 #include <proto/devicetree.h>
+#include <proto/gic400.h>
 #endif
 
 #include <exec/types.h>
@@ -28,6 +30,7 @@
 struct ExecBase *SysBase;
 struct Library *UtilityBase;
 struct DosLibrary *DOSBase;
+struct Library *GIC400_Base = NULL;
 
 extern struct MinList pci_bus_list;
 
@@ -747,10 +750,20 @@ int main(void)
         return 40;
     }
 
+    GIC400_Base = OpenLibrary((CONST_STRPTR) "gic400.library", 0);
+    if (!GIC400_Base)
+    {
+        Printf((CONST_STRPTR) "Failed to open gic400.library\n");
+        CloseLibrary((struct Library *)UtilityBase);
+        CloseLibrary((struct Library *)DOSBase);
+        return 45;
+    }
+
     struct pci_controller *pcie = AllocMem(sizeof(*pcie), MEMF_CLEAR | MEMF_PUBLIC);
     if (!pcie)
     {
         Printf((CONST_STRPTR) "Failed to allocate memory for PCIe controller\n");
+        CloseLibrary(GIC400_Base);
         CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 30;
@@ -760,6 +773,7 @@ int main(void)
     if (ret != 0)
     {
         Printf((CONST_STRPTR) "Failed to parse mailbox devtree\n");
+        CloseLibrary(GIC400_Base);
         CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 20;
@@ -769,6 +783,7 @@ int main(void)
     if (res < 0)
     {
         Printf((CONST_STRPTR) "Failed to probe PCIe controller\n");
+        CloseLibrary(GIC400_Base);
         CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 10;
@@ -782,6 +797,7 @@ int main(void)
     {
         Printf((CONST_STRPTR) "Failed to allocate memory for root bus\n");
         brcm_pcie_remove(pcie);
+        CloseLibrary(GIC400_Base);
         CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 30;
@@ -801,6 +817,7 @@ int main(void)
     {
         Printf((CONST_STRPTR) "Failed to bind devices on bus 0\n");
         brcm_pcie_remove(pcie);
+        CloseLibrary(GIC400_Base);
         CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 20;
@@ -811,6 +828,7 @@ int main(void)
     {
         Printf((CONST_STRPTR) "Failed to configure devices on bus 0\n");
         brcm_pcie_remove(pcie);
+        CloseLibrary(GIC400_Base);
         CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 10;
@@ -840,6 +858,7 @@ int main(void)
 
     brcm_pcie_remove(pcie);
 
+    CloseLibrary(GIC400_Base);
     CloseLibrary((struct Library *)UtilityBase);
     CloseLibrary((struct Library *)DOSBase);
 

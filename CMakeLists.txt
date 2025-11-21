@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(emu68-pcie-library VERSION 0.6)
+project(emu68-pcie-library VERSION 0.7)
 
 include(CMakePackageConfigHelpers)
 

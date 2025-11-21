@@ -283,6 +283,9 @@ static void dm_pciauto_setup_device(struct pci_device *dev,
 	dm_pci_write_config8(dev, PCI_LATENCY_TIMER, 0x80);
 
 	pci_assign_irq(dev);
+
+	/* Enusre MSI is disabled and preconfigure MSI message */
+	pci_msi_init(dev);
 }
 
 /*

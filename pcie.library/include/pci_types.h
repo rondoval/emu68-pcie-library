@@ -5,6 +5,11 @@
 #include <exec/lists.h>
 #include <exec/interrupts.h>
 
+#if defined(__INTELLISENSE__)
+#define asm(x)
+#define __attribute__(x)
+#endif
+
 #define CONFIG_PCI_BRIDGE_MEM_ALIGNMENT 0x100000
 // #define CONFIG_SYS_PCI_64BIT
 #define CONFIG_PHYS_64BIT // physical address is 64bit
@@ -131,7 +136,6 @@ struct pci_device
 	struct flags_msi {
 		BOOL is_64;
 		BOOL can_mask;
-		int default_irq;
 		int multi_cap;
 		int multiple;
 		int mask_pos;
@@ -139,7 +143,6 @@ struct pci_device
 
 	struct device_msi {
 		int cap;	 	   /* offset of MSI capability, or 0 if none */
-		BOOL no_64bit_msi; /* true if device does not support 64bit MSI */
 		BOOL enabled;
 		int irq; //TODO more than one MSI per device... we're assuming this is the first one and this is in one block
 		ULONG msi_mask;
