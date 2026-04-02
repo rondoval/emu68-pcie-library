@@ -31,7 +31,7 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 		return -ENOMEM;
 
 	_NewMinList(&bus->devices);
-	SNPrintf(bus->name, 30, (CONST_STRPTR) "pci_bus_%lx:%lx.%lx", PCI_BUS(bridge->bdf), PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
+	_SNPrintf(bus->name, 30, (CONST_STRPTR) "pci_bus_%lx:%lx.%lx", PCI_BUS(bridge->bdf), PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	bus->parent = parent;
 	bus->pci_bridge = bridge;
 	bus->controller = ctlr;
@@ -158,7 +158,7 @@ int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD de
 
 	dev->bus = bus;
 	dev->flags |= DM_FLAG_BOUND;
-	SNPrintf(dev->name, 30, (CONST_STRPTR) "pci_%lx:%lx.%lx", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
+	_SNPrintf(dev->name, 30, (CONST_STRPTR) "pci_%lx:%lx.%lx", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 	dev->bdf = bdf;
 	dev->devfn = PCI_MASK_BUS(bdf);
 	dev->vendor = vendor;
