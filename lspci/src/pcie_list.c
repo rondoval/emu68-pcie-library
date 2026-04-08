@@ -24,7 +24,6 @@
 #include <devtree.h>
 #include <debug.h>
 #include <minlist.h>
-#include <mbox.h>
 #include <msg.h>
 
 struct ExecBase *SysBase;
@@ -769,16 +768,6 @@ int main(void)
         return 30;
     }
 
-    int ret = mbox_parse_devtree();
-    if (ret != 0)
-    {
-        Printf((CONST_STRPTR) "Failed to parse mailbox devtree\n");
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 20;
-    }
-
     int res = brcm_pcie_probe(pcie, 0);
     if (res < 0)
     {
@@ -812,7 +801,7 @@ int main(void)
     root_bus->bus_number_last_sub = 0;
     AddTailMinList(&pci_bus_list, (struct MinNode *)root_bus);
 
-    ret = pci_bind_bus_devices(root_bus);
+    int ret = pci_bind_bus_devices(root_bus);
     if (ret)
     {
         Printf((CONST_STRPTR) "Failed to bind devices on bus 0\n");

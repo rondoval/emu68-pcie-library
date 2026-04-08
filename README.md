@@ -69,11 +69,17 @@ Both must be installed before building this project.
 ## Building
 
 ```sh
-cd build
-cmake ..                        # already done; use the existing build directory
-make -j4
-make install                    # installs headers and the CMake package into ./install/
+cmake -S . -B build \
+   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake \
+   -DCMAKE_PREFIX_PATH=/path/to/emu68-sdk \
+   -DCMAKE_INSTALL_PREFIX=/path/to/emu68-sdk
+cmake --build build
+cmake --install build
 ```
+
+Recommended workflow: install `devicetree.resource`, `emu68-common`, `emu68-gic400-library`, and this package into the same prefix.
+
+If you keep dependencies in separate install trees instead, set `CMAKE_PREFIX_PATH` to the `emu68-common` and `emu68-gic400-library` install prefixes.
 
 The CMake package `Emu68PCIe` is then importable by downstream projects:
 
