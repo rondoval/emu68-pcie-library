@@ -15,6 +15,8 @@
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
 #else
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
 #include <proto/exec.h>
 #endif
 
@@ -23,6 +25,8 @@
 #include <pci.h>
 #include <debug.h>
 #include <devtree.h>
+#include <emu_errors.h>
+#include <emu_iomem.h>
 
 /* PCIe parameters */
 #define BRCM_NUM_PCIE_OUT_WINS 4
@@ -54,8 +58,6 @@
 /* MSI target addresses */
 #define BRCM_MSI_TARGET_ADDR_LT_4GB 0x0fffffffcULL
 #define BRCM_MSI_TARGET_ADDR_GT_4GB 0xffffffffcULL
-
-extern struct ExecBase *SysBase;
 
 /**
  * brcm_pcie_encode_ibar_size() - Encode the inbound "BAR" region size
@@ -390,7 +392,7 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int
 
 static int brcm_devtree_parse(struct pci_controller *ctrl)
 {
-	DT_Init();
+	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 
 	ctrl->dt_node_name = DT_GetAlias((CONST_STRPTR) "pcie0");
 	if (ctrl->dt_node_name == NULL)
@@ -488,6 +490,7 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 
 static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
 {
+	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 	int cells_per_record;
 	int i = 0;
 
@@ -534,6 +537,7 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 
 static int pci_get_devtree_regions(struct pci_controller *hose)
 {
+	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 	int i;
 
 	APTR key = DT_OpenKey(hose->dt_node_name);
@@ -632,7 +636,8 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 
 	/* Add a region for our local memory */
 	Kprintf("[pcie] %s: Adding system memory regions\n", __func__);
-	struct MemHeader *mh = (struct MemHeader *)SysBase->MemList.lh_Head;
+	struct ExecBase *sysBase = *(struct ExecBase **)4UL;
+	struct MemHeader *mh = (struct MemHeader *)sysBase->MemList.lh_Head;
 	for (i = 0; i < CONFIG_NR_DRAM_BANKS && mh != NULL; i++)
 	{
 		if (mh->mh_Attributes & MEMF_FAST)

@@ -3,35 +3,24 @@
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
 #include <clib/dos_protos.h>
-#include <clib/utility_protos.h>
 #include <clib/devicetree_protos.h>
 #include <clib/gic400_protos.h>
 #else
 #include <proto/exec.h>
 #include <proto/dos.h>
-#include <proto/utility.h>
 #include <proto/devicetree.h>
 #include <proto/gic400.h>
 #endif
 
 #include <exec/types.h>
 #include <exec/memory.h>
-#include <utility/utility.h>
 
 #include <pcie_brcmstb.h>
 #include <pci.h>
-#include <compat.h>
+#include <emu_timing.h>
 #include <devtree.h>
 #include <debug.h>
 #include <minlist.h>
-#include <msg.h>
-
-struct ExecBase *SysBase;
-struct Library *UtilityBase;
-struct DosLibrary *DOSBase;
-struct Library *GIC400_Base = NULL;
-
-extern struct MinList pci_bus_list;
 
 #ifndef PCI_HEADER_TYPE_MASK
 #define PCI_HEADER_TYPE_MASK 0x7f
@@ -39,6 +28,9 @@ extern struct MinList pci_bus_list;
 #ifndef PCI_HEADER_TYPE_MULTI
 #define PCI_HEADER_TYPE_MULTI 0x80
 #endif
+
+struct ExecBase *SysBase;
+struct DosLibrary *DOSBase;
 
 static void dump_vl805_registers(struct pci_device *dev);
 static CONST_STRPTR pci_header_type_name(UBYTE header_type);
@@ -359,7 +351,7 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
     CONST_STRPTR bei_name = pci_ea_bei_name(bei);
     CONST_STRPTR prop_name = pci_ea_property_name(property);
 
-    Printf((CONST_STRPTR) "        EA[%ld]: size=%ld bytes BEI=%ld (%s) prop=0x%02lx (%s) enabled=%ld writable=%ld\n",
+	Printf((CONST_STRPTR) "        EA[%ld]: size=%ld bytes BEI=%ld (%s) prop=0x%02lx (%s) enabled=%ld writable=%ld\n",
            (ULONG)index,
            (ULONG)entry_size,
            (ULONG)bei,
@@ -741,53 +733,29 @@ int main(void)
         return 50;
     }
 
-    UtilityBase = OpenLibrary((CONST_STRPTR) "utility.library", 0);
-    if (!UtilityBase)
-    {
-        Printf((CONST_STRPTR) "Failed to open utility.library\n");
-        CloseLibrary((struct Library *)DOSBase);
-        return 40;
-    }
-
-    GIC400_Base = OpenLibrary((CONST_STRPTR) "gic400.library", 0);
-    if (!GIC400_Base)
-    {
-        Printf((CONST_STRPTR) "Failed to open gic400.library\n");
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 45;
-    }
-
     struct pci_controller *pcie = AllocMem(sizeof(*pcie), MEMF_CLEAR | MEMF_PUBLIC);
     if (!pcie)
     {
         Printf((CONST_STRPTR) "Failed to allocate memory for PCIe controller\n");
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 30;
     }
+    _NewMinList(&pcie->buses);
 
     int res = brcm_pcie_probe(pcie, 0);
     if (res < 0)
     {
         Printf((CONST_STRPTR) "Failed to probe PCIe controller\n");
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 10;
     }
     Printf((CONST_STRPTR) "PCIe controller probed successfully\n");
-
-    _NewMinList(&pci_bus_list);
 
     struct pci_bus *root_bus = AllocMem(sizeof(*root_bus), MEMF_CLEAR | MEMF_PUBLIC);
     if (!root_bus)
     {
         Printf((CONST_STRPTR) "Failed to allocate memory for root bus\n");
         brcm_pcie_remove(pcie);
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 30;
     }
@@ -799,15 +767,13 @@ int main(void)
     CopyMem((APTR)"pcie0", root_bus->name, sizeof("pcie0"));
     root_bus->bus_number = 0;
     root_bus->bus_number_last_sub = 0;
-    AddTailMinList(&pci_bus_list, (struct MinNode *)root_bus);
+    AddTailMinList(&pcie->buses, (struct MinNode *)root_bus);
 
     int ret = pci_bind_bus_devices(root_bus);
     if (ret)
     {
         Printf((CONST_STRPTR) "Failed to bind devices on bus 0\n");
         brcm_pcie_remove(pcie);
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 20;
     }
@@ -817,24 +783,22 @@ int main(void)
     {
         Printf((CONST_STRPTR) "Failed to configure devices on bus 0\n");
         brcm_pcie_remove(pcie);
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
         CloseLibrary((struct Library *)DOSBase);
         return 10;
     }
 
-    ret = bcm2711_notify_vl805_reset();
+    ret = bcm2711_reload_vl805_firmware();
     if (ret != 0)
     {
         Printf((CONST_STRPTR) "Failed to notify VL805 reset\n");
     }
     delay_us(1000);
 
-    int bus_max = pci_get_bus_max();
+    int bus_max = pci_get_bus_max(pcie);
     for (int bus_index = 0; bus_index <= bus_max; ++bus_index)
     {
         struct pci_bus *bus;
-        if (pci_get_bus(bus_index, &bus) == 0)
+        if (pci_get_bus(pcie, bus_index, &bus) == 0)
         {
             for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
             {
@@ -847,8 +811,6 @@ int main(void)
 
     brcm_pcie_remove(pcie);
 
-    CloseLibrary(GIC400_Base);
-    CloseLibrary((struct Library *)UtilityBase);
     CloseLibrary((struct Library *)DOSBase);
 
     return 0;

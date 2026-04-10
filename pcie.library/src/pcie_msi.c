@@ -8,7 +8,9 @@
  */
 
 #include <debug.h>
-#include <compat.h>
+#include <emu_bits.h>
+#include <emu_errors.h>
+#include <emu_memory.h>
 
 #include <pci.h>
 #include <bcm2711.h> //TODO remove

@@ -13,6 +13,8 @@ int brcm_pcie_write_config(struct pci_controller *bus, pci_dev_t bdf,
 						   UWORD offset, ULONG value,
 						   enum pci_size_t size);
 
+int bcm2711_reload_vl805_firmware(void);
+
 int brcm_pcie_enable_msi(struct pci_controller *pcie);
 void brcm_pcie_disable_msi(struct pci_controller *pcie);
 

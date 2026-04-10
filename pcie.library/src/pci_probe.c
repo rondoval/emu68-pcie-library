@@ -6,22 +6,21 @@
 
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
-#include <clib/utility_protos.h>
 #else
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
 #include <proto/exec.h>
-#include <proto/utility.h>
 #endif
 
 #include <exec/lists.h>
 
 #include <debug.h>
-#include <compat.h>
+#include <emu_errors.h>
+#include <emu_format.h>
 #include <pcie_brcmstb.h>
 #include <pci.h>
 #include <devtree.h>
 #include <minlist.h>
-
-struct MinList pci_bus_list;
 
 int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr)
 {
@@ -36,7 +35,7 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 	bus->pci_bridge = bridge;
 	bus->controller = ctlr;
 
-	AddTailMinList(&pci_bus_list, (struct MinNode *)bus);
+	AddTailMinList(&ctlr->buses, (struct MinNode *)bus);
 	*busp = bus;
 	return 0;
 }

@@ -12,7 +12,7 @@
 #define _PCI_H
 
 #include <exec/types.h>
-#include <compat.h>
+#include <emu_bits.h>
 #include <pcie_brcmstb.h>
 #include <pci_types.h>
 #include <pci_ids.h>
@@ -658,7 +658,7 @@ int pci_auto_config_devices(struct pci_bus *bus);
  * @devp:	Returns the device for this address, if found
  * Return: 0 if OK, -ENODEV if not found
  */
-int dm_pci_bus_find_bdf(pci_dev_t bdf, struct pci_device **devp);
+int dm_pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct pci_device **devp);
 
 /**
  * pci_bus_find_devfn() - Find a device on a bus
@@ -681,7 +681,7 @@ int pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn,
  *		or we got an error
  * Return: 0 if all is OK, -ve on error (e.g. a bus/bridge failed to probe)
  */
-int pci_find_first_device(struct pci_device **devp);
+int pci_find_first_device(struct pci_controller *controller, struct pci_device **devp);
 
 /**
  * pci_find_next_device() - return the next available PCI device
@@ -728,7 +728,7 @@ int pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids,
  * @devp:	Returns matching device if found
  * Return: 0 if found, -ENODEV if not
  */
-int pci_find_device_id(const struct pci_device_id *ids, int index,
+int pci_find_device_id(struct pci_controller *controller, const struct pci_device_id *ids, int index,
 					   struct pci_device **devp);
 
 /**
@@ -1037,7 +1037,7 @@ int dm_pci_flr(struct pci_device *dev);
  * @devp:	Returns pointer to the device, if found
  * Return: 0 if found, -ve on error
  */
-int dm_pci_find_device(unsigned int vendor, unsigned int device, int index, struct pci_device **devp);
+int dm_pci_find_device(struct pci_controller *controller, unsigned int vendor, unsigned int device, int index, struct pci_device **devp);
 
 /**
  * dm_pci_find_class() - find a device by class
@@ -1047,7 +1047,7 @@ int dm_pci_find_device(unsigned int vendor, unsigned int device, int index, stru
  * @devp:	Returns pointer to the device, if found
  * Return: 0 if found, -ve on error
  */
-int dm_pci_find_class(ULONG find_class, int index, struct pci_device **devp);
+int dm_pci_find_class(struct pci_controller *controller, ULONG find_class, int index, struct pci_device **devp);
 
 /**
  * PCI_DEVICE - macro used to describe a specific pci device
@@ -1107,9 +1107,9 @@ int dm_pci_find_class(ULONG find_class, int index, struct pci_device **devp);
 
 int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr);
 int pci_probe_bus(struct pci_bus *bus);
-int pci_get_bus(int busnum, struct pci_bus **busp);
+int pci_get_bus(struct pci_controller *controller, int busnum, struct pci_bus **busp);
 int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp);
-int pci_get_bus_max(void);
+int pci_get_bus_max(const struct pci_controller *controller);
 BOOL pci_is_root_bus(const struct pci_bus *bus);
 
 

@@ -6,12 +6,12 @@
 
 #include <pci.h>
 #include <debug.h>
+#include <emu_errors.h>
+#include <emu_timing.h>
 
-extern struct MinList pci_bus_list;
-
-int pci_get_bus(int busnum, struct pci_bus **busp)
+int pci_get_bus(struct pci_controller *controller, int busnum, struct pci_bus **busp)
 {
-	for(struct MinNode *node = pci_bus_list.mlh_Head; node->mln_Succ; node = node->mln_Succ)
+	for(struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
 		struct pci_bus *bus = (struct pci_bus *)node;
 		if (bus->bus_number == busnum)
@@ -29,11 +29,11 @@ int pci_get_bus(int busnum, struct pci_bus **busp)
  *
  * Return: last bus number, or -1 if no active buses
  */
-int pci_get_bus_max(void)
+int pci_get_bus_max(const struct pci_controller *controller)
 {
 	int ret = -1;
 
-	for (struct MinNode *node = pci_bus_list.mlh_Head; node->mln_Succ; node = node->mln_Succ)
+	for (struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
 		struct pci_bus *bus = (struct pci_bus *)node;
 		if (bus->bus_number > ret)

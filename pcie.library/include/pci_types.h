@@ -100,6 +100,9 @@ struct pci_controller
 		BOOL enabled;
 	} msi;
 
+	struct MinList buses;
+	struct Library *gic400Base;
+
 	int INT_x_mapping[4]; /* mapping for INT A-D */
 };
 

@@ -14,6 +14,7 @@
 
 #include <pci.h>
 #include <debug.h>
+#include <emu_timing.h>
 
 /* the user can define CFG_SYS_PCI_CACHE_LINE_SIZE to avoid problems */
 #ifndef CFG_SYS_PCI_CACHE_LINE_SIZE

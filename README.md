@@ -32,6 +32,7 @@ pcie.library/       Core library source and headers
   src/
     pcie_brcmstb.c          Broadcom STB PCIe controller driver (ported from Linux)
     pcie_brcmstb_msi.c      MSI interrupt controller support
+    vl805_reset.c           BCM2711 mailbox helper for reloading VL805 firmware
     pcie_msi.c              MSI vector management
     pci_probe.c             Bus and device enumeration
     pci_auto.c              BAR / resource auto-configuration
@@ -61,6 +62,7 @@ lspci/              Standalone AmigaOS CLI tool – initialises and enumerates t
 |---|---|---|
 | `Emu68Common` | `emu68-common` | Pool allocators, `_SNPrintf`, shared utilities |
 | `GIC400` | `emu68-gic400-library` | ARM GIC-400 interrupt controller – required for MSI |
+| `mailbox` | `mailbox.resource` | Mailbox proto headers used by the VL805 firmware reload helper |
 
 Both must be installed before building this project.
 
@@ -71,15 +73,15 @@ Both must be installed before building this project.
 ```sh
 cmake -S . -B build \
    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake \
-   -DCMAKE_PREFIX_PATH=/path/to/emu68-sdk \
-   -DCMAKE_INSTALL_PREFIX=/path/to/emu68-sdk
+   -DCMAKE_PREFIX_PATH=/path/to/emu68-driver-stack \
+   -DCMAKE_INSTALL_PREFIX=/path/to/emu68-driver-stack
 cmake --build build
 cmake --install build
 ```
 
-Recommended workflow: install `devicetree.resource`, `emu68-common`, `emu68-gic400-library`, and this package into the same prefix.
+Recommended workflow: install `devicetree.resource`, `mailbox.resource`, `emu68-common`, `emu68-gic400-library`, and this package into the same prefix.
 
-If you keep dependencies in separate install trees instead, set `CMAKE_PREFIX_PATH` to the `emu68-common` and `emu68-gic400-library` install prefixes.
+If you keep dependencies in separate install trees instead, set `CMAKE_PREFIX_PATH` to the `mailbox.resource`, `emu68-common`, and `emu68-gic400-library` install prefixes.
 
 The CMake package `Emu68PCIe` is then importable by downstream projects:
 
@@ -101,7 +103,9 @@ unit initialisation (`unit.c : pcie_init()`):
    PCIe-to-PCIe bridge and, behind it, the VIA VL805 USB 3.0 host controller.
 3. **`pci_auto_config_devices()`** — assigns MMIO BARs to every discovered device so
    that the VL805 registers are mapped into the CPU address space.
-4. **`brcm_pcie_enable_msi()`** — arms the Broadcom MSI interrupt controller so that the
+4. **`bcm2711_reload_vl805_firmware()`** — asks VideoCore, via the mailbox property
+   interface, to reload the VL805 firmware after PCI reset.
+5. **`brcm_pcie_enable_msi()`** — arms the Broadcom MSI interrupt controller so that the
    VL805 can signal completions via MSI rather than a wired IRQ line.
 
 Once `pcie_init()` returns, `xhci.device` locates the VL805 in the device list and

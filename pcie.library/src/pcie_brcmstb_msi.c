@@ -4,20 +4,23 @@
 #include <clib/gic400_protos.h>
 #include <clib/exec_protos.h>
 #else
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define GIC400_BASE_NAME pcie->gic400Base
 #include <proto/gic400.h>
 #include <proto/exec.h>
 #endif
 
 #include <exec/interrupts.h>
 
-#include <compat.h>
 #include <debug.h>
+
+#include <emu_bits.h>
+#include <emu_errors.h>
+#include <emu_iomem.h>
 #include <pci.h>
 #include <bcm2711.h>
 #include <pcie_brcmstb.h>
-
-extern struct ExecBase *SysBase;
-extern struct Library *GIC400_Base;
 
 /* call_interrupt: Invoke interrupt server with Exec ABI.
  * Args: interrupt - Exec interrupt entry; irq - source IRQ number.
@@ -25,6 +28,8 @@ extern struct Library *GIC400_Base;
  */
 static inline void call_interrupt(struct Interrupt *interrupt, ULONG irq)
 {
+	struct ExecBase *sysBase = *(struct ExecBase **)4UL;
+
 	if (interrupt == NULL || interrupt->is_Code == NULL)
 		return;
 
@@ -37,12 +42,15 @@ static inline void call_interrupt(struct Interrupt *interrupt, ULONG irq)
 		: [code] "a"(interrupt->is_Code),
 		  [data] "r"(interrupt->is_Data),
 		  [irq] "r"(irq),
-		  [sysbase] "r"(SysBase)
+		  [sysbase] "r"(sysBase)
 		: "d0", "d1", "a0", "a1", "a6");
 }
 
-static ULONG brcm_pcie_msi_isr(struct ExecBase *SysBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG irq asm("d0"))
+static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG irq asm("d0"))
 {
+	(void)execBase;
+	(void)irq;
+
 	if (!pcie)
 		return 0;
 
@@ -61,6 +69,30 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *SysBase asm("a6"), struct pci_co
 	}
 
 	return 1;
+}
+
+static int brcm_pcie_open_gic400(struct pci_controller *pcie)
+{
+	if (pcie->gic400Base != NULL)
+		return 0;
+
+	pcie->gic400Base = OpenLibrary((CONST_STRPTR) "gic400.library", 0);
+	if (pcie->gic400Base == NULL)
+	{
+		Kprintf("[pcie] %s: can't open gic400.library\n", __func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static void brcm_pcie_close_gic400(struct pci_controller *pcie)
+{
+	if (pcie->gic400Base == NULL)
+		return;
+
+	CloseLibrary(pcie->gic400Base);
+	pcie->gic400Base = NULL;
 }
 
 // TODO assign multiple MSI vectors per device
@@ -116,10 +148,12 @@ int rem_int_server(struct pci_device *dev)
 void brcm_pcie_disable_msi(struct pci_controller *pcie)
 {
 	Kprintf("[pcie] %s: disabling MSI\n", __func__);
-	if (!pcie->msi.enabled)
-		return;
-	RemIntServerEx(pcie->msi.irq + 32, &pcie->msi.irq_isr);
-	pcie->msi.enabled = FALSE;
+	if (pcie->msi.enabled)
+	{
+		RemIntServerEx(pcie->msi.irq + 32, &pcie->msi.irq_isr);
+		pcie->msi.enabled = FALSE;
+	}
+	brcm_pcie_close_gic400(pcie);
 }
 
 static void brcm_msi_set_regs(struct pci_controller *pcie)
@@ -148,6 +182,8 @@ int brcm_pcie_enable_msi(struct pci_controller *pcie)
 	Kprintf("[pcie] %s: enabling MSI\n", __func__);
 	if (pcie->msi.enabled)
 		return 0;
+	if (brcm_pcie_open_gic400(pcie) < 0)
+		return -ENODEV;
 	pcie->msi.irq_isr.is_Node.ln_Type = NT_INTERRUPT;
 	pcie->msi.irq_isr.is_Node.ln_Name = "xhci_msi_isr";
 	pcie->msi.irq_isr.is_Data = (APTR)pcie;
