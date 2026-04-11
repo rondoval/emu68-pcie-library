@@ -21,6 +21,7 @@
 - Preserve the current BCM2711 + VL805 assumptions unless the task is explicitly widening hardware support.
 - Changes to enumeration, BAR assignment, or MSI setup should be validated with both library consumers and `lspci` where possible.
 - Do not treat `pcie.library` as a real shared library yet when reasoning about current runtime state ownership, but avoid cementing assumptions that would block the planned multi-user dynamic-library model.
+- Licensing in this repo was audited against its U-Boot/Linux provenance. Preserve existing file-level SPDX headers; in particular, do not overwrite the special non-GPL provenance on `pcie.library/include/bcm2711.h`.
 
 ## Validation
 
