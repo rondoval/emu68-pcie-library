@@ -1,7 +1,7 @@
 #include <debug.h>
 
-#include <emu_errors.h>
-#include <emu_timing.h>
+#include <errors.h>
+#include <timing.h>
 
 #ifdef __INTELLISENSE__
 #include <clib/mailbox_protos.h>

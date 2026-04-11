@@ -8,9 +8,9 @@
  */
 
 #include <debug.h>
-#include <emu_bits.h>
-#include <emu_errors.h>
-#include <emu_memory.h>
+#include <bits.h>
+#include <errors.h>
+#include <memory.h>
 
 #include <pci.h>
 #include <bcm2711.h> //TODO remove
@@ -34,7 +34,7 @@ int pci_msi_vec_count(struct pci_device *dev)
 		return -EINVAL;
 
 	dm_pci_read_config16(dev, dev->msi.cap + PCI_MSI_FLAGS, &msgctl);
-	ret = 1 << FIELD_GET(PCI_MSI_FLAGS_QMASK, msgctl);
+	ret = 1 << mask_extract(msgctl, PCI_MSI_FLAGS_QMASK);
 	KprintfH("[pcie] %s: device %04lx:%04lx supports %ld MSI vectors\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, ret);
 
@@ -112,8 +112,8 @@ void pci_write_msg_msi(struct pci_device *dev)
 	KprintfH("[pcie] %s: device %04lx:%04lx writing MSI message\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device);
 	struct pci_controller *ctrl = pci_get_controller(dev->bus);
-	ULONG address_lo = lower_32_bits(ctrl->msi.msi_target_addr);
-	ULONG address_hi = upper_32_bits(ctrl->msi.msi_target_addr);
+	ULONG address_lo = u64_lo32(ctrl->msi.msi_target_addr);
+	ULONG address_hi = u64_hi32(ctrl->msi.msi_target_addr);
 	ULONG data = (0xffff & PCIE_MISC_MSI_DATA_CONFIG_VAL_32) | dev->msi.irq; // TODO BCM-specific
 
 	int pos = dev->msi.cap;
@@ -121,7 +121,7 @@ void pci_write_msg_msi(struct pci_device *dev)
 
 	dm_pci_read_config16(dev, pos + PCI_MSI_FLAGS, &msgctl);
 	msgctl &= ~PCI_MSI_FLAGS_QSIZE;
-	msgctl |= FIELD_PREP(PCI_MSI_FLAGS_QSIZE, dev->msi_flags.multiple);
+	msgctl |= mask_insert(dev->msi_flags.multiple, PCI_MSI_FLAGS_QSIZE);
 	dm_pci_write_config16(dev, pos + PCI_MSI_FLAGS, msgctl);
 
 	dm_pci_write_config32(dev, pos + PCI_MSI_ADDRESS_LO, address_lo);
@@ -164,14 +164,14 @@ static int msi_setup_msi_desc(struct pci_device *dev, int nvec)
 	UWORD control;
 
 	/* MSI Entry Initialization */
-	_memset(&dev->msi_flags, 0, sizeof(dev->msi_flags));
+	mem_zero(&dev->msi_flags, sizeof(dev->msi_flags));
 
 	dm_pci_read_config16(dev, dev->msi.cap + PCI_MSI_FLAGS, &control);
 
 	// desc.nvec_used = nvec;
 	dev->msi_flags.is_64 = !!(control & PCI_MSI_FLAGS_64BIT);
 	dev->msi_flags.can_mask = !!(control & PCI_MSI_FLAGS_MASKBIT);
-	dev->msi_flags.multi_cap = FIELD_GET(PCI_MSI_FLAGS_QMASK, control);
+	dev->msi_flags.multi_cap = mask_extract(control, PCI_MSI_FLAGS_QMASK);
 
 	if (control & PCI_MSI_FLAGS_64BIT)
 		dev->msi_flags.mask_pos = dev->msi.cap + PCI_MSI_MASK_64;

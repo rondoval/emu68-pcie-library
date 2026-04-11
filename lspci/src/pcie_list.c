@@ -17,7 +17,7 @@
 
 #include <pcie_brcmstb.h>
 #include <pci.h>
-#include <emu_timing.h>
+#include <timing.h>
 #include <devtree.h>
 #include <debug.h>
 #include <minlist.h>

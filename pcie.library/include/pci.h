@@ -12,7 +12,7 @@
 #define _PCI_H
 
 #include <exec/types.h>
-#include <emu_bits.h>
+#include <bits.h>
 #include <pcie_brcmstb.h>
 #include <pci_types.h>
 #include <pci_ids.h>

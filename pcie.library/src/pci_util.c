@@ -6,8 +6,8 @@
 
 #include <pci.h>
 #include <debug.h>
-#include <emu_errors.h>
-#include <emu_timing.h>
+#include <errors.h>
+#include <timing.h>
 
 int pci_get_bus(struct pci_controller *controller, int busnum, struct pci_bus **busp)
 {

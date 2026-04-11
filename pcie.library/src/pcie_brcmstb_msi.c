@@ -15,9 +15,9 @@
 
 #include <debug.h>
 
-#include <emu_bits.h>
-#include <emu_errors.h>
-#include <emu_iomem.h>
+#include <bits.h>
+#include <errors.h>
+#include <iomem.h>
 #include <pci.h>
 #include <bcm2711.h>
 #include <pcie_brcmstb.h>
@@ -54,7 +54,7 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 	if (!pcie)
 		return 0;
 
-	ULONG status = readl(pcie->base + PCIE_MSI_INTR2_STATUS);
+	ULONG status = mmio_read32(pcie->base + PCIE_MSI_INTR2_STATUS);
 
 	for (ULONG bit = 0; bit < MSI_MAX_VECTORS; bit++)
 	{
@@ -65,7 +65,7 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 		if (pcie->msi.msi_vectors[bit] != NULL)
 			call_interrupt(pcie->msi.msi_vectors[bit], bit);
 
-		writel(1 << bit, pcie->base + PCIE_MSI_INTR2_CLR);
+		mmio_write32(1 << bit, pcie->base + PCIE_MSI_INTR2_CLR);
 	}
 
 	return 1;
@@ -161,20 +161,20 @@ static void brcm_msi_set_regs(struct pci_controller *pcie)
 	Kprintf("[pcie] %s: setting MSI registers\n", __func__);
 	ULONG val = (1ULL << MSI_MAX_VECTORS) - 1ULL;
 
-	writel(val, pcie->base + PCIE_MSI_INTR2_MASK_CLR);
-	writel(val, pcie->base + PCIE_MSI_INTR2_CLR);
+	mmio_write32(val, pcie->base + PCIE_MSI_INTR2_MASK_CLR);
+	mmio_write32(val, pcie->base + PCIE_MSI_INTR2_CLR);
 
 	/*
 	 * The 0 bit of PCIE_MISC_MSI_BAR_CONFIG_LO is repurposed to MSI
 	 * enable, which we set to 1.
 	 */
-	writel(lower_32_bits(pcie->msi.msi_target_addr) | 0x1,
+	mmio_write32(u64_lo32(pcie->msi.msi_target_addr) | 0x1,
 		   pcie->base + PCIE_MISC_MSI_BAR_CONFIG_LO);
-	writel(upper_32_bits(pcie->msi.msi_target_addr),
+	mmio_write32(u64_hi32(pcie->msi.msi_target_addr),
 		   pcie->base + PCIE_MISC_MSI_BAR_CONFIG_HI);
 
 	val = PCIE_MISC_MSI_DATA_CONFIG_VAL_32;
-	writel(val, pcie->base + PCIE_MISC_MSI_DATA_CONFIG);
+	mmio_write32(val, pcie->base + PCIE_MISC_MSI_DATA_CONFIG);
 }
 
 int brcm_pcie_enable_msi(struct pci_controller *pcie)

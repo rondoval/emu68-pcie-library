@@ -15,8 +15,8 @@
 #include <exec/lists.h>
 
 #include <debug.h>
-#include <emu_errors.h>
-#include <emu_format.h>
+#include <errors.h>
+#include <format.h>
 #include <pcie_brcmstb.h>
 #include <pci.h>
 #include <devtree.h>

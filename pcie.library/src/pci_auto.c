@@ -14,7 +14,7 @@
 
 #include <pci.h>
 #include <debug.h>
-#include <emu_timing.h>
+#include <timing.h>
 
 /* the user can define CFG_SYS_PCI_CACHE_LINE_SIZE to avoid problems */
 #ifndef CFG_SYS_PCI_CACHE_LINE_SIZE
@@ -58,7 +58,7 @@ static int pciauto_region_allocate(struct pci_region *res, pci_size_t size, pci_
 		goto error;
 	}
 
-	if (upper_32_bits(addr) && !supports_64bit)
+	if (u64_hi32(addr) && !supports_64bit)
 	{
 		Kprintf("[pcie] %s: Cannot assign 64-bit address to 32-bit-only resource\n", __func__);
 		goto error;
