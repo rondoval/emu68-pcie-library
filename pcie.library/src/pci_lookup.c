@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
 #include <pci.h>
 #include <emu_errors.h>
 

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
 #ifndef __PCI_TYPES_H
 #define __PCI_TYPES_H
 

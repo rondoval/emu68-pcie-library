@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
 #ifndef _PCI_BRCMSTB_H
 #define _PCI_BRCMSTB_H
 
