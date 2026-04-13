@@ -9,7 +9,7 @@
 #include <errors.h>
 #include <timing.h>
 
-int pci_get_bus(struct pci_controller *controller, int busnum, struct pci_bus **busp)
+s32 pci_get_bus(struct pci_controller *controller, u32 busnum, struct pci_bus **busp)
 {
 	for(struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -29,15 +29,15 @@ int pci_get_bus(struct pci_controller *controller, int busnum, struct pci_bus **
  *
  * Return: last bus number, or -1 if no active buses
  */
-int pci_get_bus_max(const struct pci_controller *controller)
+s32 pci_get_bus_max(const struct pci_controller *controller)
 {
-	int ret = -1;
+	s32 ret = -1;
 
 	for (struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
 		struct pci_bus *bus = (struct pci_bus *)node;
-		if (bus->bus_number > ret)
-			ret = bus->bus_number;
+		if (ret < 0 || bus->bus_number > (u32)ret)
+			ret = (s32)bus->bus_number;
 	}
 	return ret;
 }
@@ -53,7 +53,7 @@ struct pci_controller *pci_get_controller(const struct pci_bus *bus)
 	return bus->controller;
 }
 
-int pci_get_ff(enum pci_size_t size)
+u32 pci_get_ff(enum pci_size_t size)
 {
 	switch (size)
 	{
@@ -66,7 +66,7 @@ int pci_get_ff(enum pci_size_t size)
 	}
 }
 
-pci_dev_t dm_pci_get_bdf(const struct pci_device *dev)
+pci_dev_t pci_get_bdf(const struct pci_device *dev)
 {
 	// /*
 	//  * This error indicates that @dev is a device on an unprobed PCI bus.
@@ -86,7 +86,7 @@ pci_dev_t dm_pci_get_bdf(const struct pci_device *dev)
 	return dev->bdf;
 }
 
-ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size)
+u32 pci_conv_32_to_size(u32 value, u32 offset, enum pci_size_t size)
 {
 	switch (size)
 	{
@@ -99,11 +99,10 @@ ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size)
 	}
 }
 
-ULONG pci_conv_size_to_32(ULONG old, ULONG value, UWORD offset, enum pci_size_t size)
+u32 pci_conv_size_to_32(u32 old, u32 value, u32 offset, enum pci_size_t size)
 {
-	UWORD off_mask;
-	UWORD val_mask, shift;
-	ULONG ldata, mask;
+	u32 off_mask;
+	u32 val_mask;
 
 	switch (size)
 	{
@@ -118,23 +117,22 @@ ULONG pci_conv_size_to_32(ULONG old, ULONG value, UWORD offset, enum pci_size_t 
 	default:
 		return value;
 	}
-	shift = (offset & off_mask) * 8;
-	ldata = (value & val_mask) << shift;
-	mask = val_mask << shift;
+	u32 shift = (offset & off_mask) * 8;
+	u32 ldata = (value & val_mask) << shift;
+	u32 mask = val_mask << shift;
 	value = (old & ~mask) | ldata;
 
 	return value;
 }
 
-int pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_region **memp, struct pci_region **prefp)
+u32 pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_region **memp, struct pci_region **prefp)
 {
 	struct pci_controller *ctrl = pci_get_controller(dev->bus);
-	int i;
 
 	*iop = NULL;
 	*memp = NULL;
 	*prefp = NULL;
-	for (i = 0; i < ctrl->region_count; i++)
+	for (u32 i = 0; i < ctrl->region_count; i++)
 	{
 		switch (ctrl->regions[i].flags)
 		{
@@ -153,31 +151,29 @@ int pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_
 		}
 	}
 
-	return (*iop != NULL) + (*memp != NULL) + (*prefp != NULL);
+	return (u32)((*iop != NULL) + (*memp != NULL) + (*prefp != NULL));
 }
 
 /**
- * dm_pci_flr() - Perform a Function Level Reset on a PCIe device
+ * pci_flr() - Perform a Function Level Reset on a PCIe device
  *
  * @dev: PCI device to reset
  * Return: 0 if OK, -ve on error
  */
-int dm_pci_flr(struct pci_device *dev)
+s32 pci_flr(struct pci_device *dev)
 {
-	int pcie_off;
-	ULONG cap;
-
 	/* look for PCI Express Capability */
-	pcie_off = dm_pci_find_capability(dev, PCI_CAP_ID_EXP);
+	u32 pcie_off = pci_find_capability(dev, PCI_CAP_ID_EXP);
 	if (!pcie_off)
 		return -ENOENT;
 
+	u32 cap;
 	/* check FLR capability */
-	dm_pci_read_config32(dev, pcie_off + PCI_EXP_DEVCAP, &cap);
+	pci_read_config32(dev, pcie_off + PCI_EXP_DEVCAP, &cap);
 	if (!(cap & PCI_EXP_DEVCAP_FLR))
 		return -ENOENT;
 
-	dm_pci_clrset_config16(dev, pcie_off + PCI_EXP_DEVCTL, 0,
+	pci_clrset_config16(dev, pcie_off + PCI_EXP_DEVCTL, 0,
 						   PCI_EXP_DEVCTL_BCR_FLR);
 
 	/* wait 100ms, per PCI spec */

@@ -12,7 +12,7 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install" CACHE PATH "Install path" FORCE)
 endif()
 
-add_subdirectory(pcie.library)
+add_subdirectory(pcie)
 add_subdirectory(lspci)
 
 install(EXPORT Emu68PCIeTargets

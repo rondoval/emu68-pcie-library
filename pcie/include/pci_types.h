@@ -6,6 +6,8 @@
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <exec/interrupts.h>
+#include <types.h>
+#include <bits.h>
 
 #if defined(__INTELLISENSE__)
 #define asm(x)
@@ -25,21 +27,21 @@ typedef uint64_t u64;
 typedef u64 pci_addr_t;
 typedef u64 pci_size_t;
 #else
-typedef ULONG pci_addr_t;
-typedef ULONG pci_size_t;
+typedef u32 pci_addr_t;
+typedef u32 pci_size_t;
 #endif
 
 #ifdef CONFIG_PHYS_64BIT
 typedef u64 phys_addr_t;
 typedef u64 size_t; // TODO check all occurences
 #else
-typedef ULONG phys_addr_t;
-typedef ULONG size_t;
+typedef u32 phys_addr_t;
+typedef u32 size_t;
 #endif
 
 /* Device state flags */
-#define DM_FLAG_BOUND 0x0001
-#define DM_FLAG_ACTIVATED 0x0002
+#define DM_FLAG_BOUND BIT(0)
+#define DM_FLAG_ACTIVATED BIT(1)
 
 /* Access sizes for PCI reads and writes */
 enum pci_size_t
@@ -49,38 +51,38 @@ enum pci_size_t
 	PCI_SIZE_32,
 };
 
-typedef int pci_dev_t;
+typedef u32 pci_dev_t;
 
 struct pci_region
 {
 	pci_addr_t bus_start;	/* Start on the bus */
 	phys_addr_t phys_start; /* Start in physical address space */
 	pci_size_t size;		/* Size */
-	ULONG flags;			/* Resource flags */
+	u32 flags;				/* Resource flags */
 
 	pci_addr_t bus_lower;
 };
 
 struct pci_device_id
 {
-	unsigned int vendor, device;	   /* Vendor and device ID or PCI_ANY_ID */
-	unsigned int subvendor, subdevice; /* Subsystem ID's or PCI_ANY_ID */
-	unsigned int class, class_mask;	   /* (class,subclass,prog-if) triplet */
+	u16 vendor, device;		  /* Vendor and device ID or PCI_ANY_ID */
+	u16 subvendor, subdevice; /* Subsystem ID's or PCI_ANY_ID */
+	u32 class, class_mask;	  /* (class,subclass,prog-if) triplet */
 };
 
 struct pci_controller
 {
 	APTR base;				 /* controller base address */
-	int gen;				 /* PCI gen to use */
+	u32 gen;				 /* PCI gen to use (1-5) */
 	BOOL ssc;				 /* should spread spectrum be enabled */
 	CONST_STRPTR compatible; /* compatible string */
-	ULONG hw_rev;			 /* hardware revision */
+	u32 hw_rev;				 /* hardware revision */
 
 	phys_addr_t mmio_window_phys; /* physical address of MMIO window */
-	ULONG mmio_window_virtual;	  /* virtual address of MMIO window */
+	u8 *mmio_window_virtual;	  /* CPU virtual address of MMIO window */
 	size_t mmio_window_size;	  /* size of MMIO window */
 
-	ULONG region_count;
+	u32 region_count;
 	struct pci_region *regions;
 
 	struct pci_region *pci_io;
@@ -89,15 +91,15 @@ struct pci_controller
 
 	CONST_STRPTR dt_node_name;
 
-	int bus_number_base; /* root bus number. This is in case there are multiple controllers/root buses */
-	int bus_number_last; /* last assigned bus number */
+	u32 bus_number_base; /* root bus number. This is in case there are multiple controllers/root buses */
+	u32 bus_number_last; /* last assigned bus number */
 
 	struct pcie_msi
 	{
 		pci_addr_t msi_target_addr; /* MSI target address */
 		struct Interrupt *msi_vectors[MSI_MAX_VECTORS];
-		int vectors_used;
-		int irq; /* MSI IRQ at GIC-400 */
+		s32 vectors_used;
+		s32 irq; /* MSI IRQ at GIC-400 */
 		struct Interrupt irq_isr;
 		BOOL enabled;
 	} msi;
@@ -105,7 +107,7 @@ struct pci_controller
 	struct MinList buses;
 	struct Library *gic400Base;
 
-	int INT_x_mapping[4]; /* mapping for INT A-D */
+	s32 INT_x_mapping[4]; /* mapping for INT A-D; -1 = not mapped */
 };
 
 struct pci_bus
@@ -115,10 +117,10 @@ struct pci_bus
 	struct pci_bus *parent;			   // null for root bus
 	struct pci_device *pci_bridge;	   // bridge device that owns this bus
 
-	UBYTE name[30];
+	char name[30];
 
-	int bus_number;
-	int bus_number_last_sub; /* last sub bus number assigned */
+	u32 bus_number;
+	u32 bus_number_last_sub; /* last sub bus number assigned */
 
 	struct MinList devices; // list of devices on this bus
 };
@@ -128,32 +130,34 @@ struct pci_device
 	struct MinNode node;
 	struct pci_bus *bus; // ref to bus/bridge
 
-	UBYTE name[30];
-	UBYTE flags;
+	char name[30];
+	u32 flags;
 
 	pci_dev_t bdf;
-	int devfn;
+	u32 devfn;
 
-	unsigned short vendor;
-	unsigned short device;
-	unsigned int class;
+	u16 vendor;
+	u16 device;
+	u32 class;
 
-	struct flags_msi {
-		BOOL is_64;
-		BOOL can_mask;
-		int multi_cap;
-		int multiple;
-		int mask_pos;
+	struct flags_msi
+	{
+		u8 is_64;
+		u8 can_mask;
+		u8 multi_cap;
+		u8 multiple;
+		u16 mask_pos;
 	} msi_flags;
 
-	struct device_msi {
-		int cap;	 	   /* offset of MSI capability, or 0 if none */
+	struct device_msi
+	{
+		u32 cap; /* offset of MSI capability, or 0 if none */
 		BOOL enabled;
-		int irq; //TODO more than one MSI per device... we're assuming this is the first one and this is in one block
-		ULONG msi_mask;
+		s32 irq; // TODO more than one MSI per device... we're assuming this is the first one and this is in one block
+		u32 msi_mask;
 	} msi;
 
-	int irq;
+	s32 irq;
 	BOOL irq_enabled;
 };
 

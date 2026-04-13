@@ -3,7 +3,7 @@
 #include <pci.h>
 #include <emu_errors.h>
 
-int pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn, struct pci_device **devp)
+s32 pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn, struct pci_device **devp)
 {
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -17,10 +17,10 @@ int pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn, struct p
 	return -ENODEV;
 }
 
-int dm_pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct pci_device **devp)
+s32 pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct pci_device **devp)
 {
 	struct pci_bus *bus;
-	int ret;
+	s32 ret;
 
 	ret = pci_get_bus(controller, PCI_BUS(bdf), &bus);
 	if (ret)
@@ -28,24 +28,24 @@ int dm_pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct
 	return pci_bus_find_devfn(bus, PCI_MASK_BUS(bdf), devp);
 }
 
-static int pci_device_matches_ids(struct pci_device *dev, const struct pci_device_id *ids)
+static BOOL pci_device_matches_ids(struct pci_device *dev, const struct pci_device_id *ids)
 {
-	for (int i = 0; ids[i].vendor != 0; i++)
+	for (u32 i = 0; ids[i].vendor != 0; i++)
 	{
 		if (dev->vendor == ids[i].vendor &&
 			dev->device == ids[i].device)
-			return i;
+			return TRUE;
 	}
 
-	return -EINVAL;
+	return FALSE;
 }
 
-int pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids, int *indexp, struct pci_device **devp)
+s32 pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids, int *indexp, struct pci_device **devp)
 {
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
 		struct pci_device *dev = (struct pci_device *)node;
-		if (pci_device_matches_ids(dev, ids) >= 0)
+		if (pci_device_matches_ids(dev, ids))
 		{
 			if ((*indexp)-- <= 0)
 			{
@@ -57,7 +57,7 @@ int pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids, i
 	return -ENODEV;
 }
 
-int pci_find_device_id(struct pci_controller *controller, const struct pci_device_id *ids, int index, struct pci_device **devp)
+s32 pci_find_device_id(struct pci_controller *controller, const struct pci_device_id *ids, int index, struct pci_device **devp)
 {
 	for (struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -70,7 +70,7 @@ int pci_find_device_id(struct pci_controller *controller, const struct pci_devic
 	return -ENODEV;
 }
 
-static int dm_pci_bus_find_device(struct pci_bus *bus, unsigned int vendor, unsigned int device, int *indexp, struct pci_device **devp)
+static s32 pci_bus_find_device(struct pci_bus *bus, u16 vendor, u16 device, int *indexp, struct pci_device **devp)
 {
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -88,12 +88,12 @@ static int dm_pci_bus_find_device(struct pci_bus *bus, unsigned int vendor, unsi
 	return -ENODEV;
 }
 
-int dm_pci_find_device(struct pci_controller *controller, unsigned int vendor, unsigned int device, int index, struct pci_device **devp)
+s32 pci_find_device(struct pci_controller *controller, u16 vendor, u16 device, int index, struct pci_device **devp)
 {
 	for (struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
 		struct pci_bus *bus = (struct pci_bus *)node;
-		if (!dm_pci_bus_find_device(bus, vendor, device, &index, devp))
+		if (!pci_bus_find_device(bus, vendor, device, &index, devp))
 			return 0;
 	}
 	*devp = NULL;
@@ -101,7 +101,7 @@ int dm_pci_find_device(struct pci_controller *controller, unsigned int vendor, u
 	return -ENODEV;
 }
 
-int dm_pci_find_class(struct pci_controller *controller, ULONG find_class, int index, struct pci_device **devp)
+s32 pci_find_class(struct pci_controller *controller, u32 find_class, int index, struct pci_device **devp)
 {
 	for (struct MinNode *node = controller->buses.mlh_Head; node->mln_Succ; node = node->mln_Succ)
 	{
@@ -121,7 +121,7 @@ int dm_pci_find_class(struct pci_controller *controller, ULONG find_class, int i
 	return -ENODEV;
 }
 
-static int skip_to_next_device(struct pci_bus *bus, struct pci_device **devp)
+static s32 skip_to_next_device(struct pci_bus *bus, struct pci_device **devp)
 {
 	struct pci_device *dev;
 
@@ -142,7 +142,7 @@ static int skip_to_next_device(struct pci_bus *bus, struct pci_device **devp)
 	return 0;
 }
 
-int pci_find_next_device(struct pci_device **devp)
+s32 pci_find_next_device(struct pci_device **devp)
 {
 	struct pci_device *child = *devp;
 	struct pci_bus *bus = child->bus;
@@ -159,7 +159,7 @@ int pci_find_next_device(struct pci_device **devp)
 	return bus ? skip_to_next_device(bus, devp) : 0;
 }
 
-int pci_find_first_device(struct pci_controller *controller, struct pci_device **devp)
+s32 pci_find_first_device(struct pci_controller *controller, struct pci_device **devp)
 {
 	*devp = NULL;
 	return skip_to_next_device((struct pci_bus *)controller->buses.mlh_Head, devp);

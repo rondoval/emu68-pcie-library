@@ -9,6 +9,8 @@
 #ifndef BCM2711_H__
 #define BCM2711_H__
 
+#include <bits.h>
+
 #define BCM2711_SOC_REGISTERS              0xfc000000
 #define BCM2711_SOC_REGISTER_LENGTH        0x02000000
 
@@ -50,13 +52,13 @@
 #define PCIE_RC_DL_MDIO_RD_DATA                   0x1108
 
 #define PCIE_MISC_MISC_CTRL                       0x4008
-#define  MISC_CTRL_SCB_ACCESS_EN_MASK             0x1000
-#define  MISC_CTRL_CFG_READ_UR_MODE_MASK          0x2000
+#define  MISC_CTRL_SCB_ACCESS_EN_MASK             BIT(12)
+#define  MISC_CTRL_CFG_READ_UR_MODE_MASK          BIT(13)
 #define  MISC_CTRL_MAX_BURST_SIZE_MASK            0x300000
 #define  MISC_CTRL_MAX_BURST_SIZE_128             0x0
 #define  MISC_CTRL_SCB0_SIZE_MASK                 0xf8000000
-#define  MISC_CTRL_PCIE_RCB_MPS_MODE_MASK		  0x400
-#define  MISC_CTRL_PCIE_RCB_64B_MODE_MASK         0x80
+#define  MISC_CTRL_PCIE_RCB_MPS_MODE_MASK         BIT(10)
+#define  MISC_CTRL_PCIE_RCB_64B_MODE_MASK         BIT(7)
 
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_LO          0x400c
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_HI          0x4010
@@ -77,11 +79,11 @@
 #define PCIE_MISC_MSI_DATA_CONFIG                 0x404c
 #define PCIE_MISC_MSI_DATA_CONFIG_VAL_32      0xffe06540
 #define PCIE_MISC_PCIE_STATUS                     0x4068
-#define  STATUS_PCIE_PORT_MASK                      0x80
+#define  STATUS_PCIE_PORT_MASK                      BIT(7)
 #define  STATUS_PCIE_PORT_SHIFT                        7
-#define  STATUS_PCIE_DL_ACTIVE_MASK                 0x20
+#define  STATUS_PCIE_DL_ACTIVE_MASK                 BIT(5)
 #define  STATUS_PCIE_DL_ACTIVE_SHIFT                   5
-#define  STATUS_PCIE_PHYLINKUP_MASK                 0x10
+#define  STATUS_PCIE_PHYLINKUP_MASK                 BIT(4)
 #define  STATUS_PCIE_PHYLINKUP_SHIFT                   4
 #define PCIE_MISC_REVISION                        0x406c
 #define   BRCM_PCIE_HW_REV_33					  0x0303
@@ -101,7 +103,7 @@
 	 PCIE_MISC_CPU_2_PCIE_MEM_WIN0_LIMIT_HI + ((win) * 8)
 
 #define PCIE_MISC_HARD_PCIE_HARD_DEBUG            0x4204
-#define  PCIE_HARD_DEBUG_SERDES_IDDQ_MASK         0x08000000
+#define  PCIE_HARD_DEBUG_SERDES_IDDQ_MASK         BIT(27)
 
 #define PCIE_INTR2_CPU_STATUS                 0x4300
 #define PCIE_INTR2_CPU_SET                    0x4304
@@ -123,20 +125,20 @@
 #define PCIE_RC_CFG_VENDOR_VENDOR_SPECIFIC_REG1_ENDIAN_MODE_BAR2_MASK 0xc
 #define PCIE_RC_CFG_PRIV1_ID_VAL3_CLASS_CODE_MASK                     0xffffff
 
-#define PCIE_MISC_MISC_CTRL_SCB_ACCESS_EN_MASK                  0x1000
-#define PCIE_MISC_MISC_CTRL_CFG_READ_UR_MODE_MASK               0x2000
+#define PCIE_MISC_MISC_CTRL_SCB_ACCESS_EN_MASK                  BIT(12)
+#define PCIE_MISC_MISC_CTRL_CFG_READ_UR_MODE_MASK               BIT(13)
 #define PCIE_MISC_MISC_CTRL_MAX_BURST_SIZE_MASK                 0x300000
 #define PCIE_MISC_MISC_CTRL_SCB0_SIZE_MASK                      0xf8000000
 #define PCIE_MISC_MISC_CTRL_SCB1_SIZE_MASK                      0x7c00000
 #define PCIE_MISC_MISC_CTRL_SCB2_SIZE_MASK                      0x1f
 #define PCIE_MISC_RC_BAR2_CONFIG_LO_SIZE_MASK                   0x1f
 
-#define PCIE_RGR1_SW_INIT_1_INIT_MASK                           0x2
-#define PCIE_RGR1_SW_INIT_1_PERST_MASK                          0x1
+#define PCIE_RGR1_SW_INIT_1_INIT_MASK                           BIT(1)
+#define PCIE_RGR1_SW_INIT_1_PERST_MASK                          BIT(0)
 
-#define PCIE_MISC_HARD_PCIE_HARD_DEBUG_SERDES_IDDQ_MASK         0x08000000
+#define PCIE_MISC_HARD_PCIE_HARD_DEBUG_SERDES_IDDQ_MASK         BIT(27)
 
-#define PCIE_MISC_HARD_PCIE_HARD_DEBUG_CLKREQ_DEBUG_ENABLE_MASK 0x2
+#define PCIE_MISC_HARD_PCIE_HARD_DEBUG_CLKREQ_DEBUG_ENABLE_MASK BIT(1)
 
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_BASE_LIMIT_LIMIT_MASK     0xfff00000
 #define PCIE_MISC_CPU_2_PCIE_MEM_WIN0_BASE_LIMIT_BASE_MASK      0xfff0

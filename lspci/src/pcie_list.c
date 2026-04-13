@@ -33,7 +33,7 @@ struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
 
 static void dump_vl805_registers(struct pci_device *dev);
-static CONST_STRPTR pci_header_type_name(UBYTE header_type);
+static CONST_STRPTR pci_header_type_name(u8 header_type);
 static void dump_bridge_config(struct pci_device *dev);
 
 static void print_device(struct pci_device *dev)
@@ -46,7 +46,7 @@ static void print_device(struct pci_device *dev)
            (ULONG)(dev->class & 0xff));
 }
 
-static CONST_STRPTR pci_capability_name(UBYTE cap_id)
+static CONST_STRPTR pci_capability_name(u8 cap_id)
 {
     switch (cap_id)
     {
@@ -89,7 +89,7 @@ static CONST_STRPTR pci_capability_name(UBYTE cap_id)
     }
 }
 
-static CONST_STRPTR pcie_ext_capability_name(UWORD cap_id)
+static CONST_STRPTR pcie_ext_capability_name(u16 cap_id)
 {
     switch (cap_id)
     {
@@ -144,7 +144,7 @@ static CONST_STRPTR pcie_ext_capability_name(UWORD cap_id)
     }
 }
 
-static CONST_STRPTR pci_header_type_name(UBYTE header_type)
+static CONST_STRPTR pci_header_type_name(u8 header_type)
 {
     switch (header_type)
     {
@@ -179,24 +179,24 @@ static void dump_bridge_config(struct pci_device *dev)
     UWORD sec_status = 0;
     UWORD bridge_ctrl = 0;
 
-    dm_pci_read_config32(dev, PCI_PRIMARY_BUS, &bus_numbers);
+    pci_read_config32(dev, PCI_PRIMARY_BUS, &bus_numbers);
     primary = (UBYTE)(bus_numbers & 0xff);
     secondary = (UBYTE)((bus_numbers >> 8) & 0xff);
     subordinate = (UBYTE)((bus_numbers >> 16) & 0xff);
     sec_latency = (UBYTE)((bus_numbers >> 24) & 0xff);
 
-    dm_pci_read_config8(dev, PCI_IO_BASE, &io_base);
-    dm_pci_read_config8(dev, PCI_IO_LIMIT, &io_limit);
-    dm_pci_read_config16(dev, PCI_IO_BASE_UPPER16, &io_base_upper);
-    dm_pci_read_config16(dev, PCI_IO_LIMIT_UPPER16, &io_limit_upper);
-    dm_pci_read_config16(dev, PCI_MEMORY_BASE, &mem_base);
-    dm_pci_read_config16(dev, PCI_MEMORY_LIMIT, &mem_limit);
-    dm_pci_read_config16(dev, PCI_PREF_MEMORY_BASE, &pref_mem_base);
-    dm_pci_read_config16(dev, PCI_PREF_MEMORY_LIMIT, &pref_mem_limit);
-    dm_pci_read_config32(dev, PCI_PREF_BASE_UPPER32, &pref_base_upper);
-    dm_pci_read_config32(dev, PCI_PREF_LIMIT_UPPER32, &pref_limit_upper);
-    dm_pci_read_config16(dev, PCI_SEC_STATUS, &sec_status);
-    dm_pci_read_config16(dev, PCI_BRIDGE_CONTROL, &bridge_ctrl);
+    pci_read_config8(dev, PCI_IO_BASE, &io_base);
+    pci_read_config8(dev, PCI_IO_LIMIT, &io_limit);
+    pci_read_config16(dev, PCI_IO_BASE_UPPER16, &io_base_upper);
+    pci_read_config16(dev, PCI_IO_LIMIT_UPPER16, &io_limit_upper);
+    pci_read_config16(dev, PCI_MEMORY_BASE, &mem_base);
+    pci_read_config16(dev, PCI_MEMORY_LIMIT, &mem_limit);
+    pci_read_config16(dev, PCI_PREF_MEMORY_BASE, &pref_mem_base);
+    pci_read_config16(dev, PCI_PREF_MEMORY_LIMIT, &pref_mem_limit);
+    pci_read_config32(dev, PCI_PREF_BASE_UPPER32, &pref_base_upper);
+    pci_read_config32(dev, PCI_PREF_LIMIT_UPPER32, &pref_limit_upper);
+    pci_read_config16(dev, PCI_SEC_STATUS, &sec_status);
+    pci_read_config16(dev, PCI_BRIDGE_CONTROL, &bridge_ctrl);
 
     ULONG io_base_addr = (ULONG)((io_base & 0xf0) << 8);
     ULONG io_limit_addr = (ULONG)((io_limit & 0xf0) << 8) | 0xfff;
@@ -243,7 +243,7 @@ static void dump_bridge_config(struct pci_device *dev)
            (ULONG)sec_status, (ULONG)bridge_ctrl);
 }
 
-static CONST_STRPTR pci_ea_bei_name(UBYTE bei)
+static CONST_STRPTR pci_ea_bei_name(u8 bei)
 {
     switch (bei)
     {
@@ -282,7 +282,7 @@ static CONST_STRPTR pci_ea_bei_name(UBYTE bei)
     }
 }
 
-static CONST_STRPTR pci_ea_property_name(UBYTE prop)
+static CONST_STRPTR pci_ea_property_name(u8 prop)
 {
     switch (prop)
     {
@@ -330,24 +330,24 @@ static void dump_ea_print_u64(CONST_STRPTR label, unsigned long long value)
     }
 }
 
-static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
+static s32 dump_ea_entry(struct pci_device *dev, u32 entry_offset, u32 index)
 {
-    int start_offset = entry_offset;
-    ULONG dw0 = 0;
-    dm_pci_read_config32(dev, entry_offset, &dw0);
+    u32 start_offset = entry_offset;
+    u32 dw0 = 0;
+    pci_read_config32(dev, entry_offset, &dw0);
     entry_offset += 4;
 
-    int entry_size = (((int)(dw0 & PCI_EA_ES)) + 1) << 2;
-    UBYTE bei = (UBYTE)((dw0 & PCI_EA_BEI) >> 4);
-    UBYTE primary_prop = (UBYTE)((dw0 & PCI_EA_PP) >> 8);
-    UBYTE secondary_prop = (UBYTE)((dw0 & PCI_EA_SP) >> 16);
-    UBYTE property = primary_prop;
+    u32 entry_size = (u32)(((dw0 & PCI_EA_ES) + 1u) << 2);
+    u8 bei = (u8)((dw0 & PCI_EA_BEI) >> 4);
+    u8 primary_prop = (u8)((dw0 & PCI_EA_PP) >> 8);
+    u8 secondary_prop = (u8)((dw0 & PCI_EA_SP) >> 16);
+    u8 property = primary_prop;
 
     if (property > PCI_EA_P_BRIDGE_IO && property < PCI_EA_P_MEM_RESERVED)
         property = secondary_prop;
 
-    int enabled = (dw0 & PCI_EA_ENABLE) ? 1 : 0;
-    int writable = (dw0 & PCI_EA_WRITABLE) ? 1 : 0;
+    u32 enabled = (dw0 & PCI_EA_ENABLE) ? 1u : 0u;
+    u32 writable = (dw0 & PCI_EA_WRITABLE) ? 1u : 0u;
     CONST_STRPTR bei_name = pci_ea_bei_name(bei);
     CONST_STRPTR prop_name = pci_ea_property_name(property);
 
@@ -362,13 +362,12 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
            (ULONG)writable);
 
     if (!enabled)
-        return start_offset + entry_size;
-
-    ULONG base_lo = 0;
-    dm_pci_read_config32(dev, entry_offset, &base_lo);
+		return (s32)(start_offset + entry_size);
+    u32 base_lo = 0;
+    pci_read_config32(dev, entry_offset, &base_lo);
     entry_offset += 4;
-    ULONG max_offset_lo = 0;
-    dm_pci_read_config32(dev, entry_offset, &max_offset_lo);
+    u32 max_offset_lo = 0;
+    pci_read_config32(dev, entry_offset, &max_offset_lo);
     entry_offset += 4;
 
     unsigned long long start = (unsigned long long)(base_lo & PCI_EA_FIELD_MASK);
@@ -376,16 +375,16 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
 
     if (base_lo & PCI_EA_IS_64)
     {
-        ULONG base_hi = 0;
-        dm_pci_read_config32(dev, entry_offset, &base_hi);
+        u32 base_hi = 0;
+        pci_read_config32(dev, entry_offset, &base_hi);
         entry_offset += 4;
         start |= ((unsigned long long)base_hi << 32);
     }
 
     if (max_offset_lo & PCI_EA_IS_64)
     {
-        ULONG max_offset_hi = 0;
-        dm_pci_read_config32(dev, entry_offset, &max_offset_hi);
+        u32 max_offset_hi = 0;
+        pci_read_config32(dev, entry_offset, &max_offset_hi);
         entry_offset += 4;
         max_offset |= ((unsigned long long)max_offset_hi << 32);
     }
@@ -399,27 +398,27 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
     dump_ea_print_u64((CONST_STRPTR) "Limit", limit);
     dump_ea_print_u64((CONST_STRPTR) "Size", length);
 
-    int consumed = entry_offset - start_offset;
+    u32 consumed = (u32)(entry_offset - start_offset);
     if (consumed < entry_size)
         entry_offset = start_offset + entry_size;
 
-    return entry_offset;
+    return (s32)entry_offset;
 }
 
-static void dump_ea_capability(struct pci_device *dev, int cap_offset, UBYTE header_layout)
+static void dump_ea_capability(struct pci_device *dev, u32 cap_offset, u8 header_layout)
 {
-    UBYTE num_entries = 0;
-    dm_pci_read_config8(dev, cap_offset + PCI_EA_NUM_ENT, &num_entries);
+    u8 num_entries = 0;
+    pci_read_config8(dev, cap_offset + PCI_EA_NUM_ENT, &num_entries);
     num_entries &= PCI_EA_NUM_ENT_MASK;
 
     Printf((CONST_STRPTR) "        Enhanced Allocation entries: %ld\n", (ULONG)num_entries);
 
     if (header_layout == PCI_HEADER_TYPE_BRIDGE)
     {
-        ULONG bus_info = 0;
-        dm_pci_read_config32(dev, cap_offset + PCI_EA_FIRST_ENT, &bus_info);
-        UBYTE ea_secondary = (UBYTE)(bus_info & PCI_EA_SEC_BUS_MASK);
-        UBYTE ea_subordinate = (UBYTE)((bus_info & PCI_EA_SUB_BUS_MASK) >> PCI_EA_SUB_BUS_SHIFT);
+        u32 bus_info = 0;
+        pci_read_config32(dev, cap_offset + PCI_EA_FIRST_ENT, &bus_info);
+        u8 ea_secondary = (u8)(bus_info & PCI_EA_SEC_BUS_MASK);
+        u8 ea_subordinate = (u8)((bus_info & PCI_EA_SUB_BUS_MASK) >> PCI_EA_SUB_BUS_SHIFT);
 
         if (ea_secondary != 0 && ea_subordinate >= ea_secondary)
         {
@@ -432,17 +431,17 @@ static void dump_ea_capability(struct pci_device *dev, int cap_offset, UBYTE hea
         }
     }
 
-    int entry_offset = cap_offset + ((header_layout == PCI_HEADER_TYPE_BRIDGE) ? PCI_EA_FIRST_ENT_BRIDGE : PCI_EA_FIRST_ENT);
+    u32 entry_offset = cap_offset + (u32)((header_layout == PCI_HEADER_TYPE_BRIDGE) ? PCI_EA_FIRST_ENT_BRIDGE : PCI_EA_FIRST_ENT);
 
-    for (int index = 0; index < num_entries; ++index)
+    for (u32 index = 0; index < num_entries; ++index)
     {
-        int next = dump_ea_entry(dev, entry_offset, index);
-        if (next <= entry_offset)
+        s32 next = dump_ea_entry(dev, entry_offset, index);
+        if (next <= (s32)entry_offset)
         {
             Printf((CONST_STRPTR) "          Failed to parse EA entry %ld\n", (ULONG)index);
             break;
         }
-        entry_offset = next;
+        entry_offset = (u32)next;
     }
 }
 
@@ -461,19 +460,19 @@ static void probe_pci_device(struct pci_device *dev)
     UBYTE interrupt_pin = 0;
     UBYTE header_type = 0;
 
-    dm_pci_read_config16(dev, PCI_STATUS, &status);
-    dm_pci_read_config16(dev, PCI_COMMAND, &command);
-    dm_pci_read_config8(dev, PCI_REVISION_ID, &revision);
-    dm_pci_read_config8(dev, PCI_CLASS_PROG, &prog_if);
-    dm_pci_read_config8(dev, PCI_CLASS_DEVICE, &subclass);
-    dm_pci_read_config8(dev, PCI_CLASS_DEVICE + 1, &baseclass);
-    dm_pci_read_config8(dev, PCI_CAPABILITY_LIST, &capability_pointer);
-    dm_pci_read_config8(dev, PCI_INTERRUPT_LINE, &interrupt_line);
-    dm_pci_read_config8(dev, PCI_INTERRUPT_PIN, &interrupt_pin);
-    dm_pci_read_config8(dev, PCI_HEADER_TYPE, &header_type);
+    pci_read_config16(dev, PCI_STATUS, &status);
+    pci_read_config16(dev, PCI_COMMAND, &command);
+    pci_read_config8(dev, PCI_REVISION_ID, &revision);
+    pci_read_config8(dev, PCI_CLASS_PROG, &prog_if);
+    pci_read_config8(dev, PCI_CLASS_DEVICE, &subclass);
+    pci_read_config8(dev, PCI_CLASS_DEVICE + 1, &baseclass);
+    pci_read_config8(dev, PCI_CAPABILITY_LIST, &capability_pointer);
+    pci_read_config8(dev, PCI_INTERRUPT_LINE, &interrupt_line);
+    pci_read_config8(dev, PCI_INTERRUPT_PIN, &interrupt_pin);
+    pci_read_config8(dev, PCI_HEADER_TYPE, &header_type);
 
-    UBYTE header_layout = (UBYTE)(header_type & PCI_HEADER_TYPE_MASK);
-    int multi_function = (header_type & PCI_HEADER_TYPE_MULTI) ? 1 : 0;
+    u8 header_layout = (u8)(header_type & PCI_HEADER_TYPE_MASK);
+    u32 multi_function = (header_type & PCI_HEADER_TYPE_MULTI) ? 1u : 0u;
     CONST_STRPTR header_desc = pci_header_type_name(header_layout);
 
     Printf((CONST_STRPTR) "  Class = %02lx:%02lx:%02lx (rev %02lx)\n",
@@ -502,21 +501,21 @@ static void probe_pci_device(struct pci_device *dev)
     else
     {
         Printf((CONST_STRPTR) "\n    Standard PCI capabilities:\n");
-        for (int cap_id = 1; cap_id <= PCI_CAP_ID_MAX; ++cap_id)
+        for (u32 cap_id = 1; cap_id <= PCI_CAP_ID_MAX; ++cap_id)
         {
-            int offset = dm_pci_find_capability(dev, cap_id);
-            if (offset <= 0)
+            u32 offset = pci_find_capability(dev, (u8)cap_id);
+            if (offset == 0)
                 continue;
 
-            UBYTE next_ptr = 0;
-            ULONG dword0 = 0;
-            ULONG dword1 = 0;
+            u8 next_ptr = 0;
+            u32 dword0 = 0;
+            u32 dword1 = 0;
 
-            dm_pci_read_config8(dev, offset + PCI_CAP_LIST_NEXT, &next_ptr);
-            dm_pci_read_config32(dev, offset + 0, &dword0);
-            dm_pci_read_config32(dev, offset + 4, &dword1);
+            pci_read_config8(dev, offset + PCI_CAP_LIST_NEXT, &next_ptr);
+            pci_read_config32(dev, offset + 0, &dword0);
+            pci_read_config32(dev, offset + 4, &dword1);
 
-            CONST_STRPTR name = pci_capability_name((UBYTE)cap_id);
+            CONST_STRPTR name = pci_capability_name((u8)cap_id);
             Printf((CONST_STRPTR) "      off=0x%02lx id=0x%02lx (%s) next=0x%02lx\n",
                    (ULONG)offset, (ULONG)cap_id, (ULONG)name, (ULONG)next_ptr);
             Printf((CONST_STRPTR) "        dword0=0x%08lx dword1=0x%08lx\n",
@@ -524,28 +523,28 @@ static void probe_pci_device(struct pci_device *dev)
 
             if (cap_id == PCI_CAP_ID_MSI)
             {
-                UWORD msg_ctl = 0;
-                ULONG addr_lo = 0;
-                dm_pci_read_config16(dev, offset + PCI_MSI_FLAGS, &msg_ctl);
-                dm_pci_read_config32(dev, offset + PCI_MSI_ADDRESS_LO, &addr_lo);
+                u16 msg_ctl = 0;
+                u32 addr_lo = 0;
+                pci_read_config16(dev, offset + PCI_MSI_FLAGS, &msg_ctl);
+                pci_read_config32(dev, offset + PCI_MSI_ADDRESS_LO, &addr_lo);
                 Printf((CONST_STRPTR) "        MSI: ctl=0x%04lx addr_lo=0x%08lx\n",
                        (ULONG)msg_ctl, addr_lo);
             }
             else if (cap_id == PCI_CAP_ID_MSIX)
             {
-                UWORD msg_ctl = 0;
-                ULONG table = 0;
-                ULONG pba = 0;
-                dm_pci_read_config16(dev, offset + PCI_MSI_FLAGS, &msg_ctl);
-                dm_pci_read_config32(dev, offset + 4, &table);
-                dm_pci_read_config32(dev, offset + 8, &pba);
+                u16 msg_ctl = 0;
+                u32 table = 0;
+                u32 pba = 0;
+                pci_read_config16(dev, offset + PCI_MSI_FLAGS, &msg_ctl);
+                pci_read_config32(dev, offset + 4, &table);
+                pci_read_config32(dev, offset + 8, &pba);
                 Printf((CONST_STRPTR) "        MSI-X: ctl=0x%04lx table=0x%08lx pba=0x%08lx\n",
                        (ULONG)msg_ctl, table, pba);
             }
             else if (cap_id == PCI_CAP_ID_EXP)
             {
-                UWORD exp_flags = 0;
-                dm_pci_read_config16(dev, offset + PCI_EXP_FLAGS, &exp_flags);
+                u16 exp_flags = 0;
+                pci_read_config16(dev, offset + PCI_EXP_FLAGS, &exp_flags);
                 Printf((CONST_STRPTR) "        PCIe Flags=0x%04lx\n",
                        (ULONG)exp_flags);
             }
@@ -557,21 +556,21 @@ static void probe_pci_device(struct pci_device *dev)
     }
 
     Printf((CONST_STRPTR) "\n    PCIe extended capabilities:\n");
-    for (int cap_id = 1; cap_id <= PCI_EXT_CAP_ID_MAX; ++cap_id)
+    for (u32 cap_id = 1; cap_id <= PCI_EXT_CAP_ID_MAX; ++cap_id)
     {
-        int offset = dm_pci_find_ext_capability(dev, cap_id);
-        if (offset <= 0 || offset >= PCI_CFG_SPACE_EXP_SIZE)
+        u32 offset = pci_find_ext_capability(dev, (u16)cap_id);
+        if (offset == 0 || offset >= PCI_CFG_SPACE_EXP_SIZE)
             continue;
 
-        ULONG header = 0;
-        ULONG dword1 = 0;
+        u32 header = 0;
+        u32 dword1 = 0;
 
-        dm_pci_read_config32(dev, offset, &header);
-        dm_pci_read_config32(dev, offset + 4, &dword1);
+        pci_read_config32(dev, offset, &header);
+        pci_read_config32(dev, offset + 4, &dword1);
 
-        UBYTE version = (UBYTE)PCI_EXT_CAP_VER(header);
-        UWORD next_ptr = (UWORD)PCI_EXT_CAP_NEXT(header);
-        CONST_STRPTR name = pcie_ext_capability_name((UWORD)cap_id);
+        u8 version = (u8)PCI_EXT_CAP_VER(header);
+        u16 next_ptr = (u16)PCI_EXT_CAP_NEXT(header);
+        CONST_STRPTR name = pcie_ext_capability_name((u16)cap_id);
 
         Printf((CONST_STRPTR) "      off=0x%03lx id=0x%04lx (%s) ver=%lu next=0x%03lx\n",
                (ULONG)offset, (ULONG)cap_id, (ULONG)name, (ULONG)version, (ULONG)next_ptr);
@@ -593,7 +592,7 @@ static void dump_vl805_registers(struct pci_device *dev)
     if (!dev)
         return;
 
-    void *bar0 = dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0, 0x1000, PCI_REGION_TYPE, PCI_REGION_MEM);
+    void *bar0 = pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0, 0x1000, PCI_REGION_TYPE, PCI_REGION_MEM);
     if (!bar0)
     {
         Printf((CONST_STRPTR) "  Failed to map VL805 BAR0\n");
@@ -794,8 +793,8 @@ int main(void)
     }
     delay_us(1000);
 
-    int bus_max = pci_get_bus_max(pcie);
-    for (int bus_index = 0; bus_index <= bus_max; ++bus_index)
+    s32 bus_max = pci_get_bus_max(pcie);
+    for (u32 bus_index = 0; bus_max >= 0 && bus_index <= (u32)bus_max; ++bus_index)
     {
         struct pci_bus *bus;
         if (pci_get_bus(pcie, bus_index, &bus) == 0)

@@ -29,35 +29,35 @@
 #define PCI_VENDOR_ID 0x00			  	/* 16 bits */
 #define PCI_DEVICE_ID 0x02			  	/* 16 bits */
 #define PCI_COMMAND 0x04			  	/* 16 bits */
-#define  PCI_COMMAND_IO 0x1			  	/* Enable response in I/O space */
-#define  PCI_COMMAND_MEMORY 0x2		  	/* Enable response in Memory space */
-#define  PCI_COMMAND_MASTER 0x4		  	/* Enable bus mastering */
-#define  PCI_COMMAND_SPECIAL 0x8	  	/* Enable response to special cycles */
-#define  PCI_COMMAND_INVALIDATE 0x10  	/* Use memory write and invalidate */
-#define  PCI_COMMAND_VGA_PALETTE 0x20 	/* Enable palette snooping */
-#define  PCI_COMMAND_PARITY 0x40	  	/* Enable parity checking */
-#define  PCI_COMMAND_WAIT 0x80		  	/* Enable address/data stepping */
-#define  PCI_COMMAND_SERR 0x100		  	/* Enable SERR */
-#define  PCI_COMMAND_FAST_BACK 0x200  	/* Enable back-to-back writes */
-#define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
+#define  PCI_COMMAND_IO           BIT(0)  /* Enable response in I/O space */
+#define  PCI_COMMAND_MEMORY       BIT(1)  /* Enable response in Memory space */
+#define  PCI_COMMAND_MASTER       BIT(2)  /* Enable bus mastering */
+#define  PCI_COMMAND_SPECIAL      BIT(3)  /* Enable response to special cycles */
+#define  PCI_COMMAND_INVALIDATE   BIT(4)  /* Use memory write and invalidate */
+#define  PCI_COMMAND_VGA_PALETTE  BIT(5)  /* Enable palette snooping */
+#define  PCI_COMMAND_PARITY       BIT(6)  /* Enable parity checking */
+#define  PCI_COMMAND_WAIT         BIT(7)  /* Enable address/data stepping */
+#define  PCI_COMMAND_SERR         BIT(8)  /* Enable SERR */
+#define  PCI_COMMAND_FAST_BACK    BIT(9)  /* Enable back-to-back writes */
+#define  PCI_COMMAND_INTX_DISABLE BIT(10) /* INTx Emulation Disable */
 
 #define PCI_STATUS 0x06				 	/* 16 bits */
-#define  PCI_STATUS_IMM_READY	0x01	/* Immediate Readiness */
-#define  PCI_STATUS_INTERRUPT	0x08	/* Interrupt status */
-#define  PCI_STATUS_CAP_LIST 0x10	 	/* Support Capability List */
-#define  PCI_STATUS_66MHZ 0x20		 	/* Support 66 Mhz PCI 2.1 bus */
-#define  PCI_STATUS_UDF 0x40			/* Support User Definable Features [obsolete] */
-#define  PCI_STATUS_FAST_BACK 0x80	 	/* Accept fast-back to back */
-#define  PCI_STATUS_PARITY 0x100		/* Detected parity error */
+#define  PCI_STATUS_IMM_READY        BIT(0)  /* Immediate Readiness */
+#define  PCI_STATUS_INTERRUPT        BIT(3)  /* Interrupt status */
+#define  PCI_STATUS_CAP_LIST         BIT(4)  /* Support Capability List */
+#define  PCI_STATUS_66MHZ            BIT(5)  /* Support 66 Mhz PCI 2.1 bus */
+#define  PCI_STATUS_UDF              BIT(6)  /* Support User Definable Features [obsolete] */
+#define  PCI_STATUS_FAST_BACK        BIT(7)  /* Accept fast-back to back */
+#define  PCI_STATUS_PARITY           BIT(8)  /* Detected parity error */
 #define  PCI_STATUS_DEVSEL_MASK 0x600 	/* DEVSEL timing */
 #define  PCI_STATUS_DEVSEL_FAST 0x000
 #define  PCI_STATUS_DEVSEL_MEDIUM 0x200
 #define  PCI_STATUS_DEVSEL_SLOW 0x400
-#define  PCI_STATUS_SIG_TARGET_ABORT 0x800  /* Set on target abort */
-#define  PCI_STATUS_REC_TARGET_ABORT 0x1000 /* Master ack of " */
-#define  PCI_STATUS_REC_MASTER_ABORT 0x2000 /* Set on master abort */
-#define  PCI_STATUS_SIG_SYSTEM_ERROR 0x4000 /* Set when we drive SERR */
-#define  PCI_STATUS_DETECTED_PARITY 0x8000  /* Set on parity error */
+#define  PCI_STATUS_SIG_TARGET_ABORT BIT(11) /* Set on target abort */
+#define  PCI_STATUS_REC_TARGET_ABORT BIT(12) /* Master ack of " */
+#define  PCI_STATUS_REC_MASTER_ABORT BIT(13) /* Set on master abort */
+#define  PCI_STATUS_SIG_SYSTEM_ERROR BIT(14) /* Set when we drive SERR */
+#define  PCI_STATUS_DETECTED_PARITY  BIT(15) /* Set on parity error */
 
 #define PCI_CLASS_REVISION 0x08 /* High 24 bits are class, low 8 \
 				   revision */
@@ -76,8 +76,8 @@
 
 #define PCI_BIST 0x0f			/* 8 bits */
 #define PCI_BIST_CODE_MASK 0x0f /* Return result */
-#define PCI_BIST_START 0x40		/* 1 to start BIST, 2 secs or less */
-#define PCI_BIST_CAPABLE 0x80	/* 1 if BIST capable */
+#define PCI_BIST_START        BIT(6)  /* 1 to start BIST, 2 secs or less */
+#define PCI_BIST_CAPABLE      BIT(7)  /* 1 if BIST capable */
 
 /*
  * Base addresses specify locations in memory or I/O space.
@@ -91,16 +91,16 @@
 #define PCI_BASE_ADDRESS_3 0x1c		/* 32 bits */
 #define PCI_BASE_ADDRESS_4 0x20		/* 32 bits */
 #define PCI_BASE_ADDRESS_5 0x24		/* 32 bits */
-#define PCI_BASE_ADDRESS_SPACE 0x01 /* 0 = memory, 1 = I/O */
-#define PCI_BASE_ADDRESS_SPACE_IO 0x01
+#define PCI_BASE_ADDRESS_SPACE    BIT(0) /* 0 = memory, 1 = I/O */
+#define PCI_BASE_ADDRESS_SPACE_IO BIT(0)
 #define PCI_BASE_ADDRESS_SPACE_MEMORY 0x00
 #define PCI_BASE_ADDRESS_MEM_TYPE_MASK 0x06
 #define PCI_BASE_ADDRESS_MEM_TYPE_32 0x00  /* 32 bit address */
 #define PCI_BASE_ADDRESS_MEM_TYPE_1M 0x02  /* Below 1M [obsolete] */
 #define PCI_BASE_ADDRESS_MEM_TYPE_64 0x04  /* 64 bit address */
-#define PCI_BASE_ADDRESS_MEM_PREFETCH 0x08 /* prefetchable? */
-#define PCI_BASE_ADDRESS_MEM_MASK (~0x0fULL)
-#define PCI_BASE_ADDRESS_IO_MASK (~0x03ULL)
+#define PCI_BASE_ADDRESS_MEM_PREFETCH BIT(3) /* prefetchable? */
+#define PCI_BASE_ADDRESS_MEM_MASK (~0x0fUL)
+#define PCI_BASE_ADDRESS_IO_MASK  (~0x03UL)
 /* bit 1 is reserved if address_space = 1 */
 
 /* Convert a regsister address (e.g. PCI_BASE_ADDRESS_1) to a bar # (e.g. 1) */
@@ -112,7 +112,7 @@
 #define PCI_SUBSYSTEM_VENDOR_ID 0x2c
 #define PCI_SUBSYSTEM_ID 0x2e
 #define PCI_ROM_ADDRESS 0x30 /* Bits 31..11 are address, 10..1 reserved */
-#define PCI_ROM_ADDRESS_ENABLE 0x01
+#define PCI_ROM_ADDRESS_ENABLE BIT(0)
 #define PCI_ROM_ADDRESS_MASK (~0x7ffULL)
 
 #define PCI_CAPABILITY_LIST 0x34 /* Offset of first capability list entry */
@@ -135,18 +135,18 @@
 #define PCI_IO_RANGE_TYPE_MASK 0x0f /* I/O bridging type */
 #define PCI_IO_RANGE_TYPE_16 0x00
 #define PCI_IO_RANGE_TYPE_32 0x01
-#define PCI_IO_RANGE_MASK ~0x0f
+#define PCI_IO_RANGE_MASK ~0x0fU
 #define PCI_SEC_STATUS 0x1e	 /* Secondary status register, only bit 14 used */
 #define PCI_MEMORY_BASE 0x20 /* Memory range behind */
 #define PCI_MEMORY_LIMIT 0x22
 #define PCI_MEMORY_RANGE_TYPE_MASK 0x0f
-#define PCI_MEMORY_RANGE_MASK ~0x0f
+#define PCI_MEMORY_RANGE_MASK ~0x0fU
 #define PCI_PREF_MEMORY_BASE 0x24 /* Prefetchable memory range behind */
 #define PCI_PREF_MEMORY_LIMIT 0x26
 #define PCI_PREF_RANGE_TYPE_MASK 0x0f
 #define PCI_PREF_RANGE_TYPE_32 0x00
 #define PCI_PREF_RANGE_TYPE_64 0x01
-#define PCI_PREF_RANGE_MASK ~0x0f
+#define PCI_PREF_RANGE_MASK ~0x0fU
 #define PCI_PREF_BASE_UPPER32 0x28 /* Upper half of prefetchable memory range */
 #define PCI_PREF_LIMIT_UPPER32 0x2c
 #define PCI_IO_BASE_UPPER16 0x30 /* Upper half of I/O addresses */
@@ -156,13 +156,13 @@
 #define PCI_ROM_ADDRESS1 0x38 /* Same as PCI_ROM_ADDRESS, but for htype 1 */
 /* 0x3c-0x3d are same as for htype 0 */
 #define PCI_BRIDGE_CONTROL 0x3e
-#define PCI_BRIDGE_CTL_PARITY 0x01		 /* Enable parity detection on secondary interface */
-#define PCI_BRIDGE_CTL_SERR 0x02		 /* The same for SERR forwarding */
-#define PCI_BRIDGE_CTL_NO_ISA 0x04		 /* Disable bridging of ISA ports */
-#define PCI_BRIDGE_CTL_VGA 0x08			 /* Forward VGA addresses */
-#define PCI_BRIDGE_CTL_MASTER_ABORT 0x20 /* Report master aborts */
-#define PCI_BRIDGE_CTL_BUS_RESET 0x40	 /* Secondary bus reset */
-#define PCI_BRIDGE_CTL_FAST_BACK 0x80	 /* Fast Back2Back enabled on secondary interface */
+#define PCI_BRIDGE_CTL_PARITY        BIT(0)  /* Enable parity detection on secondary interface */
+#define PCI_BRIDGE_CTL_SERR          BIT(1)  /* The same for SERR forwarding */
+#define PCI_BRIDGE_CTL_NO_ISA        BIT(2)  /* Disable bridging of ISA ports */
+#define PCI_BRIDGE_CTL_VGA           BIT(3)  /* Forward VGA addresses */
+#define PCI_BRIDGE_CTL_MASTER_ABORT  BIT(5)  /* Report master aborts */
+#define PCI_BRIDGE_CTL_BUS_RESET     BIT(6)  /* Secondary bus reset */
+#define PCI_BRIDGE_CTL_FAST_BACK     BIT(7)  /* Fast Back2Back enabled on secondary interface */
 
 /* Header type 2 (CardBus bridges) */
 #define PCI_CB_CAPABILITY_LIST 0x14
@@ -187,16 +187,16 @@
 #define PCI_CB_IO_RANGE_MASK ~0x03
 /* 0x3c-0x3d are same as for htype 0 */
 #define PCI_CB_BRIDGE_CONTROL 0x3e
-#define PCI_CB_BRIDGE_CTL_PARITY 0x01 /* Similar to standard bridge control register */
-#define PCI_CB_BRIDGE_CTL_SERR 0x02
-#define PCI_CB_BRIDGE_CTL_ISA 0x04
-#define PCI_CB_BRIDGE_CTL_VGA 0x08
-#define PCI_CB_BRIDGE_CTL_MASTER_ABORT 0x20
-#define PCI_CB_BRIDGE_CTL_CB_RESET 0x40		  /* CardBus reset */
-#define PCI_CB_BRIDGE_CTL_16BIT_INT 0x80	  /* Enable interrupt for 16-bit cards */
-#define PCI_CB_BRIDGE_CTL_PREFETCH_MEM0 0x100 /* Prefetch enable for both memory regions */
-#define PCI_CB_BRIDGE_CTL_PREFETCH_MEM1 0x200
-#define PCI_CB_BRIDGE_CTL_POST_WRITES 0x400
+#define PCI_CB_BRIDGE_CTL_PARITY        BIT(0)  /* Similar to standard bridge control register */
+#define PCI_CB_BRIDGE_CTL_SERR          BIT(1)
+#define PCI_CB_BRIDGE_CTL_ISA           BIT(2)
+#define PCI_CB_BRIDGE_CTL_VGA           BIT(3)
+#define PCI_CB_BRIDGE_CTL_MASTER_ABORT  BIT(5)
+#define PCI_CB_BRIDGE_CTL_CB_RESET      BIT(6)  /* CardBus reset */
+#define PCI_CB_BRIDGE_CTL_16BIT_INT     BIT(7)  /* Enable interrupt for 16-bit cards */
+#define PCI_CB_BRIDGE_CTL_PREFETCH_MEM0 BIT(8)  /* Prefetch enable for both memory regions */
+#define PCI_CB_BRIDGE_CTL_PREFETCH_MEM1 BIT(9)
+#define PCI_CB_BRIDGE_CTL_POST_WRITES   BIT(10)
 #define PCI_CB_SUBSYSTEM_VENDOR_ID 0x40
 #define PCI_CB_SUBSYSTEM_ID 0x42
 #define PCI_CB_LEGACY_MODE_BASE 0x44 /* 16-bit PC Card legacy mode base address (ExCa) */
@@ -233,21 +233,21 @@
 /* Power Management Registers */
 
 #define PCI_PM_CAP_VER_MASK 0x0007		   /* Version */
-#define PCI_PM_CAP_PME_CLOCK 0x0008		   /* PME clock required */
-#define PCI_PM_CAP_AUX_POWER 0x0010		   /* Auxilliary power support */
-#define PCI_PM_CAP_DSI 0x0020			   /* Device specific initialization */
-#define PCI_PM_CAP_D1 0x0200			   /* D1 power state support */
-#define PCI_PM_CAP_D2 0x0400			   /* D2 power state support */
-#define PCI_PM_CAP_PME 0x0800			   /* PME pin supported */
+#define PCI_PM_CAP_PME_CLOCK    BIT(3)   /* PME clock required */
+#define PCI_PM_CAP_AUX_POWER    BIT(4)   /* Auxilliary power support */
+#define PCI_PM_CAP_DSI          BIT(5)   /* Device specific initialization */
+#define PCI_PM_CAP_D1           BIT(9)   /* D1 power state support */
+#define PCI_PM_CAP_D2           BIT(10)  /* D2 power state support */
+#define PCI_PM_CAP_PME          BIT(11)  /* PME pin supported */
 #define PCI_PM_CTRL 4					   /* PM control and status register */
 #define PCI_PM_CTRL_STATE_MASK 0x0003	   /* Current power state (D0 to D3) */
-#define PCI_PM_CTRL_PME_ENABLE 0x0100	   /* PME pin enable */
+#define PCI_PM_CTRL_PME_ENABLE  BIT(8)   /* PME pin enable */
 #define PCI_PM_CTRL_DATA_SEL_MASK 0x1e00   /* Data select (??) */
 #define PCI_PM_CTRL_DATA_SCALE_MASK 0x6000 /* Data scale (??) */
-#define PCI_PM_CTRL_PME_STATUS 0x8000	   /* PME pin status */
+#define PCI_PM_CTRL_PME_STATUS  BIT(15)  /* PME pin status */
 #define PCI_PM_PPB_EXTENSIONS 6			   /* PPB support extensions (??) */
-#define PCI_PM_PPB_B2_B3 0x40			   /* Stop clock when in D3hot (??) */
-#define PCI_PM_BPCC_ENABLE 0x80			   /* Bus power/clock control enable (??) */
+#define PCI_PM_PPB_B2_B3        BIT(6)   /* Stop clock when in D3hot (??) */
+#define PCI_PM_BPCC_ENABLE      BIT(7)   /* Bus power/clock control enable (??) */
 #define PCI_PM_DATA_REGISTER 7			   /* (??) */
 #define PCI_PM_SIZEOF 8
 
@@ -257,27 +257,27 @@
 #define PCI_AGP_RFU 3					   /* Rest of capability flags */
 #define PCI_AGP_STATUS 4				   /* Status register */
 #define PCI_AGP_STATUS_RQ_MASK 0xff000000  /* Maximum number of requests - 1 */
-#define PCI_AGP_STATUS_SBA 0x0200		   /* Sideband addressing supported */
-#define PCI_AGP_STATUS_64BIT 0x0020		   /* 64-bit addressing supported */
-#define PCI_AGP_STATUS_FW 0x0010		   /* FW transfers supported */
-#define PCI_AGP_STATUS_RATE4 0x0004		   /* 4x transfer rate supported */
-#define PCI_AGP_STATUS_RATE2 0x0002		   /* 2x transfer rate supported */
-#define PCI_AGP_STATUS_RATE1 0x0001		   /* 1x transfer rate supported */
+#define PCI_AGP_STATUS_SBA      BIT(9)  /* Sideband addressing supported */
+#define PCI_AGP_STATUS_64BIT    BIT(5)  /* 64-bit addressing supported */
+#define PCI_AGP_STATUS_FW       BIT(4)  /* FW transfers supported */
+#define PCI_AGP_STATUS_RATE4    BIT(2)  /* 4x transfer rate supported */
+#define PCI_AGP_STATUS_RATE2    BIT(1)  /* 2x transfer rate supported */
+#define PCI_AGP_STATUS_RATE1    BIT(0)  /* 1x transfer rate supported */
 #define PCI_AGP_COMMAND 8				   /* Control register */
 #define PCI_AGP_COMMAND_RQ_MASK 0xff000000 /* Master: Maximum number of requests */
-#define PCI_AGP_COMMAND_SBA 0x0200		   /* Sideband addressing enabled */
-#define PCI_AGP_COMMAND_AGP 0x0100		   /* Allow processing of AGP transactions */
-#define PCI_AGP_COMMAND_64BIT 0x0020	   /* Allow processing of 64-bit addresses */
-#define PCI_AGP_COMMAND_FW 0x0010		   /* Force FW transfers */
-#define PCI_AGP_COMMAND_RATE4 0x0004	   /* Use 4x rate */
-#define PCI_AGP_COMMAND_RATE2 0x0002	   /* Use 4x rate */
-#define PCI_AGP_COMMAND_RATE1 0x0001	   /* Use 4x rate */
+#define PCI_AGP_COMMAND_SBA     BIT(9)  /* Sideband addressing enabled */
+#define PCI_AGP_COMMAND_AGP     BIT(8)  /* Allow processing of AGP transactions */
+#define PCI_AGP_COMMAND_64BIT   BIT(5)  /* Allow processing of 64-bit addresses */
+#define PCI_AGP_COMMAND_FW      BIT(4)  /* Force FW transfers */
+#define PCI_AGP_COMMAND_RATE4   BIT(2)  /* Use 4x rate */
+#define PCI_AGP_COMMAND_RATE2   BIT(1)   /* Use 2x rate */
+#define PCI_AGP_COMMAND_RATE1   BIT(0)   /* Use 1x rate */
 #define PCI_AGP_SIZEOF 12
 
 /* PCI-X registers */
 
-#define PCI_X_CMD_DPERR_E 0x0001			   /* Data Parity Error Recovery Enable */
-#define PCI_X_CMD_ERO 0x0002				   /* Enable Relaxed Ordering */
+#define PCI_X_CMD_DPERR_E       BIT(0)   /* Data Parity Error Recovery Enable */
+#define PCI_X_CMD_ERO           BIT(1)   /* Enable Relaxed Ordering */
 #define PCI_X_CMD_MAX_READ 0x0000			   /* Max Memory Read Byte Count */
 #define PCI_X_CMD_MAX_SPLIT 0x0030			   /* Max Outstanding Split Transactions */
 #define PCI_X_CMD_VERSION(x) (((x) >> 12) & 3) /* Version */
@@ -286,17 +286,17 @@
 
 #define PCI_SID_ESR 2			/* Expansion Slot Register */
 #define PCI_SID_ESR_NSLOTS 0x1f /* Number of expansion slots available */
-#define PCI_SID_ESR_FIC 0x20	/* First In Chassis Flag */
+#define PCI_SID_ESR_FIC BIT(5)  /* First In Chassis Flag */
 #define PCI_SID_CHASSIS_NR 3	/* Chassis Number */
 
 /* Message Signalled Interrupts registers */
 
 #define PCI_MSI_FLAGS		0x02	/* Message Control */
-#define  PCI_MSI_FLAGS_ENABLE	0x0001	/* MSI feature enabled */
+#define  PCI_MSI_FLAGS_ENABLE  BIT(0)  /* MSI feature enabled */
 #define  PCI_MSI_FLAGS_QMASK	0x000e	/* Maximum queue size available */
 #define  PCI_MSI_FLAGS_QSIZE	0x0070	/* Message queue size configured */
-#define  PCI_MSI_FLAGS_64BIT	0x0080	/* 64-bit addresses allowed */
-#define  PCI_MSI_FLAGS_MASKBIT	0x0100	/* Per-vector masking capable */
+#define  PCI_MSI_FLAGS_64BIT   BIT(7)  /* 64-bit addresses allowed */
+#define  PCI_MSI_FLAGS_MASKBIT BIT(8)  /* Per-vector masking capable */
 #define PCI_MSI_RFU		3	/* Rest of capability flags */
 #define PCI_MSI_ADDRESS_LO	0x04	/* Lower 32 bits */
 #define PCI_MSI_ADDRESS_HI	0x08	/* Upper 32 bits (if PCI_MSI_FLAGS_64BIT set) */
@@ -374,11 +374,11 @@
 
 #define PCI_EA_PP 0x0000ff00		 /* Primary Properties */
 #define PCI_EA_SP 0x00ff0000		 /* Secondary Properties */
-#define PCI_EA_WRITABLE 0x40000000	 /* Writable flag */
-#define PCI_EA_ENABLE 0x80000000	 /* Enable flag */
+#define PCI_EA_WRITABLE BIT(30) /* Writable flag */
+#define PCI_EA_ENABLE   BIT(31) /* Enable flag */
 /* Base, MaxOffset registers */
 /* bit 0 is reserved */
-#define PCI_EA_IS_64 0x00000002		 /* 64-bit field flag */
+#define PCI_EA_IS_64    BIT(1)  /* 64-bit field flag */
 #define PCI_EA_FIELD_MASK 0xfffffffc /* For Base & Max Offset */
 
 #define PCI_EA_P_MEM 0x00
@@ -401,7 +401,7 @@
 #define PCI_EXP_TYPE_DOWNSTREAM 0x6			/* Downstream Port */
 #define PCI_EXP_TYPE_PCIE_BRIDGE 0x8		/* PCI/PCI-X to PCIe Bridge */
 #define PCI_EXP_DEVCAP 4					/* Device capabilities */
-#define PCI_EXP_DEVCAP_FLR 0x10000000		/* Function Level Reset */
+#define PCI_EXP_DEVCAP_FLR      BIT(28) /* Function Level Reset */
 #define PCI_EXP_DEVCAP_PAYLOAD 0x0007		/* Max payload size supported */
 #define PCI_EXP_DEVCAP_PAYLOAD_128B 0x0000	/* 128 Bytes */
 #define PCI_EXP_DEVCAP_PAYLOAD_256B 0x0001	/* 256 Bytes */
@@ -417,8 +417,8 @@
 #define PCI_EXP_DEVCTL_PAYLOAD_1024B 0x0060 /* 1024 Bytes */
 #define PCI_EXP_DEVCTL_PAYLOAD_2048B 0x0080 /* 2048 Bytes */
 #define PCI_EXP_DEVCTL_PAYLOAD_4096B 0x00a0 /* 4096 Bytes */
-#define PCI_EXP_DEVCTL_RELAX_EN 0x0010		/* Enable relaxed ordering */
-#define PCI_EXP_DEVCTL_NOSNOOP_EN 0x0800	/* Enable No Snoop */
+#define PCI_EXP_DEVCTL_RELAX_EN   BIT(4)  /* Enable relaxed ordering */
+#define PCI_EXP_DEVCTL_NOSNOOP_EN BIT(11) /* Enable No Snoop */
 #define PCI_EXP_DEVCTL_READRQ 0x7000		/* Max_Read_Request_Size */
 #define PCI_EXP_DEVCTL_READRQ_128B 0x0000	/* 128 Bytes */
 #define PCI_EXP_DEVCTL_READRQ_256B 0x1000	/* 256 Bytes */
@@ -426,7 +426,7 @@
 #define PCI_EXP_DEVCTL_READRQ_1024B 0x3000	/* 1024 Bytes */
 #define PCI_EXP_DEVCTL_READRQ_2048B 0x4000	/* 2048 Bytes */
 #define PCI_EXP_DEVCTL_READRQ_4096B 0x5000	/* 4096 Bytes */
-#define PCI_EXP_DEVCTL_BCR_FLR 0x8000		/* Bridge Configuration Retry / FLR */
+#define PCI_EXP_DEVCTL_BCR_FLR    BIT(15) /* Bridge Configuration Retry / FLR */
 #define PCI_EXP_LNKCAP 12					/* Link Capabilities */
 #define PCI_EXP_LNKCAP_SLS 0x0000000f		/* Supported Link Speeds */
 #define PCI_EXP_LNKCAP_SLS_2_5GB 0x00000001 /* LNKCAP2 SLS Vector bit 0 */
@@ -434,11 +434,11 @@
 #define PCI_EXP_LNKCAP_SLS_8_0GB 0x00000003 /* LNKCAP2 SLS Vector bit 2 */
 #define PCI_EXP_LNKCAP_MLW 0x000003f0		/* Maximum Link Width */
 #define PCI_EXP_LNKCAP_ASPMS 0x00000c00		/* ASPM Support */
-#define PCI_EXP_LNKCAP_ASPM_L0S 0x00000400	/* ASPM L0s Support */
-#define PCI_EXP_LNKCAP_ASPM_L1 0x00000800	/* ASPM L1 Support */
-#define PCI_EXP_LNKCAP_DLLLARC 0x00100000	/* Data Link Layer Link Active Reporting Capable */
+#define PCI_EXP_LNKCAP_ASPM_L0S  BIT(10) /* ASPM L0s Support */
+#define PCI_EXP_LNKCAP_ASPM_L1   BIT(11) /* ASPM L1 Support */
+#define PCI_EXP_LNKCAP_DLLLARC   BIT(20) /* Data Link Layer Link Active Reporting Capable */
 #define PCI_EXP_LNKCTL 16					/* Link Control */
-#define PCI_EXP_LNKCTL_RL 0x0020			/* Retrain Link */
+#define PCI_EXP_LNKCTL_RL    BIT(5)  /* Retrain Link */
 #define PCI_EXP_LNKSTA 18					/* Link Status */
 #define PCI_EXP_LNKSTA_CLS 0x000f			/* Current Link Speed */
 #define PCI_EXP_LNKSTA_CLS_2_5GB 0x0001		/* Current Link Speed 2.5GT/s */
@@ -446,20 +446,20 @@
 #define PCI_EXP_LNKSTA_CLS_8_0GB 0x0003		/* Current Link Speed 8.0GT/s */
 #define PCI_EXP_LNKSTA_NLW 0x03f0			/* Negotiated Link Width */
 #define PCI_EXP_LNKSTA_NLW_SHIFT 4			/* start of NLW mask in link status */
-#define PCI_EXP_LNKSTA_LT 0x0800			/* Link Training */
-#define PCI_EXP_LNKSTA_DLLLA 0x2000			/* Data Link Layer Link Active */
-#define PCI_EXP_LNKSTA_LBMS 0x4000			/* Link Bandwidth Management Status */
+#define PCI_EXP_LNKSTA_LT   BIT(11) /* Link Training */
+#define PCI_EXP_LNKSTA_DLLLA BIT(13) /* Data Link Layer Link Active */
+#define PCI_EXP_LNKSTA_LBMS  BIT(14) /* Link Bandwidth Management Status */
 #define PCI_EXP_SLTCAP 20					/* Slot Capabilities */
-#define PCI_EXP_SLTCAP_HPC 0x00000040		/* Hot-Plug Capable */
+#define PCI_EXP_SLTCAP_HPC   BIT(6)  /* Hot-Plug Capable */
 #define PCI_EXP_SLTCAP_PSN 0xfff80000		/* Physical Slot Number */
 #define PCI_EXP_RTCTL 28					/* Root Control */
-#define PCI_EXP_RTCTL_CRSSVE 0x0010			/* CRS Software Visibility Enable */
+#define PCI_EXP_RTCTL_CRSSVE BIT(4)  /* CRS Software Visibility Enable */
 #define PCI_EXP_RTCAP 30					/* Root Capabilities */
-#define PCI_EXP_RTCAP_CRSVIS 0x0001			/* CRS Software Visibility capability */
+#define PCI_EXP_RTCAP_CRSVIS BIT(0)  /* CRS Software Visibility capability */
 #define PCI_EXP_DEVCAP2 36					/* Device Capabilities 2 */
-#define PCI_EXP_DEVCAP2_ARI 0x00000020		/* ARI Forwarding Supported */
+#define PCI_EXP_DEVCAP2_ARI  BIT(5)  /* ARI Forwarding Supported */
 #define PCI_EXP_DEVCTL2 40					/* Device Control 2 */
-#define PCI_EXP_DEVCTL2_ARI 0x0020			/* Alternative Routing-ID */
+#define PCI_EXP_DEVCTL2_ARI  BIT(5)  /* Alternative Routing-ID */
 #define PCI_EXP_LNKCAP2 44					/* Link Capability 2 */
 #define PCI_EXP_LNKCAP2_SLS 0x000000fe		/* Supported Link Speeds Vector */
 #define PCI_EXP_LNKCTL2 48					/* Link Control 2 */
@@ -471,17 +471,17 @@
 /* Advanced Error Reporting */
 #define PCI_ERR_CAP 24					 /* Advanced Error Capabilities */
 #define PCI_ERR_CAP_FEP(x) ((x) & 31)	 /* First Error Pointer */
-#define PCI_ERR_CAP_ECRC_GENC 0x00000020 /* ECRC Generation Capable */
-#define PCI_ERR_CAP_ECRC_GENE 0x00000040 /* ECRC Generation Enable */
-#define PCI_ERR_CAP_ECRC_CHKC 0x00000080 /* ECRC Check Capable */
-#define PCI_ERR_CAP_ECRC_CHKE 0x00000100 /* ECRC Check Enable */
+#define PCI_ERR_CAP_ECRC_GENC BIT(5)  /* ECRC Generation Capable */
+#define PCI_ERR_CAP_ECRC_GENE BIT(6)  /* ECRC Generation Enable */
+#define PCI_ERR_CAP_ECRC_CHKC BIT(7)  /* ECRC Check Capable */
+#define PCI_ERR_CAP_ECRC_CHKE BIT(8)  /* ECRC Check Enable */
 
 /* Single Root I/O Virtualization Registers */
 #define PCI_SRIOV_CAP 0x04		  /* SR-IOV Capabilities */
 #define PCI_SRIOV_CTRL 0x08		  /* SR-IOV Control */
-#define PCI_SRIOV_CTRL_VFE 0x01	  /* VF Enable */
-#define PCI_SRIOV_CTRL_MSE 0x08	  /* VF Memory Space Enable */
-#define PCI_SRIOV_CTRL_ARI 0x10	  /* ARI Capable Hierarchy */
+#define PCI_SRIOV_CTRL_VFE BIT(0) /* VF Enable */
+#define PCI_SRIOV_CTRL_MSE BIT(3) /* VF Memory Space Enable */
+#define PCI_SRIOV_CTRL_ARI BIT(4) /* ARI Capable Hierarchy */
 #define PCI_SRIOV_INITIAL_VF 0x0c /* Initial VFs */
 #define PCI_SRIOV_TOTAL_VF 0x0e	  /* Total VFs */
 #define PCI_SRIOV_NUM_VF 0x10	  /* Number of VFs */
@@ -565,18 +565,18 @@
 	 PCIE_ECAM_REG(where))
 
 #define PCI_REGION_MEM 0x00000000 /* PCI memory space */
-#define PCI_REGION_IO 0x00000001  /* PCI IO space */
+#define PCI_REGION_IO         BIT(0)  /* PCI IO space */
 #define PCI_REGION_TYPE 0x00000001
-#define PCI_REGION_PREFETCH 0x00000008 /* prefetchable PCI memory */
+#define PCI_REGION_PREFETCH    BIT(3)  /* prefetchable PCI memory */
 
-#define PCI_REGION_SYS_MEMORY 0x00000100 /* System memory */
-#define PCI_REGION_RO 0x00000200		 /* Read-only memory */
+#define PCI_REGION_SYS_MEMORY  BIT(8)  /* System memory */
+#define PCI_REGION_RO          BIT(9)  /* Read-only memory */
 
 static inline void pci_set_region(struct pci_region *reg,
 								  pci_addr_t bus_start,
 								  phys_addr_t phys_start,
 								  pci_size_t size,
-								  ULONG flags)
+								  u32 flags)
 {
 	reg->bus_start = bus_start;
 	reg->phys_start = phys_start;
@@ -584,7 +584,7 @@ static inline void pci_set_region(struct pci_region *reg,
 	reg->flags = flags;
 }
 
-#define PCI_BUS(d) (((d) >> 16) & 0xff)
+#define PCI_BUS(d) ((UBYTE)((d) >> 16))
 
 /*
  * Please note the difference in DEVFN usage in U-Boot vs Linux. U-Boot
@@ -609,15 +609,15 @@ static inline void pci_set_region(struct pci_region *reg,
 
 #define INDIRECT_TYPE_NO_PCIE_LINK 1
 
-int pci_skip_dev(struct pci_controller *hose, pci_dev_t dev);
+s32 pci_skip_dev(struct pci_controller *hose, pci_dev_t dev);
 
 /**
- * dm_pci_get_bdf() - Get the BDF value for a device
+ * pci_get_bdf() - Get the BDF value for a device
  *
  * @dev:	Device to check
  * Return: bus/device/function value (see PCI_BDF())
  */
-pci_dev_t dm_pci_get_bdf(const struct pci_device *dev);
+pci_dev_t pci_get_bdf(const struct pci_device *dev);
 
 /**
  * pci_bind_bus_devices() - scan a PCI bus and bind devices
@@ -634,7 +634,7 @@ pci_dev_t dm_pci_get_bdf(const struct pci_device *dev);
  * @bus:	Bus containing devices to bind
  * Return: 0 if OK, -ve on error
  */
-int pci_bind_bus_devices(struct pci_bus *bus);
+s32 pci_bind_bus_devices(struct pci_bus *bus);
 
 /**
  * pci_auto_config_devices() - configure bus devices ready for use
@@ -649,16 +649,16 @@ int pci_bind_bus_devices(struct pci_bus *bus);
  * @bus:	Bus containing devices to bind
  * Return: 0 if OK, -ve on error
  */
-int pci_auto_config_devices(struct pci_bus *bus);
+s32 pci_auto_config_devices(struct pci_bus *bus);
 
 /**
- * dm_pci_bus_find_bdf() - Find a device given its PCI bus address
+ * pci_bus_find_bdf() - Find a device given its PCI bus address
  *
  * @bdf:	PCI device address: bus, device and function -see PCI_BDF()
  * @devp:	Returns the device for this address, if found
  * Return: 0 if OK, -ENODEV if not found
  */
-int dm_pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct pci_device **devp);
+s32 pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct pci_device **devp);
 
 /**
  * pci_bus_find_devfn() - Find a device on a bus
@@ -667,7 +667,7 @@ int dm_pci_bus_find_bdf(struct pci_controller *controller, pci_dev_t bdf, struct
  * @devp:	Returns the device for this address, if found
  * Return: 0 if OK, -ENODEV if not found
  */
-int pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn,
+s32 pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn,
 					   struct pci_device **devp);
 
 /**
@@ -681,7 +681,7 @@ int pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn,
  *		or we got an error
  * Return: 0 if all is OK, -ve on error (e.g. a bus/bridge failed to probe)
  */
-int pci_find_first_device(struct pci_controller *controller, struct pci_device **devp);
+s32 pci_find_first_device(struct pci_controller *controller, struct pci_device **devp);
 
 /**
  * pci_find_next_device() - return the next available PCI device
@@ -693,7 +693,7 @@ int pci_find_first_device(struct pci_controller *controller, struct pci_device *
  *		device, or NULL if no more are left or we got an error
  * Return: 0 if all is OK, -ve on error (e.g. a bus/bridge failed to probe)
  */
-int pci_find_next_device(struct pci_device **devp);
+s32 pci_find_next_device(struct pci_device **devp);
 
 /**
  * pci_get_ff() - Returns a mask for the given access size
@@ -702,7 +702,7 @@ int pci_find_next_device(struct pci_device **devp);
  * Return: 0xff for PCI_SIZE_8, 0xffff for PCI_SIZE_16, 0xffffffff for
  * PCI_SIZE_32
  */
-int pci_get_ff(enum pci_size_t size);
+u32 pci_get_ff(enum pci_size_t size);
 
 /**
  * pci_bus_find_devices () - Find devices on a bus
@@ -716,7 +716,7 @@ int pci_get_ff(enum pci_size_t size);
  * @devp:	Returns matching device if found
  * Return: 0 if found, -ENODEV if not
  */
-int pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids,
+s32 pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids,
 						 int *indexp, struct pci_device **devp);
 
 /**
@@ -728,11 +728,11 @@ int pci_bus_find_devices(struct pci_bus *bus, const struct pci_device_id *ids,
  * @devp:	Returns matching device if found
  * Return: 0 if found, -ENODEV if not
  */
-int pci_find_device_id(struct pci_controller *controller, const struct pci_device_id *ids, int index,
+s32 pci_find_device_id(struct pci_controller *controller, const struct pci_device_id *ids, int index,
 					   struct pci_device **devp);
 
 /**
- * dm_pci_hose_probe_bus() - probe a subordinate bus, scanning it for devices
+ * pci_hose_probe_bus() - probe a subordinate bus, scanning it for devices
  *
  * This probes the given bus which causes it to be scanned for devices. The
  * devices will be bound but not probed.
@@ -745,7 +745,7 @@ int pci_find_device_id(struct pci_controller *controller, const struct pci_devic
  * @bdf:	PCI bus address to scan (PCI_BUS(bdf) is the bus number)
  * Return: 0 if OK, -ve on error
  */
-int dm_pci_hose_probe_bus(struct pci_bus *bus);
+s32 pci_hose_probe_bus(struct pci_bus *bus, u32 *last_bus_out);
 
 /**
  * pci_bus_clrset_config32() - Update a configuration value for a device
@@ -759,34 +759,34 @@ int dm_pci_hose_probe_bus(struct pci_bus *bus);
  * @set:	Bits to set
  * Return: 0 if OK, -ve on error
  */
-int pci_bus_clrset_config32(struct pci_bus *bus, pci_dev_t bdf, int offset,
-							ULONG clr, ULONG set);
+s32 pci_bus_clrset_config32(struct pci_bus *bus, pci_dev_t bdf, u32 offset,
+							u32 clr, u32 set);
 
 /**
  * Driver model PCI config access functions. Use these in preference to others
  * when you have a valid device
  */
-int dm_pci_read_config(const struct pci_device *dev, int offset,
-					   ULONG *valuep, enum pci_size_t size);
+s32 pci_read_config(const struct pci_device *dev, u32 offset,
+					   u32 *valuep, enum pci_size_t size);
 
-int dm_pci_read_config8(const struct pci_device *dev, int offset, UBYTE *valuep);
-int dm_pci_read_config16(const struct pci_device *dev, int offset, UWORD *valuep);
-int dm_pci_read_config32(const struct pci_device *dev, int offset, ULONG *valuep);
+s32 pci_read_config8(const struct pci_device *dev, u32 offset, u8 *valuep);
+s32 pci_read_config16(const struct pci_device *dev, u32 offset, u16 *valuep);
+s32 pci_read_config32(const struct pci_device *dev, u32 offset, u32 *valuep);
 
-int dm_pci_write_config(struct pci_device *dev, int offset, ULONG value,
+s32 pci_write_config(struct pci_device *dev, u32 offset, u32 value,
 						enum pci_size_t size);
 
-int dm_pci_write_config8(struct pci_device *dev, int offset, UBYTE value);
-int dm_pci_write_config16(struct pci_device *dev, int offset, UWORD value);
-int dm_pci_write_config32(struct pci_device *dev, int offset, ULONG value);
+s32 pci_write_config8(struct pci_device *dev, u32 offset, u32 value);
+s32 pci_write_config16(struct pci_device *dev, u32 offset, u32 value);
+s32 pci_write_config32(struct pci_device *dev, u32 offset, u32 value);
 
 /**
  * These permit convenient read/modify/write on PCI configuration. The
  * register is updated to (oldvalue & ~clr) | set.
  */
-int dm_pci_clrset_config8(struct pci_device *dev, int offset, ULONG clr, ULONG set);
-int dm_pci_clrset_config16(struct pci_device *dev, int offset, ULONG clr, ULONG set);
-int dm_pci_clrset_config32(struct pci_device *dev, int offset, ULONG clr, ULONG set);
+s32 pci_clrset_config8(struct pci_device *dev, u32 offset, u32 clr, u32 set);
+s32 pci_clrset_config16(struct pci_device *dev, u32 offset, u32 clr, u32 set);
+s32 pci_clrset_config32(struct pci_device *dev, u32 offset, u32 clr, u32 set);
 
 /**
  * pci_conv_32_to_size() - convert a 32-bit read value to the given size
@@ -801,7 +801,7 @@ int dm_pci_clrset_config32(struct pci_device *dev, int offset, ULONG clr, ULONG 
  * Return: the value that would have been obtained if the read had been
  * performed at the given offset with the correct size
  */
-ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size);
+u32 pci_conv_32_to_size(u32 value, u32 offset, enum pci_size_t size);
 
 /**
  * pci_conv_size_to_32() - update a 32-bit value to prepare for a write
@@ -816,7 +816,7 @@ ULONG pci_conv_32_to_size(ULONG value, UWORD offset, enum pci_size_t size);
  * @size:	Required size of the write
  * Return: the value that should be written as a 32-bit access to @offset & ~3.
  */
-ULONG pci_conv_size_to_32(ULONG old, ULONG value, UWORD offset,
+u32 pci_conv_size_to_32(u32 old, u32 value, u32 offset,
 						  enum pci_size_t size);
 
 /**
@@ -836,11 +836,11 @@ struct pci_controller *pci_get_controller(const struct pci_bus *bus);
  * @prefp:	Returns a pointer to the pre-fetch region, or NULL if none
  * Return: the number of non-NULL regions returned, normally 3
  */
-int pci_get_regions(struct pci_device *dev, struct pci_region **iop,
+u32 pci_get_regions(struct pci_device *dev, struct pci_region **iop,
 					struct pci_region **memp, struct pci_region **prefp);
 
 					/**
- * dm_pci_write_bar32() - Write the address of a BAR
+ * pci_write_bar32() - Write the address of a BAR
  *
  * This writes a raw address to a bar
  *
@@ -848,19 +848,19 @@ int pci_get_regions(struct pci_device *dev, struct pci_region **iop,
  * @barnum:	BAR number (0-5)
  * @addr:	BAR address
  */
-void dm_pci_write_bar32(struct pci_device *dev, int barnum, ULONG addr);
+void pci_write_bar32(struct pci_device *dev, u32 barnum, u32 addr);
 
 /**
- * dm_pci_read_bar32() - read a base address register from a device
+ * pci_read_bar32() - read a base address register from a device
  *
  * @dev:	Device to check
  * @barnum:	Bar number to read (numbered from 0)
  * @return: value of BAR
  */
-ULONG dm_pci_read_bar32(const struct pci_device *dev, int barnum);
+u32 pci_read_bar32(const struct pci_device *dev, u32 barnum);
 
 /**
- * dm_pci_bus_to_phys() - convert a PCI bus address range to a physical address
+ * pci_bus_to_phys() - convert a PCI bus address range to a physical address
  *
  * @dev:	Device containing the PCI address
  * @addr:	PCI address to convert
@@ -869,11 +869,11 @@ ULONG dm_pci_read_bar32(const struct pci_device *dev, int barnum);
  * @flags:	Flags for the region type (PCI_REGION_...)
  * Return: physical address corresponding to that PCI bus address
  */
-phys_addr_t dm_pci_bus_to_phys(struct pci_device *dev, pci_addr_t addr, size_t len,
-							   ULONG mask, ULONG flags);
+phys_addr_t pci_bus_to_phys(struct pci_device *dev, pci_addr_t addr, size_t len,
+							   u32 mask, u32 flags);
 
 /**
- * dm_pci_phys_to_bus() - convert a physical address to a PCI bus address
+ * pci_phys_to_bus() - convert a physical address to a PCI bus address
  *
  * @dev:	Device containing the bus address
  * @addr:	Physical address to convert
@@ -882,11 +882,15 @@ phys_addr_t dm_pci_bus_to_phys(struct pci_device *dev, pci_addr_t addr, size_t l
  * @flags:	Flags for the region type (PCI_REGION_...)
  * Return: PCI bus address corresponding to that physical address
  */
-pci_addr_t dm_pci_phys_to_bus(struct pci_device *dev, phys_addr_t addr, size_t len,
-							  ULONG mask, ULONG flags);
+pci_addr_t pci_phys_to_bus(struct pci_device *dev, phys_addr_t addr, size_t len,
+							  u32 mask, u32 flags);
 
+void *pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr, size_t len,
+								 u32 mask, u32 flags);
+pci_addr_t pci_virt_to_bus(struct pci_device *dev, void *virt_addr, size_t len,
+								   u32 mask, u32 flags);
 /**
- * dm_pci_map_bar() - get a virtual address associated with a BAR region
+ * pci_map_bar() - get a virtual address associated with a BAR region
  *
  * Looks up a base address register and finds the physical memory address
  * that corresponds to it.
@@ -904,11 +908,11 @@ pci_addr_t dm_pci_phys_to_bus(struct pci_device *dev, phys_addr_t addr, size_t l
  * @flags:	Flags for the region type (PCI_REGION_...)
  * @return: pointer to the virtual address to use or 0 on error
  */
-void *dm_pci_map_bar(struct pci_device *dev, int bar, size_t offset, size_t len,
-					 ULONG mask, ULONG flags);
+void *pci_map_bar(struct pci_device *dev, u32 bar, pci_addr_t offset, size_t len,
+					 u32 mask, u32 flags);
 
 /**
- * dm_pci_find_next_capability() - find a capability starting from an offset
+ * pci_find_next_capability() - find a capability starting from an offset
  *
  * Tell if a device supports a given PCI capability. Returns the
  * address of the requested capability structure within the device's
@@ -928,10 +932,10 @@ void *dm_pci_map_bar(struct pci_device *dev, int bar, size_t offset, size_t len,
  * @cap:	capability code
  * @return:	capability address or 0 if not supported
  */
-int dm_pci_find_next_capability(struct pci_device *dev, UBYTE start, int cap);
+u32 pci_find_next_capability(struct pci_device *dev, u8 start, u8 cap);
 
 /**
- * dm_pci_find_capability() - find a capability
+ * pci_find_capability() - find a capability
  *
  * Tell if a device supports a given PCI capability. Returns the
  * address of the requested capability structure within the device's
@@ -950,10 +954,10 @@ int dm_pci_find_next_capability(struct pci_device *dev, UBYTE start, int cap);
  * @cap:	capability code
  * @return:	capability address or 0 if not supported
  */
-int dm_pci_find_capability(struct pci_device *dev, int cap);
+u32 pci_find_capability(struct pci_device *dev, u8 cap);
 
 /**
- * dm_pci_find_next_ext_capability() - find an extended capability
+ * pci_find_next_ext_capability() - find an extended capability
  *				       starting from an offset
  *
  * Tell if a device supports a given PCI express extended capability.
@@ -975,10 +979,10 @@ int dm_pci_find_capability(struct pci_device *dev, int cap);
  * @cap:	extended capability code
  * @return:	extended capability address or 0 if not supported
  */
-int dm_pci_find_next_ext_capability(struct pci_device *dev, int start, int cap);
+u32 pci_find_next_ext_capability(struct pci_device *dev, u32 start, u16 cap);
 
 /**
- * dm_pci_find_ext_capability() - find an extended capability
+ * pci_find_ext_capability() - find an extended capability
  *
  * Tell if a device supports a given PCI express extended capability.
  * Returns the address of the requested extended capability structure
@@ -998,38 +1002,38 @@ int dm_pci_find_next_ext_capability(struct pci_device *dev, int start, int cap);
  * @cap:	extended capability code
  * @return:	extended capability address or 0 if not supported
  */
-int dm_pci_find_ext_capability(struct pci_device *dev, int cap);
+u32 pci_find_ext_capability(struct pci_device *dev, u16 cap);
 
 /**
- * dm_pci_flr() - Perform FLR if the device suppoorts it
+ * pci_flr() - Perform FLR if the device suppoorts it
  *
  * @dev:	PCI device to reset
  * @return:	0 if OK, -ENOENT if FLR is not supported by dev
  */
-int dm_pci_flr(struct pci_device *dev);
+s32 pci_flr(struct pci_device *dev);
 
-#define dm_pci_phys_to_mem(dev, addr) \
-	dm_pci_phys_to_bus((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_MEM)
-#define dm_pci_mem_to_phys(dev, addr) \
-	dm_pci_bus_to_phys((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_MEM)
-#define dm_pci_phys_to_io(dev, addr) \
-	dm_pci_phys_to_bus((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_IO)
-#define dm_pci_io_to_phys(dev, addr) \
-	dm_pci_bus_to_phys((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_IO)
+#define pci_phys_to_mem(dev, addr) \
+	pci_phys_to_bus((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_MEM)
+#define pci_mem_to_phys(dev, addr) \
+	pci_bus_to_phys((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_MEM)
+#define pci_phys_to_io(dev, addr) \
+	pci_phys_to_bus((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_IO)
+#define pci_io_to_phys(dev, addr) \
+	pci_bus_to_phys((dev), (addr), 0, PCI_REGION_TYPE, PCI_REGION_IO)
 
-#define dm_pci_virt_to_mem(dev, addr) \
-	dm_pci_virt_to_bus((dev), (addr), PCI_REGION_MEM)
-#define dm_pci_mem_to_virt(dev, addr, len, map_flags)         \
-	dm_pci_bus_to_virt((dev), (addr), (len), PCI_REGION_TYPE, \
+#define pci_virt_to_mem(dev, addr) \
+	pci_virt_to_bus((dev), (addr), PCI_REGION_MEM)
+#define pci_mem_to_virt(dev, addr, len, map_flags)         \
+	pci_bus_to_virt((dev), (addr), (len), PCI_REGION_TYPE, \
 					   PCI_REGION_MEM, (map_flags))
-#define dm_pci_virt_to_io(dev, addr) \
-	dm_pci_virt_to_bus((dev), (addr), PCI_REGION_IO)
-#define dm_pci_io_to_virt(dev, addr, len, map_flags)          \
-	dm_pci_bus_to_virt((dev), (addr), (len), PCI_REGION_TYPE, \
+#define pci_virt_to_io(dev, addr) \
+	pci_virt_to_bus((dev), (addr), PCI_REGION_IO)
+#define pci_io_to_virt(dev, addr, len, map_flags)          \
+	pci_bus_to_virt((dev), (addr), (len), PCI_REGION_TYPE, \
 					   PCI_REGION_IO, (map_flags))
 
 /**
- * dm_pci_find_device() - find a device by vendor/device ID
+ * pci_find_device() - find a device by vendor/device ID
  *
  * @vendor:	Vendor ID
  * @device:	Device ID
@@ -1037,17 +1041,17 @@ int dm_pci_flr(struct pci_device *dev);
  * @devp:	Returns pointer to the device, if found
  * Return: 0 if found, -ve on error
  */
-int dm_pci_find_device(struct pci_controller *controller, unsigned int vendor, unsigned int device, int index, struct pci_device **devp);
+s32 pci_find_device(struct pci_controller *controller, u16 vendor, u16 device, int index, struct pci_device **devp);
 
 /**
- * dm_pci_find_class() - find a device by class
+ * pci_find_class() - find a device by class
  *
  * @find_class: 3-byte (24-bit) class value to find
  * @index:	0 to find the first match, 1 for second, etc.
  * @devp:	Returns pointer to the device, if found
  * Return: 0 if found, -ve on error
  */
-int dm_pci_find_class(struct pci_controller *controller, ULONG find_class, int index, struct pci_device **devp);
+s32 pci_find_class(struct pci_controller *controller, u32 find_class, int index, struct pci_device **devp);
 
 /**
  * PCI_DEVICE - macro used to describe a specific pci device
@@ -1105,11 +1109,11 @@ int dm_pci_find_class(struct pci_controller *controller, ULONG find_class, int i
 	.vendor = PCI_VENDOR_ID_##vend, .device = (dev), \
 	.subvendor = PCI_ANY_ID, .subdevice = PCI_ANY_ID, 0, 0
 
-int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr);
-int pci_probe_bus(struct pci_bus *bus);
-int pci_get_bus(struct pci_controller *controller, int busnum, struct pci_bus **busp);
-int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp);
-int pci_get_bus_max(const struct pci_controller *controller);
+s32 pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr);
+s32 pci_probe_bus(struct pci_bus *bus);
+s32 pci_get_bus(struct pci_controller *controller, u32 busnum, struct pci_bus **busp);
+s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device, u32 class, struct pci_device **devp);
+s32 pci_get_bus_max(const struct pci_controller *controller);
 BOOL pci_is_root_bus(const struct pci_bus *bus);
 
 
@@ -1119,15 +1123,15 @@ void pci_assign_irq(struct pci_device *dev); // called it in initialization of d
 BOOL pci_check_and_set_intx_mask(struct pci_device *dev, BOOL mask);
 
 /*MSI interrupt handling */
-int add_int_server(struct pci_device *dev, struct Interrupt *isr);
-int rem_int_server(struct pci_device *dev);
-int pci_msi_vec_count(struct pci_device *dev);
+s32 add_int_server(struct pci_device *dev, struct Interrupt *isr);
+s32 rem_int_server(struct pci_device *dev);
+s32 pci_msi_vec_count(struct pci_device *dev);
 void pci_msi_mask_irq(struct pci_device *dev, int irq);
 void pci_msi_unmask_irq(struct pci_device *dev, int irq);
 
 void pci_write_msg_msi(struct pci_device *dev); // for discovery purpose
 void pci_msi_init(struct pci_device *dev); // for discovery purpose
-int msi_capability_init(struct pci_device *dev, int nvec); // for add_int_server
+s32 msi_capability_init(struct pci_device *dev, u32 nvec); // for add_int_server
 void pci_msi_shutdown(struct pci_device *dev); // for rem_int_server
 
 #endif /* _PCI_H */

@@ -54,9 +54,9 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 	if (!pcie)
 		return 0;
 
-	ULONG status = mmio_read32(pcie->base + PCIE_MSI_INTR2_STATUS);
+	u32 status = mmio_read32(pcie->base + PCIE_MSI_INTR2_STATUS);
 
-	for (ULONG bit = 0; bit < MSI_MAX_VECTORS; bit++)
+	for (u32 bit = 0; bit < MSI_MAX_VECTORS; bit++)
 	{
 		// TODO slow
 		if (!(status & (1UL << bit)))
@@ -65,13 +65,13 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 		if (pcie->msi.msi_vectors[bit] != NULL)
 			call_interrupt(pcie->msi.msi_vectors[bit], bit);
 
-		mmio_write32(1 << bit, pcie->base + PCIE_MSI_INTR2_CLR);
+		mmio_write32(1u << bit, pcie->base + PCIE_MSI_INTR2_CLR);
 	}
 
 	return 1;
 }
 
-static int brcm_pcie_open_gic400(struct pci_controller *pcie)
+static s32 brcm_pcie_open_gic400(struct pci_controller *pcie)
 {
 	if (pcie->gic400Base != NULL)
 		return 0;
@@ -97,14 +97,14 @@ static void brcm_pcie_close_gic400(struct pci_controller *pcie)
 
 // TODO assign multiple MSI vectors per device
 //      see __pci_enable_msi_range()
-int add_int_server(struct pci_device *dev, struct Interrupt *isr)
+s32 add_int_server(struct pci_device *dev, struct Interrupt *isr)
 {
 	Kprintf("[pcie] %s: adding MSI interrupt server for device %04lx:%04lx\n", __func__, dev->vendor, dev->device);
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
 	if (pcie->msi.vectors_used >= MSI_MAX_VECTORS)
 		return -1;
 
-	int vector = 0;
+	s32 vector = 0;
 	while (vector < MSI_MAX_VECTORS && pcie->msi.msi_vectors[vector])
 		vector++;
 
@@ -124,7 +124,7 @@ int add_int_server(struct pci_device *dev, struct Interrupt *isr)
 	return vector;
 }
 
-int rem_int_server(struct pci_device *dev)
+s32 rem_int_server(struct pci_device *dev)
 {
 	Kprintf("[pcie] %s: removing MSI interrupt server for device %04x:%04x\n", __func__, dev->vendor, dev->device);
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
@@ -133,7 +133,7 @@ int rem_int_server(struct pci_device *dev)
 
 	pci_msi_shutdown(dev);
 
-	int vector = dev->msi.irq;
+	s32 vector = dev->msi.irq;
 	if (vector < 0 || vector >= MSI_MAX_VECTORS)
 		return -1;
 
@@ -150,7 +150,7 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 	Kprintf("[pcie] %s: disabling MSI\n", __func__);
 	if (pcie->msi.enabled)
 	{
-		RemIntServerEx(pcie->msi.irq + 32, &pcie->msi.irq_isr);
+		RemIntServerEx((ULONG)(pcie->msi.irq + 32), &pcie->msi.irq_isr);
 		pcie->msi.enabled = FALSE;
 	}
 	brcm_pcie_close_gic400(pcie);
@@ -159,7 +159,7 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 static void brcm_msi_set_regs(struct pci_controller *pcie)
 {
 	Kprintf("[pcie] %s: setting MSI registers\n", __func__);
-	ULONG val = (1ULL << MSI_MAX_VECTORS) - 1ULL;
+	u32 val = (u32)((1ULL << MSI_MAX_VECTORS) - 1ULL);
 
 	mmio_write32(val, pcie->base + PCIE_MSI_INTR2_MASK_CLR);
 	mmio_write32(val, pcie->base + PCIE_MSI_INTR2_CLR);
@@ -177,7 +177,7 @@ static void brcm_msi_set_regs(struct pci_controller *pcie)
 	mmio_write32(val, pcie->base + PCIE_MISC_MSI_DATA_CONFIG);
 }
 
-int brcm_pcie_enable_msi(struct pci_controller *pcie)
+s32 brcm_pcie_enable_msi(struct pci_controller *pcie)
 {
 	Kprintf("[pcie] %s: enabling MSI\n", __func__);
 	if (pcie->msi.enabled)
@@ -189,7 +189,7 @@ int brcm_pcie_enable_msi(struct pci_controller *pcie)
 	pcie->msi.irq_isr.is_Data = (APTR)pcie;
 	pcie->msi.irq_isr.is_Code = (APTR)brcm_pcie_msi_isr;
 
-	int ret = AddIntServerEx(pcie->msi.irq + 32, 0, FALSE, &pcie->msi.irq_isr);
+	s32 ret = AddIntServerEx((ULONG)(pcie->msi.irq + 32), 0, FALSE, &pcie->msi.irq_isr);
 	if (ret < 0)
 	{
 		Kprintf("[pcie] %s: can't register IRQ %ld\n", __func__, pcie->msi.irq);

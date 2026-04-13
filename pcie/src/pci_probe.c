@@ -22,7 +22,7 @@
 #include <devtree.h>
 #include <minlist.h>
 
-int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr)
+s32 pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr)
 {
 	KprintfH("[pcie] %s: creating bus for bridge %lx, function %ld\n", __func__, PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	struct pci_bus *bus = AllocMem(sizeof(*bus), MEMF_CLEAR);
@@ -30,7 +30,7 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 		return -ENOMEM;
 
 	_NewMinList(&bus->devices);
-	_SNPrintf(bus->name, 30, (CONST_STRPTR) "pci_bus_%lx:%lx.%lx", PCI_BUS(bridge->bdf), PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
+	_SNPrintf((STRPTR)bus->name, 30, (CONST_STRPTR) "pci_bus_%lx:%lx.%lx", PCI_BUS(bridge->bdf), PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	bus->parent = parent;
 	bus->pci_bridge = bridge;
 	bus->controller = ctlr;
@@ -40,9 +40,9 @@ int pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 	return 0;
 }
 
-int pci_probe_bus(struct pci_bus *bus)
+s32 pci_probe_bus(struct pci_bus *bus)
 {
-	int ret;
+	s32 ret;
 
 	if (!bus)
 		return -EINVAL;
@@ -99,7 +99,7 @@ fail:
 	return ret;
 }
 
-int pci_auto_config_devices(struct pci_bus *bus)
+s32 pci_auto_config_devices(struct pci_bus *bus)
 {
 	pciauto_config_init(bus->controller);
 	for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
@@ -107,47 +107,48 @@ int pci_auto_config_devices(struct pci_bus *bus)
 		struct pci_device *device = (struct pci_device *)node;
 
 		Kprintf("[pcie] %s: device %s\n", __func__, device->name);
-		int ret = dm_pciauto_config_device(device);
+		s32 ret = pciauto_config_device(device);
 		if (ret < 0)
 		{
 			Kprintf("[pcie] %s: Failed to configure device %s: %ld\n", __func__, device->name, ret);
 			return ret;
 		}
-		bus->bus_number_last_sub = bus->bus_number_last_sub < ret ? ret : bus->bus_number_last_sub;
+		bus->bus_number_last_sub = bus->bus_number_last_sub < (u32)ret ? (u32)ret : bus->bus_number_last_sub;
 	}
 
 	KprintfH("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
 	return 0;
 }
 
-int dm_pci_hose_probe_bus(struct pci_bus *bus)
+s32 pci_hose_probe_bus(struct pci_bus *bus, u32 *last_bus_out)
 {
-	UBYTE header_type;
-	dm_pci_read_config8(bus->pci_bridge, PCI_HEADER_TYPE, &header_type);
+	u8 header_type;
+	pci_read_config8(bus->pci_bridge, PCI_HEADER_TYPE, &header_type);
 	header_type &= 0x7f;
 	if (header_type != PCI_HEADER_TYPE_BRIDGE)
 	{
-		Kprintf("[pcie] %s: Skipping PCI device %ld with Non-Bridge Header Type 0x%lx\n", __func__, PCI_DEV(dm_pci_get_bdf(bus->pci_bridge)), header_type);
+		Kprintf("[pcie] %s: Skipping PCI device %ld with Non-Bridge Header Type 0x%lx\n", __func__, PCI_DEV(pci_get_bdf(bus->pci_bridge)), header_type);
 		return -EINVAL;
 	}
 
 	// TODO merge this with pci_probe_bus
 	bus->bus_number = bus->controller->bus_number_last + 1;
 	Kprintf("[pcie] %s: bus = %ld/%s\n", __func__, bus->bus_number, bus->name);
-	dm_pciauto_prescan_setup_bridge(bus);
+	pciauto_prescan_setup_bridge(bus);
 
-	int ret = pci_probe_bus(bus);
+	s32 ret = pci_probe_bus(bus);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: Cannot probe bus %s: %ld\n", __func__, bus->name, ret);
 		return ret;
 	}
 
-	dm_pciauto_postscan_setup_bridge(bus);
-	return bus->bus_number_last_sub;
+	pciauto_postscan_setup_bridge(bus);
+	*last_bus_out = bus->bus_number_last_sub;
+	return 0;
 }
 
-int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD device, ULONG class, struct pci_device **devp)
+s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device, u32 class, struct pci_device **devp)
 {
 	KprintfH("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
 	*devp = NULL;
@@ -157,7 +158,7 @@ int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD de
 
 	dev->bus = bus;
 	dev->flags |= DM_FLAG_BOUND;
-	_SNPrintf(dev->name, 30, (CONST_STRPTR) "pci_%lx:%lx.%lx", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
+	_SNPrintf((STRPTR)dev->name, 30, (CONST_STRPTR) "pci_%lx:%lx.%lx", PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 	dev->bdf = bdf;
 	dev->devfn = PCI_MASK_BUS(bdf);
 	dev->vendor = vendor;
@@ -170,9 +171,9 @@ int pci_create_device(struct pci_bus *bus, pci_dev_t bdf, UWORD vendor, UWORD de
 	return 0;
 }
 
-int pci_bind_bus_devices(struct pci_bus *bus)
+s32 pci_bind_bus_devices(struct pci_bus *bus)
 {
-	int ret;
+	s32 ret;
 
 	BOOL found_multi = FALSE;
 	pci_dev_t end = PCI_BDF(bus->bus_number, PCI_MAX_PCI_DEVICES - 1, PCI_MAX_PCI_FUNCTIONS - 1);
@@ -186,20 +187,25 @@ int pci_bind_bus_devices(struct pci_bus *bus)
 		KprintfH("[pcie] %s: checking device 0x%lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
 
 		/* Check only the first access, we don't expect problems */
-		ULONG vendor;
-		ret = brcm_pcie_read_config(bus->controller, bdf, PCI_VENDOR_ID, &vendor, PCI_SIZE_16);
+		u32 config_value;
+		u16 vendor;
+		ret = brcm_pcie_read_config(bus->controller, bdf, PCI_VENDOR_ID, &config_value, PCI_SIZE_16);
+		vendor = (u16)config_value;
 		if (ret || vendor == 0xffff || vendor == 0x0000)
 			continue;
 
-		ULONG header_type;
-		brcm_pcie_read_config(bus->controller, bdf, PCI_HEADER_TYPE, &header_type, PCI_SIZE_8);
+		u8 header_type;
+		brcm_pcie_read_config(bus->controller, bdf, PCI_HEADER_TYPE, &config_value, PCI_SIZE_8);
+		header_type = (u8)config_value;
 
 		if (!PCI_FUNC(bdf))
 			found_multi = header_type & 0x80;
 
 		Kprintf("[pcie] %s: bus %ld/%s: found device %lx, function %ld\n", __func__, bus->bus_number, bus->name, PCI_DEV(bdf), PCI_FUNC(bdf));
-		ULONG device, class;
-		brcm_pcie_read_config(bus->controller, bdf, PCI_DEVICE_ID, &device, PCI_SIZE_16);
+		u16 device;
+		u32 class;
+		brcm_pcie_read_config(bus->controller, bdf, PCI_DEVICE_ID, &config_value, PCI_SIZE_16);
+		device = (u16)config_value;
 		brcm_pcie_read_config(bus->controller, bdf, PCI_CLASS_REVISION, &class, PCI_SIZE_32);
 		class >>= 8;
 

@@ -69,16 +69,16 @@
  *
  * Return: The encoded inbound region size
  */
-static int brcm_pcie_encode_ibar_size(u64 size)
+static u32 brcm_pcie_encode_ibar_size(u64 size)
 {
-	int log2_in = log2_floor_u64(size);
+	u32 log2_in = log2_floor_u64(size);
 
 	if (log2_in >= 12 && log2_in <= 15)
 		/* Covers 4KB to 32KB (inclusive) */
-		return (log2_in - 12) + 0x1c;
+		return (u32)((log2_in - 12U) + 0x1cU);
 	else if (log2_in >= 16 && log2_in <= 37)
 		/* Covers 64KB to 32GB, (inclusive) */
-		return log2_in - 15;
+		return (u32)(log2_in - 15U);
 
 	/* Something is awry so disable */
 	return 0;
@@ -94,7 +94,7 @@ static int brcm_pcie_encode_ibar_size(u64 size)
  */
 static BOOL brcm_pcie_rc_mode(struct pci_controller *pcie)
 {
-	ULONG val = mmio_read32(pcie->base + PCIE_MISC_PCIE_STATUS);
+	u32 val = mmio_read32(pcie->base + PCIE_MISC_PCIE_STATUS);
 	KprintfH("[pcie] %s: PCIe status: 0x%lx\n", __func__, val);
 
 	return (val & STATUS_PCIE_PORT_MASK) >> STATUS_PCIE_PORT_SHIFT;
@@ -108,7 +108,7 @@ static BOOL brcm_pcie_rc_mode(struct pci_controller *pcie)
  */
 static BOOL brcm_pcie_link_up(const struct pci_controller *pcie)
 {
-	ULONG val, dla, plu;
+	u32 val, dla, plu;
 
 	val = mmio_read32(pcie->base + PCIE_MISC_PCIE_STATUS);
 	dla = (val & STATUS_PCIE_DL_ACTIVE_MASK) >> STATUS_PCIE_DL_ACTIVE_SHIFT;
@@ -118,13 +118,10 @@ static BOOL brcm_pcie_link_up(const struct pci_controller *pcie)
 	return dla && plu;
 }
 
-static int brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t bdf, UWORD offset, void **paddress)
+static s32 brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t bdf, u32 offset, void **paddress)
 {
 
-	unsigned int pci_bus = PCI_BUS(bdf);
-	unsigned int pci_dev = PCI_DEV(bdf);
-	unsigned int pci_func = PCI_FUNC(bdf);
-	int idx;
+	u32 pci_bus = PCI_BUS(bdf), pci_dev = PCI_DEV(bdf), pci_func = PCI_FUNC(bdf), idx;
 
 	KprintfH("[pcie] %s: bus %ld dev %ld func %ld offset 0x%lx\n",
 			 __func__, pci_bus, pci_dev, pci_func, offset);
@@ -155,9 +152,9 @@ static int brcm_pcie_config_address(const struct pci_controller *pcie, pci_dev_t
 	return 0;
 }
 
-int brcm_pcie_read_config(const struct pci_controller *ctrl, pci_dev_t bdf, UWORD offset, ULONG *valuep, enum pci_size_t size)
+s32 brcm_pcie_read_config(const struct pci_controller *ctrl, pci_dev_t bdf, u32 offset, u32 *valuep, enum pci_size_t size)
 {
-	if (offset < 0 || offset >= 4096)
+	if (offset >= 4096)
 	{
 		*valuep = pci_conv_32_to_size(0, offset, size);
 		return -EINVAL;
@@ -174,22 +171,22 @@ int brcm_pcie_read_config(const struct pci_controller *ctrl, pci_dev_t bdf, UWOR
 	switch (size)
 	{
 	case PCI_SIZE_8:
-		*valuep = mmio_read8(address);
+		*valuep = (u32)mmio_read8(address);
 		return 0;
 	case PCI_SIZE_16:
-		*valuep = mmio_read16(address);
+		*valuep = (u32)mmio_read16(address);
 		return 0;
 	case PCI_SIZE_32:
-		*valuep = mmio_read32(address);
+		*valuep = (u32)mmio_read32(address);
 		return 0;
 	default:
 		return -EINVAL;
 	}
 }
 
-int brcm_pcie_write_config(struct pci_controller *ctrl, pci_dev_t bdf, UWORD offset, ULONG value, enum pci_size_t size)
+s32 brcm_pcie_write_config(struct pci_controller *ctrl, pci_dev_t bdf, u32 offset, u32 value, enum pci_size_t size)
 {
-	if (offset < 0 || offset >= 4096)
+	if (offset >= 4096)
 		return -EINVAL;
 
 	void *address;
@@ -200,20 +197,20 @@ int brcm_pcie_write_config(struct pci_controller *ctrl, pci_dev_t bdf, UWORD off
 	switch (size)
 	{
 	case PCI_SIZE_8:
-		mmio_write8(value, address);
+		mmio_write8((u8)value, address);
 		return 0;
 	case PCI_SIZE_16:
-		mmio_write16(value, address);
+		mmio_write16((u16)value, address);
 		return 0;
 	case PCI_SIZE_32:
-		mmio_write32(value, address);
+		mmio_write32((u32)value, address);
 		return 0;
 	default:
 		return -EINVAL;
 	}
 }
 
-static const char *link_speed_to_str(unsigned int cls)
+static const char *link_speed_to_str(u32 cls)
 {
 	switch (cls)
 	{
@@ -230,9 +227,9 @@ static const char *link_speed_to_str(unsigned int cls)
 	return "??";
 }
 
-static ULONG brcm_pcie_mdio_form_pkt(unsigned int port, unsigned int regad, unsigned int cmd)
+static u32 brcm_pcie_mdio_form_pkt(u32 port, u32 regad, u32 cmd)
 {
-	ULONG pkt;
+	u32 pkt;
 
 	pkt = (port << MDIO_PORT_SHIFT) & MDIO_PORT_MASK;
 	pkt |= (regad << MDIO_REGAD_SHIFT) & MDIO_REGAD_MASK;
@@ -241,10 +238,9 @@ static ULONG brcm_pcie_mdio_form_pkt(unsigned int port, unsigned int regad, unsi
 	return pkt;
 }
 
-static int brcm_pcie_wait_mdio_value(void *addr, ULONG mask, ULONG expected, ULONG timeout_us, ULONG *value)
+static s32 brcm_pcie_wait_mdio_value(void *addr, u32 mask, u32 expected, u32 timeout_us, u32 *value)
 {
-	ULONG current = 0;
-	ULONG deadline = get_time() + timeout_us;
+	u32 current = 0, deadline = get_time() + timeout_us;
 
 	for (;;)
 	{
@@ -269,15 +265,15 @@ static int brcm_pcie_wait_mdio_value(void *addr, ULONG mask, ULONG expected, ULO
  * Return: 0 on success and register value in @val, negative error value
  *         on failure.
  */
-static int brcm_pcie_mdio_read(void *base, unsigned int port, unsigned int regad, ULONG *val)
+static s32 brcm_pcie_mdio_read(void *base, u32 port, u32 regad, u32 *val)
 {
-	ULONG data, addr;
+	u32 data, addr;
 
 	addr = brcm_pcie_mdio_form_pkt(port, regad, MDIO_CMD_READ);
 	mmio_write32(addr, base + PCIE_RC_DL_MDIO_ADDR);
 	mmio_read32(base + PCIE_RC_DL_MDIO_ADDR);
 
-	int ret = brcm_pcie_wait_mdio_value(base + PCIE_RC_DL_MDIO_RD_DATA,
+	s32 ret = brcm_pcie_wait_mdio_value(base + PCIE_RC_DL_MDIO_RD_DATA,
 		MDIO_DATA_DONE_MASK, MDIO_DATA_DONE_MASK, 100, &data);
 
 	*val = data & MDIO_DATA_MASK;
@@ -294,9 +290,9 @@ static int brcm_pcie_mdio_read(void *base, unsigned int port, unsigned int regad
  *
  * Return: 0 on success, negative error value on failure.
  */
-static int brcm_pcie_mdio_write(void *base, unsigned int port, unsigned int regad, UWORD wrdata)
+static s32 brcm_pcie_mdio_write(void *base, u32 port, u32 regad, u16 wrdata)
 {
-	ULONG data, addr;
+	u32 data, addr;
 
 	addr = brcm_pcie_mdio_form_pkt(port, regad, MDIO_CMD_WRITE);
 	mmio_write32(addr, base + PCIE_RC_DL_MDIO_ADDR);
@@ -313,12 +309,12 @@ static int brcm_pcie_mdio_write(void *base, unsigned int port, unsigned int rega
  *
  * Return: 0 on success, negative error value on failure.
  */
-static int brcm_pcie_set_ssc(void *base)
+static s32 brcm_pcie_set_ssc(void *base)
 {
 	KprintfH("[pcie] %s\n", __func__);
-	int pll, ssc;
-	int ret;
-	ULONG tmp;
+	u32 pll, ssc;
+	s32 ret;
+	u32 tmp;
 
 	ret = brcm_pcie_mdio_write(base, MDIO_PORT0, SET_ADDR_OFFSET,
 							   SSC_REGS_ADDR);
@@ -331,7 +327,7 @@ static int brcm_pcie_set_ssc(void *base)
 
 	tmp |= (SSC_CNTL_OVRD_EN_MASK | SSC_CNTL_OVRD_VAL_MASK);
 
-	ret = brcm_pcie_mdio_write(base, MDIO_PORT0, SSC_CNTL_OFFSET, tmp);
+	ret = brcm_pcie_mdio_write(base, MDIO_PORT0, SSC_CNTL_OFFSET, (u16)tmp);
 	if (ret < 0)
 		return ret;
 
@@ -351,22 +347,22 @@ static int brcm_pcie_set_ssc(void *base)
  * @pcie: pointer to the PCIe controller state
  * @gen: PCIe generation to limit the controller's operation to
  */
-static void brcm_pcie_set_gen(struct pci_controller *pcie, unsigned int gen)
+static void brcm_pcie_set_gen(struct pci_controller *pcie, u32 gen)
 {
 	Kprintf("[pcie] %s: gen %ld\n", __func__, gen);
 	void *cap_base = pcie->base + BRCM_PCIE_CAP_REGS;
 
-	UWORD lnkctl2 = mmio_read16(cap_base + PCI_EXP_LNKCTL2);
-	ULONG lnkcap = mmio_read32(cap_base + PCI_EXP_LNKCAP);
+	u32 lnkctl2 = mmio_read16(cap_base + PCI_EXP_LNKCTL2);
+	u32 lnkcap = mmio_read32(cap_base + PCI_EXP_LNKCAP);
 
-	lnkcap = (lnkcap & ~PCI_EXP_LNKCAP_SLS) | gen;
+	lnkcap = (lnkcap & ~(u32)PCI_EXP_LNKCAP_SLS) | gen;
 	mmio_write32(lnkcap, cap_base + PCI_EXP_LNKCAP);
 
-	lnkctl2 = (lnkctl2 & ~0xf) | gen;
-	mmio_write16(lnkctl2, cap_base + PCI_EXP_LNKCTL2);
+	lnkctl2 = (lnkctl2 & ~0x0fU) | gen;
+	mmio_write16((u16)lnkctl2, cap_base + PCI_EXP_LNKCTL2);
 }
 
-static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int win, u64 phys_addr, u64 pcie_addr, u64 size)
+static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, u32 win, u64 phys_addr, u64 pcie_addr, u64 size)
 {
 	Kprintf("[pcie] %s: Setting outbound win %ld: phys 0x%lx%08lx <-> pcie 0x%lx, size 0x%lx\n", __func__, win, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff), (ULONG)pcie_addr, (ULONG)size);
 	void *base = pcie->base;
@@ -378,11 +374,11 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_HI(%ld) = 0x%lx\n", __func__, win, mmio_read32(base + PCIE_MEM_WIN0_HI(win)));
 
 	/* Write the addr base & limit lower bits (in MBs) */
-	phys_addr_t phys_addr_mb = phys_addr / SZ_1M;
-	phys_addr_t limit_addr_mb = (phys_addr + size - 1) / SZ_1M;
+	u32 phys_addr_mb = (u32)(phys_addr / SZ_1M);
+	u32 limit_addr_mb = (u32)((phys_addr + size - 1) / SZ_1M);
 	KprintfH("[pcie] %s: phys_addr_mb = 0x%lx, limit_addr_mb = 0x%lx\n", __func__, (ULONG)phys_addr_mb, (ULONG)limit_addr_mb);
 
-	ULONG tmp = mmio_read32(base + PCIE_MEM_WIN0_BASE_LIMIT(win));
+	u32 tmp = mmio_read32(base + PCIE_MEM_WIN0_BASE_LIMIT(win));
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_LIMIT(%ld) before = 0x%lx\n", __func__, win, tmp);
 	u32_update_mask(&tmp, phys_addr_mb, MEM_WIN0_BASE_LIMIT_BASE_MASK);
 	u32_update_mask(&tmp, limit_addr_mb, MEM_WIN0_BASE_LIMIT_LIMIT_MASK);
@@ -390,8 +386,8 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_LIMIT(%ld) after = 0x%lx\n", __func__, win, mmio_read32(base + PCIE_MEM_WIN0_BASE_LIMIT(win)));
 
 	/* Write the cpu & limit addr upper bits */
-	int high_addr_shift = MEM_WIN0_BASE_LIMIT_BASE_HI_SHIFT;
-	ULONG phys_addr_mb_high = phys_addr_mb >> high_addr_shift;
+	u32 high_addr_shift = MEM_WIN0_BASE_LIMIT_BASE_HI_SHIFT;
+	u32 phys_addr_mb_high = (u32)(phys_addr_mb >> high_addr_shift);
 	KprintfH("[pcie] %s: phys_addr_mb_high = 0x%lx\n", __func__, (ULONG)phys_addr_mb_high);
 	tmp = mmio_read32(base + PCIE_MEM_WIN0_BASE_HI(win));
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_HI(%ld) before = 0x%lx\n", __func__, win, tmp);
@@ -399,7 +395,7 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int
 	mmio_write32(tmp, base + PCIE_MEM_WIN0_BASE_HI(win));
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_BASE_HI(%ld) after = 0x%lx\n", __func__, win, mmio_read32(base + PCIE_MEM_WIN0_BASE_HI(win)));
 
-	ULONG limit_addr_mb_high = limit_addr_mb >> high_addr_shift;
+	u32 limit_addr_mb_high = (u32)(limit_addr_mb >> high_addr_shift);
 	KprintfH("[pcie] %s: limit_addr_mb_high = 0x%lx\n", __func__, (ULONG)limit_addr_mb_high);
 	tmp = mmio_read32(base + PCIE_MEM_WIN0_LIMIT_HI(win));
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_LIMIT_HI(%ld) before = 0x%lx\n", __func__, win, tmp);
@@ -408,7 +404,7 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, unsigned int
 	KprintfH("[pcie] %s: PCIE_MEM_WIN0_LIMIT_HI(%ld) after = 0x%lx\n", __func__, win, mmio_read32(base + PCIE_MEM_WIN0_LIMIT_HI(win)));
 }
 
-static int brcm_devtree_parse(struct pci_controller *ctrl)
+static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 
@@ -454,12 +450,12 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 		DT_CloseKey(key);
 		return -EINVAL;
 	}
-	int mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(ULONG);
+	u32 mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(u32);
 	ctrl->mmio_window_phys = DT_GetNumber(DT_GetPropValue(mmio_window_phys_prop), mmio_window_phys_cells);
-	ctrl->mmio_window_virtual = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-virt", 0, FALSE);
+	ctrl->mmio_window_virtual = (u8 *)DT_GetPropertyValueULONG(key, "emu68,pci-mmio-virt", 0, FALSE);
 	ctrl->mmio_window_size = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-size", SZ_64M, FALSE);
 	Kprintf("[pcie] %s: emu68,pci-mmio-phys = 0x%lx%08lx\n", __func__, (ULONG)(ctrl->mmio_window_phys >> 32), (ULONG)(ctrl->mmio_window_phys & 0xffffffff));
-	Kprintf("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_virtual));
+	Kprintf("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)ctrl->mmio_window_virtual);
 	Kprintf("[pcie] %s: emu68,pci-mmio-size = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_size));
 
 	APTR int_map_prop = DT_FindProperty(key, (CONST_STRPTR) "interrupt-map");
@@ -470,30 +466,30 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 		// ULONG interrupt_parent_phandle = DT_GetPropertyValueULONG(root, "interrupt-parent", 0, TRUE);
 		DT_CloseKey(root);
 
-		const ULONG interrupt_cells = DT_GetPropertyValueULONG(key, "#interrupt-cells", 1, FALSE);
-		const ULONG addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+		const u32 interrupt_cells = DT_GetPropertyValueULONG(key, "#interrupt-cells", 1, FALSE);
+		const u32 addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
 
-		ULONG *int_map = (ULONG *)DT_GetPropValue(int_map_prop);
-		ULONG len = DT_GetPropLen(int_map_prop);
+		const u32 *int_map = (const u32 *)DT_GetPropValue(int_map_prop);
+		u32 len = DT_GetPropLen(int_map_prop);
 
 		 // child_addr + child_interrupt + phandle + int_type + parent_interrupt + interrupt flags
-		int entry_size = (addr_cells + 1 + 1 + 1 + interrupt_cells + 1);
-		int entries = len / (sizeof(ULONG) * entry_size);
+		u32 entry_size = addr_cells + 1 + 1 + 1 + interrupt_cells + 1;
+		u32 entries = len / (sizeof(u32) * entry_size);
 
 		Kprintf("[pcie] %s: Found interrupt-map with %ld entries\n", __func__, entries);
 
-		for (int i = 0; i < entries; i++)
+		for (u32 i = 0; i < entries; i++)
 		{
 			// child addr cells + child interrupt cells + parent phandle + parent interrupt cells + interrupt flags
-			ULONG child_interrupt = DT_GetNumber(int_map + i * entry_size + addr_cells, 1);
-			ULONG parent_interrupt = DT_GetNumber(int_map + i * entry_size + addr_cells + 3, interrupt_cells);
-			ULONG flags = DT_GetNumber(int_map + i * entry_size + addr_cells + 3 + interrupt_cells, 1);
+			u32 child_interrupt = (u32)DT_GetNumber(int_map + i * entry_size + addr_cells, 1);
+			u32 parent_interrupt = (u32)DT_GetNumber(int_map + i * entry_size + addr_cells + 3, interrupt_cells);
+			u32 flags = (u32)DT_GetNumber(int_map + i * entry_size + addr_cells + 3 + interrupt_cells, 1);
 			//TODO check phandle matches GIC-400 phandle
 			Kprintf("[pcie] %s: interrupt-map entry %ld: child=%ld parent=%ld flags=0x%lx\n", __func__, i, child_interrupt, parent_interrupt, flags);
 
 			if (child_interrupt >= 1 && child_interrupt <= 4)
 			{
-				ctrl->INT_x_mapping[child_interrupt - 1] = parent_interrupt;
+				ctrl->INT_x_mapping[child_interrupt - 1] = (s32)parent_interrupt;
 			}
 		}
 	}
@@ -506,11 +502,10 @@ static int brcm_devtree_parse(struct pci_controller *ctrl)
 	return 0;
 }
 
-static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
+static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, int index)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
-	int cells_per_record;
-	int i = 0;
+	u32 cells_per_record, i = 0;
 
 	APTR key = DT_OpenKey(ctlr->dt_node_name);
 	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "dma-ranges");
@@ -521,25 +516,25 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 		return -EINVAL;
 	}
 
-	ULONG *dma_ranges = (ULONG *)DT_GetPropValue(prop);
-	int len = DT_GetPropLen(prop);
+	const u32 *dma_ranges = (const u32 *)DT_GetPropValue(prop);
+	u32 len = DT_GetPropLen(prop);
 
-	ULONG pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
-	ULONG addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
-	ULONG size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
+	u32 pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+	u32 addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
+	u32 size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
 
 	/* PCI addresses are always 3-cells */
-	len /= sizeof(ULONG);
+	len /= sizeof(u32);
 	cells_per_record = pci_addr_cells + addr_cells + size_cells;
 	KprintfH("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
 	while (len)
 	{
-		memp->bus_start = DT_GetNumber(dma_ranges + 1, 2);
+		memp->bus_start = (pci_addr_t)DT_GetNumber(dma_ranges + 1, 2);
 		dma_ranges += pci_addr_cells;
 		memp->phys_start = DT_GetNumber(dma_ranges, addr_cells);
 		dma_ranges += addr_cells;
-		memp->size = DT_GetNumber(dma_ranges, size_cells);
+		memp->size = (pci_size_t)DT_GetNumber(dma_ranges, size_cells);
 		dma_ranges += size_cells;
 		Kprintf("[pcie] %s: region %ld, bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n",
 				__func__, i, (ULONG)(memp->bus_start >> 32), (ULONG)(memp->bus_start & 0xffffffff), (ULONG)(memp->phys_start >> 32), (ULONG)(memp->phys_start & 0xffffffff), (ULONG)(memp->size >> 32), (ULONG)(memp->size & 0xffffffff));
@@ -553,10 +548,9 @@ static int pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 	return -EINVAL;
 }
 
-static int pci_get_devtree_regions(struct pci_controller *hose)
+static s32 pci_get_devtree_regions(struct pci_controller *hose)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
-	int i;
 
 	APTR key = DT_OpenKey(hose->dt_node_name);
 	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "ranges");
@@ -567,32 +561,32 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 		return -EINVAL;
 	}
 
-	ULONG *ranges = (ULONG *)DT_GetPropValue(prop);
-	ULONG len = DT_GetPropLen(prop);
+	u32 *ranges = (u32 *)DT_GetPropValue(prop);
+	u32 len = DT_GetPropLen(prop);
 
-	ULONG pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
-	ULONG addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
-	ULONG size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
+	u32 pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+	u32 addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
+	u32 size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
 
 	/* PCI addresses are always 3-cells */
-	len /= sizeof(ULONG);
-	const int cells_per_record = pci_addr_cells + addr_cells + size_cells;
+	len /= sizeof(u32);
+	const u32 cells_per_record = pci_addr_cells + addr_cells + size_cells;
 	hose->region_count = 0;
 	KprintfH("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
 	/* Dynamically allocate the regions array */
-	int max_regions = len / cells_per_record + CONFIG_NR_DRAM_BANKS;
+	u32 max_regions = len / cells_per_record + CONFIG_NR_DRAM_BANKS;
 	hose->regions = (struct pci_region *)AllocVec(max_regions * sizeof(struct pci_region), MEMF_CLEAR);
 	if (!hose->regions)
 		return -ENOMEM;
 
-	for (int i = 0; i < max_regions; i++, len -= cells_per_record)
+	for (u32 i = 0; i < max_regions; i++, len -= cells_per_record)
 	{
 		u64 pci_addr, addr, size;
-		int space_code;
-		ULONG flags;
-		int type;
-		int pos;
+		u32 space_code;
+		u32 flags;
+		u32 type;
+		u32 pos;
 
 		if (len < cells_per_record)
 			break;
@@ -649,24 +643,24 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 
 		pos = hose->region_count++;
 		Kprintf("[pcie] %s: - type=%ld, pos=%ld\n", __func__, type, pos);
-		pci_set_region(hose->regions + pos, pci_addr, addr, size, type);
+		pci_set_region(hose->regions + pos, (pci_addr_t)pci_addr, (phys_addr_t)addr, (pci_size_t)size, type);
 	}
 
 	/* Add a region for our local memory */
 	Kprintf("[pcie] %s: Adding system memory regions\n", __func__);
 	struct ExecBase *sysBase = *(struct ExecBase **)4UL;
 	struct MemHeader *mh = (struct MemHeader *)sysBase->MemList.lh_Head;
-	for (i = 0; i < CONFIG_NR_DRAM_BANKS && mh != NULL; i++)
+	for (u32 i = 0; i < CONFIG_NR_DRAM_BANKS && mh != NULL; i++)
 	{
 		if (mh->mh_Attributes & MEMF_FAST)
 		{
-			ULONG start = (ULONG)mh->mh_Lower;
-			ULONG end = (ULONG)mh->mh_Upper;
-			ULONG size = end - start + 1;
+			u32 start = (u32)mh->mh_Lower;
+			u32 end = (u32)mh->mh_Upper;
+			u32 size = end - start + 1;
 
 			if (size == 0)
 				continue;
-			int pos = hose->region_count++;
+			u32 pos = hose->region_count++;
 			Kprintf("[pcie] %s: - DRAM region %ld: start=0x%lx, size=0x%lx\n", __func__, pos, start, size);
 #ifdef CONFIG_PCI_MAP_SYSTEM_MEMORY
 			start = virt_to_phys((void *)(uintptr_t)bd->bi_dram[i].start);
@@ -680,9 +674,9 @@ static int pci_get_devtree_regions(struct pci_controller *hose)
 	return 0;
 }
 
-int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
+s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 {
-	int res = brcm_devtree_parse(ctlr);
+	s32 res = brcm_devtree_parse(ctlr);
 	if (res < 0)
 	{
 		return res;
@@ -718,7 +712,7 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 						MISC_CTRL_PCIE_RCB_MPS_MODE_MASK |
 						MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 
-	int ret = pci_get_devtree_regions(ctlr);
+	s32 ret = pci_get_devtree_regions(ctlr);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: failed to get ranges\n", __func__);
@@ -740,8 +734,8 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	KprintfH("[pcie] %s: RC BAR2: offset=0x%lx%08lx, size=0x%lx%08lx\n", __func__, (ULONG)(rc_bar2_offset >> 32), (ULONG)(rc_bar2_offset & 0xffffffff), (ULONG)(rc_bar2_size >> 32), (ULONG)(rc_bar2_size & 0xffffffff));
 	KprintfH("[pcie] %s: RC BAR2 size encoded = 0x%lx\n", __func__, (ULONG)brcm_pcie_encode_ibar_size(rc_bar2_size));
 
-	ULONG tmp = u64_lo32(rc_bar2_offset);
-	u32_update_mask(&tmp, brcm_pcie_encode_ibar_size(rc_bar2_size),
+	u32 tmp = u64_lo32(rc_bar2_offset);
+	u32_update_mask(&tmp, (u32)brcm_pcie_encode_ibar_size(rc_bar2_size),
 					  RC_BAR2_CONFIG_LO_SIZE_MASK);
 	mmio_write32(tmp, base + PCIE_MISC_RC_BAR2_CONFIG_LO);
 	mmio_write32(u64_hi32(rc_bar2_offset),
@@ -761,7 +755,7 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 #endif
 	Kprintf("[pcie] %s: MSI target address set to 0x%lx\n", __func__, ctlr->msi.msi_target_addr);
 
-	unsigned int scb_size_val = rc_bar2_size ? log2_floor_u64(rc_bar2_size) - 15 : 0xf; /* 0xf is 1GB */
+	u32 scb_size_val = rc_bar2_size ? (u32)(log2_floor_u64(rc_bar2_size) - 15) : 0xf; /* 0xf is 1GB */
 
 	tmp = mmio_read32(base + PCIE_MISC_MISC_CTRL);
 	u32_update_mask(&tmp, scb_size_val,
@@ -796,7 +790,7 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	/* Give the RC/EP time to wake up, before trying to configure RC.
 	 * Intermittently check status for link-up, up to a total of 100ms.
 	 */
-	for (int i = 0; i < 100 && !brcm_pcie_link_up(ctlr); i += 5)
+	for (u32 i = 0; i < 100 && !brcm_pcie_link_up(ctlr); i += 5)
 		delay_us(5 * 1000);
 
 	if (!brcm_pcie_link_up(ctlr))
@@ -811,8 +805,8 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 		return -EINVAL;
 	}
 
-	int num_out_wins = 0;
-	for (int i = 0; i < ctlr->region_count; i++)
+	u32 num_out_wins = 0;
+	for (u32 i = 0; i < ctlr->region_count; i++)
 	{
 		struct pci_region *reg = &ctlr->regions[i];
 
@@ -844,9 +838,8 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 			Kprintf("[pcie] %s: failed attempt to enter SSC mode\n", __func__);
 	}
 
-	UWORD lnksta = mmio_read16(base + BRCM_PCIE_CAP_REGS + PCI_EXP_LNKSTA);
-	UWORD cls = lnksta & PCI_EXP_LNKSTA_CLS;
-	UWORD nlw = (lnksta & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
+	u16 lnksta = mmio_read16(base + BRCM_PCIE_CAP_REGS + PCI_EXP_LNKSTA);
+	u16 cls = lnksta & PCI_EXP_LNKSTA_CLS, nlw = (lnksta & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
 
 	Kprintf("[pcie] %s: link up, %s Gbps x%lu %s\n", __func__, link_speed_to_str(cls), nlw, ssc_good ? "(SSC)" : "(!SSC)");
 
@@ -859,7 +852,7 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	 * RootCtl bits are reset by perst_n, which undoes pci_enable_crs()
 	 * called prior to pci_add_new_bus() during probe. Re-enable here.
 	 */
-	UWORD capreg = mmio_read16(base + BRCM_PCIE_CAP_REGS + PCI_EXP_RTCAP);
+	u16 capreg = mmio_read16(base + BRCM_PCIE_CAP_REGS + PCI_EXP_RTCAP);
 	if (capreg & PCI_EXP_RTCAP_CRSVIS)
 	{
 		KprintfH("[pcie] %s: enabling CRS\n", __func__);
@@ -899,7 +892,7 @@ int brcm_pcie_probe(struct pci_controller *ctlr, int bus_number_base)
 	return 0;
 }
 
-int brcm_pcie_remove(struct pci_controller *pcie)
+s32 brcm_pcie_remove(struct pci_controller *pcie)
 {
 	brcm_pcie_disable_msi(pcie);
 

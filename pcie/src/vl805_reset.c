@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
 #include <debug.h>
+#include <pcie_brcmstb.h>
 
 #include <errors.h>
 #include <timing.h>
@@ -16,7 +17,7 @@
 #define MAILBOX_TAG_NOTIFY_XHCI_RESET 0x00030058UL
 
 /* Ask VideoCore to reload VL805 firmware after PCI reset. */
-int bcm2711_reload_vl805_firmware(void)
+s32 bcm2711_reload_vl805_firmware(void)
 {
 	APTR MailboxBase = OpenResource((CONST_STRPTR) "mailbox.resource");
 	if (!MailboxBase)
@@ -26,11 +27,11 @@ int bcm2711_reload_vl805_firmware(void)
 	}
 
 	ULONG command[] = {
-		7 * sizeof(ULONG), /* buffer size */
+		7 * sizeof(u32), /* buffer size */
 		MAILBOX_PROP_REQ_CODE, /* request code */
 		MAILBOX_TAG_NOTIFY_XHCI_RESET, /* tag id */
-		sizeof(ULONG), /* value buffer size */
-		sizeof(ULONG), /* value length */
+		sizeof(u32), /* value buffer size */
+		sizeof(u32), /* value length */
 		0x100000, /* Hardwired RPi4 VL805 PCI address. */
 		0, /* end tag */
 	};

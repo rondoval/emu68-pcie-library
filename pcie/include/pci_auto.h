@@ -8,7 +8,7 @@
 void pciauto_config_init(struct pci_controller *hose);
 
 /**
- * dm_pciauto_config_device() - configure a device ready for use
+ * pciauto_config_device() - configure a device ready for use
  *
  * Space is allocated for each PCI base address register (BAR) so that the
  * devices are mapped into memory and I/O space ready for use.
@@ -16,9 +16,9 @@ void pciauto_config_init(struct pci_controller *hose);
  * @dev:	Device to configure
  * Return: 0 if OK, -ve on error
  */
-int dm_pciauto_config_device(struct pci_device *dev);
+s32 pciauto_config_device(struct pci_device *dev);
 
-void dm_pciauto_prescan_setup_bridge(struct pci_bus *dev);
-void dm_pciauto_postscan_setup_bridge(struct pci_bus *dev);
+void pciauto_prescan_setup_bridge(struct pci_bus *dev);
+void pciauto_postscan_setup_bridge(struct pci_bus *dev);
 
 #endif
