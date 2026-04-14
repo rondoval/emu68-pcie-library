@@ -47,6 +47,10 @@ s32 pci_probe_bus(struct pci_bus *bus)
 	if (!bus)
 		return -EINVAL;
 
+	/* Root bus has no bridge device and is already set up by the caller. */
+	if (!bus->pci_bridge)
+		return 0;
+
 	if (bus->pci_bridge->flags & DM_FLAG_ACTIVATED)
 		return 0;
 
