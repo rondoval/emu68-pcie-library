@@ -10,8 +10,18 @@ add_executable(lspci
 
 target_link_libraries(lspci
     Emu68Common::common
-    GIC400::gic400_headers
-    pcie
+)
+
+# pcie_library_sfd_headers generates proto/bcmpcie.h (and clib/, inline/, pragmas/) into
+# the build tree.  Reference it directly so lspci can build before the install step
+# copies those headers into the install prefix.
+add_dependencies(lspci pcie_library_sfd_headers)
+
+target_include_directories(lspci PRIVATE
+    # SFD-generated pcie headers (proto/bcmpcie.h etc.)
+    ${CMAKE_BINARY_DIR}/bcmpcie.library/generated/include
+    # bcmpcie.library public headers (libraries/pcie.h, libraries/pci_constants.h, libraries/openpci.h, libraries/pcitags.h)
+    ${CMAKE_SOURCE_DIR}/bcmpcie.library/include
 )
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lspci DESTINATION C)
