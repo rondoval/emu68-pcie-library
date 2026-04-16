@@ -1,0 +1,88 @@
+==id $Id: bcmpcie.sfd 1.0.0 $
+* "bcmpcie.library"
+==base _BCMPCIEBase
+==basetype struct Library *
+==libname bcmpcie.library
+==bias 30
+==public
+==include <exec/types.h>
+==include <exec/interrupts.h>
+==include <utility/tagitem.h>
+==include <utility/hooks.h>
+==include <libraries/openpci.h>
+* -30: Return the bus type found
+UWORD pci_bus() ()
+* -36..-66: Legacy PCI I/O port access (stubs; future work)
+UBYTE pci_inb(APTR address) (A0)
+void pci_outb(UBYTE value, APTR address) (D0,A0)
+UWORD pci_inw(APTR address) (A0)
+void pci_outw(UWORD value, APTR address) (D0,A0)
+ULONG pci_inl(APTR address) (A0)
+void pci_outl(ULONG value, APTR address) (D0,A0)
+* -72..-84: PCI<->host memory copy (stub -> plain memcpy)
+void pci_to_hostcpy(APTR pcisrc, APTR dest, ULONG size) (A0,A1,D0)
+void host_to_pcicpy(APTR src, APTR pcidest, ULONG size) (A0,A1,D0)
+void pci_to_pcicpy(APTR pcisrc, APTR pcidest, ULONG size) (A0,A1,D0)
+* -90: Find functions
+struct pci_dev *pci_find_device(UWORD vendor, UWORD device, struct pci_dev *prev) (D0,D1,A0)
+struct pci_dev *pci_find_class(ULONG devclass, struct pci_dev *prev) (D0,A0)
+struct pci_dev *pci_find_slot(UBYTE bus, ULONG devfn) (D0,D1)
+* -108: Config space read
+UBYTE pci_read_config_byte(UBYTE reg, struct pci_dev *dev) (D0,A0)
+UWORD pci_read_config_word(UBYTE reg, struct pci_dev *dev) (D0,A0)
+ULONG pci_read_config_long(UBYTE reg, struct pci_dev *dev) (D0,A0)
+* -126: Config space write
+void pci_write_config_byte(UBYTE reg, UBYTE val, struct pci_dev *dev) (D0,D1,A0)
+void pci_write_config_word(UBYTE reg, UWORD val, struct pci_dev *dev) (D0,D1,A0)
+void pci_write_config_long(UBYTE reg, ULONG val, struct pci_dev *dev) (D0,D1,A0)
+* -144: Bus master
+BOOL pci_set_master(struct pci_dev *dev) (A0)
+* -150: Interrupts
+BOOL pci_add_intserver(struct Interrupt *isr, struct pci_dev *dev) (A0,A1)
+void pci_rem_intserver(struct Interrupt *isr, struct pci_dev *dev) (A0,A1)
+* -162: DMA memory
+APTR pci_allocdma_mem(ULONG size, ULONG flags) (D0,D1)
+void pci_freedma_mem(APTR buf, ULONG size) (A0,D0)
+* -174: Address translation
+APTR pci_logic_to_physic_addr(APTR logicaddr, struct pci_dev *dev) (A0,A1)
+APTR pci_physic_to_logic_addr(APTR physicaddr, struct pci_dev *dev) (A0,A1)
+* -186: Card reservation
+BOOL pci_obtain_card(struct pci_dev *dev) (A0)
+void pci_release_card(struct pci_dev *dev) (A0)
+* -198: Private placeholder (openpci compat)
+==private
+ULONG pcie_private() ()
+==public
+* -204: v3 tag API
+struct pci_dev *FindBoardA(struct pci_dev *prev, struct TagItem *tags) (A0,A1)
+ULONG GetBoardAttrsA(struct pci_dev *dev, struct TagItem *tags) (A0,A1)
+BOOL SetBoardAttrsA(struct pci_dev *dev, struct TagItem *tags) (A0,A1)
+APTR AllocateDMAMemoryForBoard(struct pci_dev *dev, ULONG size, ULONG flags) (A0,D0,D1)
+void ReleaseDMAMemoryForBoard(struct pci_dev *dev, APTR mem, ULONG size) (A0,A1,D0)
+BOOL AddMemoryHandlerForBoard(struct pci_dev *dev, struct Hook *hk, BYTE pri) (A0,A1,D0)
+BOOL RemMemoryHandlerForBoard(struct pci_dev *dev, struct Hook *hk) (A0,A1)
+* -246: Region access
+APTR ObtainPCIRegion(struct pci_dev *dev, ULONG region, ULONG size) (A0,A1,D0)
+void ReleasePCIRegion(struct pci_dev *dev, APTR addr) (A0,A1)
+* -258: PCIe-specific extensions
+ULONG FindCapability(struct pci_dev *dev, UBYTE cap) (A0,D0)
+ULONG FindExtCapability(struct pci_dev *dev, UWORD cap) (A0,D0)
+LONG EnableMSI(struct pci_dev *dev) (A0)
+void DisableMSI(struct pci_dev *dev) (A0)
+LONG FLR(struct pci_dev *dev) (A0)
+APTR MapBAR(struct pci_dev *dev, ULONG bar, ULONG offset, ULONG len, ULONG flags) (A0,D0,D1,D2,D3)
+BOOL GetBARInfo(struct pci_dev *dev, ULONG bar, ULONG *addrp, ULONG *sizep) (A0,D0,A1,A2)
+* -300: Extended config space access (ULONG register argument; supports offsets >= 0x100)
+UBYTE ReadExtConfigByte(ULONG reg, struct pci_dev *dev) (D0,A0)
+UWORD ReadExtConfigWord(ULONG reg, struct pci_dev *dev) (D0,A0)
+ULONG ReadExtConfigLong(ULONG reg, struct pci_dev *dev) (D0,A0)
+void WriteExtConfigByte(ULONG reg, UBYTE val, struct pci_dev *dev) (D0,D1,A0)
+void WriteExtConfigWord(ULONG reg, UWORD val, struct pci_dev *dev) (D0,D1,A0)
+void WriteExtConfigLong(ULONG reg, ULONG val, struct pci_dev *dev) (D0,D1,A0)
+* -336: ISR-safe interrupt control
+* These functions do NOT acquire the library semaphore and are safe to call
+* from interrupt context (e.g. from within an installed interrupt server).
+void MaskMSI(struct pci_dev *dev) (A0)
+void UnmaskMSI(struct pci_dev *dev) (A0)
+BOOL CheckSetINTxMask(struct pci_dev *dev, BOOL mask) (A0,D0)
+==end

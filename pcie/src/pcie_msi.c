@@ -25,7 +25,7 @@
  * and returns a power of two, up to a maximum of 2^5 (32), according to the
  * MSI specification.
  **/
-s32 pci_msi_vec_count(struct pci_device *dev)
+static s32 pci_msi_vec_count(struct pci_device *dev)
 {
 	s32 ret;
 	u16 msgctl;
@@ -225,7 +225,7 @@ s32 msi_capability_init(struct pci_device *dev, u32 nvec)
 	pci_msi_mask(dev, msi_multi_mask(dev));
 
 	/* Set MSI enabled bits	*/
-	//	pci_intx(dev, 0);
+	pci_intx(dev, 0);
 	pci_msi_set_enable(dev, 1);
 
 	goto unlock;

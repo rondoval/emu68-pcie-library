@@ -158,7 +158,7 @@ struct pci_device
 	} msi;
 
 	s32 irq;
-	BOOL irq_enabled;
+	BOOL prefer_msi;
 };
 
 #endif
