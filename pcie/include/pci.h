@@ -251,22 +251,6 @@ s32 pci_find_device_id(struct pci_controller *controller, const struct pci_devic
 					   struct pci_device **devp);
 
 /**
- * pci_hose_probe_bus() - probe a subordinate bus, scanning it for devices
- *
- * This probes the given bus which causes it to be scanned for devices. The
- * devices will be bound but not probed.
- *
- * @hose specifies the PCI hose that will be used for the scan. This is
- * always a top-level bus with uclass UCLASS_PCI. The bus to scan is
- * in @bdf, and is a subordinate bus reachable from @hose.
- *
- * @hose:	PCI hose to scan
- * @bdf:	PCI bus address to scan (PCI_BUS(bdf) is the bus number)
- * Return: 0 if OK, -ve on error
- */
-s32 pci_hose_probe_bus(struct pci_bus *bus, u32 *last_bus_out);
-
-/**
  * pci_bus_clrset_config32() - Update a configuration value for a device
  *
  * The register at @offset is updated to (oldvalue & ~clr) | set.

@@ -494,8 +494,8 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		}
 	}
 
-	ctrl->msi.irq = DT_GetInterrupt(key, 1); // first interrupt is for the host controller; second interrupt is MSI
-	Kprintf("[pcie] %s: MSI IRQ = %ld\n", __func__, ctrl->msi.irq);
+	ctrl->msi.gic_irq = DT_GetInterrupt(key, 1); // first interrupt is for the host controller; second interrupt is MSI
+	Kprintf("[pcie] %s: MSI IRQ = %ld\n", __func__, ctrl->msi.gic_irq);
 
 	// We're done with the device tree
 	DT_CloseKey(key);
@@ -743,16 +743,16 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 #ifdef CONFIG_SYS_PCI_64BIT
 	if (rc_bar2_offset >= SZ_4G || rc_bar2_size + rc_bar2_offset < SZ_4G)
 	{
-		ctlr->msi.msi_target_addr = BRCM_MSI_TARGET_ADDR_LT_4GB;
+		ctlr->msi.target_addr = BRCM_MSI_TARGET_ADDR_LT_4GB;
 	}
 	else
 	{
-		ctlr->msi.msi_target_addr = BRCM_MSI_TARGET_ADDR_GT_4GB;
+		ctlr->msi.target_addr = BRCM_MSI_TARGET_ADDR_GT_4GB;
 	}
 #else
-	ctlr->msi.msi_target_addr = BRCM_MSI_TARGET_ADDR_LT_4GB;
+	ctlr->msi.target_addr = BRCM_MSI_TARGET_ADDR_LT_4GB;
 #endif
-	Kprintf("[pcie] %s: MSI target address set to 0x%lx\n", __func__, ctlr->msi.msi_target_addr);
+	Kprintf("[pcie] %s: MSI target address set to 0x%lx\n", __func__, ctlr->msi.target_addr);
 
 	u32 scb_size_val = rc_bar2_size ? (u32)(log2_floor_u64(rc_bar2_size) - 15) : 0xf; /* 0xf is 1GB */
 

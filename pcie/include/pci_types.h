@@ -96,11 +96,11 @@ struct pci_controller
 
 	struct pcie_msi
 	{
-		pci_addr_t msi_target_addr; /* MSI target address */
-		struct Interrupt *msi_vectors[MSI_MAX_VECTORS];
-		s32 vectors_used;
-		s32 irq; /* MSI IRQ at GIC-400 */
-		struct Interrupt irq_isr;
+		pci_addr_t target_addr;    /* MSI doorbell address written by the device */
+		struct Interrupt *vectors[MSI_MAX_VECTORS]; /* per-vector Exec interrupt servers */
+		s32 num_vectors;           /* number of allocated vector slots */
+		s32 gic_irq;               /* GIC-400 SPI line for the MSI aggregation interrupt */
+		struct Interrupt isr;      /* Exec Interrupt registered with gic400.library */
 		BOOL enabled;
 	} msi;
 
@@ -142,19 +142,19 @@ struct pci_device
 
 	struct flags_msi
 	{
-		u8 is_64;
-		u8 can_mask;
-		u8 multi_cap;
-		u8 multiple;
-		u16 mask_pos;
+		u8 addr64;        /* device supports 64-bit MSI address (PCI_MSI_FLAGS_64BIT) */
+		u8 maskable;      /* device has a per-vector mask register (PCI_MSI_FLAGS_MASKBIT) */
+		u8 log2_max_vecs; /* log2 of max vectors advertised by device (PCI_MSI_FLAGS_QMASK) */
+		u8 log2_num_vecs; /* log2 of vectors allocated/enabled (PCI_MSI_FLAGS_QSIZE) */
+		u16 mask_offset;  /* config-space byte offset of the MSI mask register */
 	} msi_flags;
 
 	struct device_msi
 	{
-		u32 cap; /* offset of MSI capability, or 0 if none */
+		u32 cap_offset; /* config-space offset of MSI capability, or 0 if none */
 		BOOL enabled;
-		s32 irq; // TODO more than one MSI per device... we're assuming this is the first one and this is in one block
-		u32 msi_mask;
+		s32 vector;     /* assigned MSI vector index (TODO: support multiple per device) */
+		u32 mask;       /* cached value of the MSI mask register */
 	} msi;
 
 	BOOL prefer_msi; /* TRUE - use MSI when configuring this device */

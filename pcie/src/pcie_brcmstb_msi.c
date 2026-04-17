@@ -56,16 +56,17 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 
 	u32 status = mmio_read32(pcie->base + PCIE_MSI_INTR2_STATUS);
 
-	for (u32 bit = 0; bit < MSI_MAX_VECTORS; bit++)
+	while (status)
 	{
-		// TODO slow
-		if (!(status & (1UL << bit)))
-			continue;
+		u32 bit = (u32)__builtin_ctz(status);
+		status &= status - 1u;
 
-		if (pcie->msi.msi_vectors[bit] != NULL)
-			call_interrupt(pcie->msi.msi_vectors[bit], bit);
-
+		/* Clear before calling so a re-assertion during the handler is
+		 * not lost — the hardware will re-set the status bit. */
 		mmio_write32(1u << bit, pcie->base + PCIE_MSI_INTR2_CLR);
+
+		if (pcie->msi.vectors[bit] != NULL)
+			call_interrupt(pcie->msi.vectors[bit], bit);
 	}
 
 	return 1;
@@ -101,23 +102,23 @@ s32 add_int_server(struct pci_device *dev, struct Interrupt *isr)
 {
 	Kprintf("[pcie] %s: adding MSI interrupt server for device %04lx:%04lx\n", __func__, dev->vendor, dev->device);
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
-	if (pcie->msi.vectors_used >= MSI_MAX_VECTORS)
+	if (pcie->msi.num_vectors >= MSI_MAX_VECTORS)
 		return -1;
 
 	s32 vector = 0;
-	while (vector < MSI_MAX_VECTORS && pcie->msi.msi_vectors[vector])
+	while (vector < MSI_MAX_VECTORS && pcie->msi.vectors[vector])
 		vector++;
 
 	if (vector == MSI_MAX_VECTORS)
 		return -1;
 
-	pcie->msi.msi_vectors[vector] = isr;
-	dev->msi.irq = vector;
-	pcie->msi.vectors_used++;
+	pcie->msi.vectors[vector] = isr;
+	dev->msi.vector = vector;
+	pcie->msi.num_vectors++;
 	Kprintf("[pcie] %s: assigned MSI vector %ld to device %04lx:%04lx\n", __func__, vector, dev->vendor, dev->device);
 
-	// TODO set msi_flags.multiple to actual number of vectors assigned
-	//  dev->msi_flags.multiple = ilog2(__roundup_pow_of_two(nvec));
+	// TODO set msi_flags.log2_num_vecs to actual number of vectors assigned
+	//  dev->msi_flags.log2_num_vecs = ilog2(__roundup_pow_of_two(nvec));
 	msi_capability_init(dev, 1);
 	pci_write_msg_msi(dev);
 
@@ -133,14 +134,14 @@ s32 rem_int_server(struct pci_device *dev)
 
 	pci_msi_shutdown(dev);
 
-	s32 vector = dev->msi.irq;
+	s32 vector = dev->msi.vector;
 	if (vector < 0 || vector >= MSI_MAX_VECTORS)
 		return -1;
 
-	pcie->msi.msi_vectors[vector] = NULL;
+	pcie->msi.vectors[vector] = NULL;
 
-	if (pcie->msi.vectors_used > 0)
-		pcie->msi.vectors_used--;
+	if (pcie->msi.num_vectors > 0)
+		pcie->msi.num_vectors--;
 
 	return 0;
 }
@@ -150,7 +151,7 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 	Kprintf("[pcie] %s: disabling MSI\n", __func__);
 	if (pcie->msi.enabled)
 	{
-		RemIntServerEx((ULONG)(pcie->msi.irq + 32), &pcie->msi.irq_isr);
+		RemIntServerEx((ULONG)(pcie->msi.gic_irq + 32), &pcie->msi.isr);
 		pcie->msi.enabled = FALSE;
 	}
 	brcm_pcie_close_gic400(pcie);
@@ -168,9 +169,9 @@ static void brcm_msi_set_regs(struct pci_controller *pcie)
 	 * The 0 bit of PCIE_MISC_MSI_BAR_CONFIG_LO is repurposed to MSI
 	 * enable, which we set to 1.
 	 */
-	mmio_write32(u64_lo32(pcie->msi.msi_target_addr) | 0x1,
+	mmio_write32(u64_lo32(pcie->msi.target_addr) | 0x1,
 		   pcie->base + PCIE_MISC_MSI_BAR_CONFIG_LO);
-	mmio_write32(u64_hi32(pcie->msi.msi_target_addr),
+	mmio_write32(u64_hi32(pcie->msi.target_addr),
 		   pcie->base + PCIE_MISC_MSI_BAR_CONFIG_HI);
 
 	val = PCIE_MISC_MSI_DATA_CONFIG_VAL_32;
@@ -184,15 +185,15 @@ s32 brcm_pcie_enable_msi(struct pci_controller *pcie)
 		return 0;
 	if (brcm_pcie_open_gic400(pcie) < 0)
 		return -ENODEV;
-	pcie->msi.irq_isr.is_Node.ln_Type = NT_INTERRUPT;
-	pcie->msi.irq_isr.is_Node.ln_Name = "xhci_msi_isr";
-	pcie->msi.irq_isr.is_Data = (APTR)pcie;
-	pcie->msi.irq_isr.is_Code = (APTR)brcm_pcie_msi_isr;
+	pcie->msi.isr.is_Node.ln_Type = NT_INTERRUPT;
+	pcie->msi.isr.is_Node.ln_Name = "xhci_msi_isr";
+	pcie->msi.isr.is_Data = (APTR)pcie;
+	pcie->msi.isr.is_Code = (APTR)brcm_pcie_msi_isr;
 
-	s32 ret = AddIntServerEx((ULONG)(pcie->msi.irq + 32), 0, FALSE, &pcie->msi.irq_isr);
+	s32 ret = AddIntServerEx((ULONG)(pcie->msi.gic_irq + 32), 0, FALSE, &pcie->msi.isr);
 	if (ret < 0)
 	{
-		Kprintf("[pcie] %s: can't register IRQ %ld\n", __func__, pcie->msi.irq);
+		Kprintf("[pcie] %s: can't register IRQ %ld\n", __func__, pcie->msi.gic_irq);
 		return -ENODEV;
 	}
 

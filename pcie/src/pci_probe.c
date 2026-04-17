@@ -51,6 +51,16 @@ s32 pci_probe_bus(struct pci_bus *bus)
 	if (!bus->pci_bridge)
 		return 0;
 
+	/* Sanity-check: the bridge device must present a Type 1 (bridge) header. */
+	u8 header_type;
+	pci_read_config8(bus->pci_bridge, PCI_HEADER_TYPE, &header_type);
+	if ((header_type & 0x7f) != PCI_HEADER_TYPE_BRIDGE)
+	{
+		Kprintf("[pcie] %s: device %ld has Non-Bridge Header Type 0x%lx\n",
+				__func__, PCI_DEV(pci_get_bdf(bus->pci_bridge)), (ULONG)header_type);
+		return -EINVAL;
+	}
+
 	if (bus->pci_bridge->flags & DM_FLAG_ACTIVATED)
 		return 0;
 
@@ -77,9 +87,8 @@ s32 pci_probe_bus(struct pci_bus *bus)
 	bus->bus_number = ++bus->controller->bus_number_last;
 	bus->bus_number_last_sub = bus->bus_number;
 
-	// ret = device_get_dma_constraints(dev);
-	// if (ret)
-	// 	goto fail;
+	Kprintf("[pcie] %s: probing bus %ld/%s\n", __func__, bus->bus_number, bus->name);
+	pciauto_prescan_setup_bridge(bus);
 
 	ret = pci_bind_bus_devices(bus);
 	if (ret)
@@ -95,6 +104,7 @@ s32 pci_probe_bus(struct pci_bus *bus)
 		goto fail;
 	}
 
+	pciauto_postscan_setup_bridge(bus);
 	return 0;
 
 fail:
@@ -121,34 +131,6 @@ s32 pci_auto_config_devices(struct pci_bus *bus)
 	}
 
 	KprintfH("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
-	return 0;
-}
-
-s32 pci_hose_probe_bus(struct pci_bus *bus, u32 *last_bus_out)
-{
-	u8 header_type;
-	pci_read_config8(bus->pci_bridge, PCI_HEADER_TYPE, &header_type);
-	header_type &= 0x7f;
-	if (header_type != PCI_HEADER_TYPE_BRIDGE)
-	{
-		Kprintf("[pcie] %s: Skipping PCI device %ld with Non-Bridge Header Type 0x%lx\n", __func__, PCI_DEV(pci_get_bdf(bus->pci_bridge)), header_type);
-		return -EINVAL;
-	}
-
-	// TODO merge this with pci_probe_bus
-	bus->bus_number = bus->controller->bus_number_last + 1;
-	Kprintf("[pcie] %s: bus = %ld/%s\n", __func__, bus->bus_number, bus->name);
-	pciauto_prescan_setup_bridge(bus);
-
-	s32 ret = pci_probe_bus(bus);
-	if (ret)
-	{
-		Kprintf("[pcie] %s: Cannot probe bus %s: %ld\n", __func__, bus->name, ret);
-		return ret;
-	}
-
-	pciauto_postscan_setup_bridge(bus);
-	*last_bus_out = bus->bus_number_last_sub;
 	return 0;
 }
 

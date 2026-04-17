@@ -190,8 +190,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 		/* Check the BAR type and set our address mask */
 		if (bar_response & PCI_BASE_ADDRESS_SPACE)
 		{
-			bar_size = bar_response & PCI_BASE_ADDRESS_IO_MASK;
-			bar_size &= ~(bar_size - 1);
+			bar_size = (u32)(~(bar_response & PCI_BASE_ADDRESS_IO_MASK) + 1u);
 
 			bar_res = io;
 
@@ -654,14 +653,13 @@ s32 pciauto_config_device(struct pci_device *dev)
 		struct pci_bus *bus;
 		pci_create_bus(&bus, dev->bus, dev, ctlr);
 
-		u32 last_sub;
-		s32 err = pci_hose_probe_bus(bus, &last_sub);
+		s32 err = pci_probe_bus(bus);
 		if (err < 0)
 		{
 			Kprintf("[pcie] %s: Failed to probe bus %ld\n", __func__, sub_bus);
 			return err;
 		}
-		sub_bus = last_sub;
+		sub_bus = bus->bus_number_last_sub;
 		break;
 
 	case PCI_CLASS_BRIDGE_CARDBUS:
