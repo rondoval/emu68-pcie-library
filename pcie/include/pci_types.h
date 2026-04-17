@@ -206,6 +206,9 @@ struct pci_device
 	u16 vendor;              /* PCI vendor ID read from config space (offset 0x00) */
 	u16 device;              /* PCI device ID read from config space (offset 0x02) */
 	u32 class;               /* 24-bit class/subclass/prog-if read from config space (offset 0x09) */
+	u8  revision;            /* revision ID read from config space (offset 0x08); cached at probe time */
+	u16 subsys_vendor;       /* subsystem vendor ID (offset 0x2C); cached at probe time */
+	u16 subsys_id;           /* subsystem device ID (offset 0x2E); cached at probe time */
 
 	/* MSI capability flags decoded from PCI_MSI_FLAGS at msi_capability_init() time */
 	struct flags_msi

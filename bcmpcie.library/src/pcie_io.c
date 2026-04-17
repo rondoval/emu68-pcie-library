@@ -8,8 +8,8 @@
  */
 
 #include <pcie_private.h>
-#include <pci.h>
 #include <iomem.h>
+#include <pci_io.h>
 
 #if defined(__INTELLISENSE__)
 #define asm(x)

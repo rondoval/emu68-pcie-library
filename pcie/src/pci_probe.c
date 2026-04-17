@@ -155,6 +155,16 @@ s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device
 	dev->vendor = vendor;
 	dev->device = device;
 	dev->class = class;
+
+	/* Cache identity fields that are static after enumeration */
+	u32 tmp = 0;
+	pci_read_config(dev, PCI_REVISION_ID, &tmp, PCI_SIZE_8);
+	dev->revision = (u8)tmp;
+	pci_read_config(dev, PCI_SUBSYSTEM_VENDOR_ID, &tmp, PCI_SIZE_16);
+	dev->subsys_vendor = (u16)tmp;
+	pci_read_config(dev, PCI_SUBSYSTEM_ID, &tmp, PCI_SIZE_16);
+	dev->subsys_id = (u16)tmp;
+
 	dev->prefer_msi = FALSE; /* default to not preferring MSI for compatibility */
 
 	AddTailMinList(&bus->devices, (struct MinNode *)dev);
