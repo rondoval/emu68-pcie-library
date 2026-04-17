@@ -4,6 +4,8 @@
  * Written by Simon Glass <sjg@chromium.org>
  */
 #include <pci.h>
+#include <pci_capability.h>
+#include <pci_io.h>
 
 static u32 _pci_find_next_capability(struct pci_device *dev, u32 pos, u8 cap)
 {

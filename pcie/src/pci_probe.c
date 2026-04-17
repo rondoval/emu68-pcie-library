@@ -19,6 +19,11 @@
 #include <format.h>
 #include <pcie_brcmstb.h>
 #include <pci.h>
+#include <pci_auto.h>
+#include <pci_probe.h>
+#include <pci_io.h>
+#include <pci_util.h>
+#include <pci_lookup.h>
 #include <devtree.h>
 #include <minlist.h>
 

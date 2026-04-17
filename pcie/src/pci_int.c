@@ -10,6 +10,9 @@
 
 #include <pcie_brcmstb.h>
 #include <pci.h>
+#include <pci_int.h>
+#include <pci_io.h>
+#include <pci_util.h>
 
 /**
  * pci_intx - enables/disables PCI INTx for device dev

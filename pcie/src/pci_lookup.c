@@ -2,6 +2,8 @@
 
 #include <pci.h>
 #include <errors.h>
+#include <pci_lookup.h>
+#include <pci_util.h>
 
 s32 pci_bus_find_devfn(const struct pci_bus *bus, pci_dev_t find_devfn, struct pci_device **devp)
 {

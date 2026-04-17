@@ -4,6 +4,9 @@
  * Written by Simon Glass <sjg@chromium.org>
  */
 #include <pci.h>
+#include <pcie_brcmstb.h>
+#include <pci_util.h>
+#include <pci_io.h>
  
 s32 pci_bus_clrset_config32(struct pci_bus *bus, pci_dev_t bdf, u32 offset, u32 clr, u32 set)
 {

@@ -15,6 +15,13 @@
 #include <pci.h>
 #include <debug.h>
 #include <timing.h>
+#include <pci_auto.h>
+#include <pci_probe.h>
+#include <pci_io.h>
+#include <pci_capability.h>
+#include <pci_int.h>
+#include <pci_msi.h>
+#include <pci_util.h>
 
 /* the user can define CFG_SYS_PCI_CACHE_LINE_SIZE to avoid problems */
 #ifndef CFG_SYS_PCI_CACHE_LINE_SIZE

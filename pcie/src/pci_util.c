@@ -8,6 +8,9 @@
 #include <debug.h>
 #include <errors.h>
 #include <timing.h>
+#include <pci_util.h>
+#include <pci_capability.h>
+#include <pci_io.h>
 
 s32 pci_get_bus(struct pci_controller *controller, u32 busnum, struct pci_bus **busp)
 {

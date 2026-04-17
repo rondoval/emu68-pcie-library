@@ -14,6 +14,11 @@
 
 #include <pci.h>
 #include <bcm2711.h> //TODO remove
+#include <pci_msi.h>
+#include <pci_capability.h>
+#include <pci_io.h>
+#include <pci_util.h>
+#include <pci_int.h>
 
 /**
  * pci_msi_vec_count - Return the number of MSI vectors a device can send

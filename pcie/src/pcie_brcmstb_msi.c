@@ -20,6 +20,8 @@
 #include <iomem.h>
 #include <pci.h>
 #include <bcm2711.h>
+#include <pci_msi.h>
+#include <pci_util.h>
 #include <pcie_brcmstb.h>
 
 /* call_interrupt: Invoke interrupt server with Exec ABI.

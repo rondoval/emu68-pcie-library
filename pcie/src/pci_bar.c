@@ -5,6 +5,9 @@
  */
 #include <pci.h>
 #include <debug.h>
+#include <pci_bar.h>
+#include <pci_util.h>
+#include <pci_io.h>
 
 phys_addr_t pci_bus_to_phys(struct pci_device *dev, pci_addr_t bus_addr, size_t len, u32 mask, u32 flags)
 {

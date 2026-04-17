@@ -24,6 +24,7 @@
 #include <bcm2711.h>
 #include <pci.h>
 #include <debug.h>
+#include <pci_util.h>
 #include <devtree.h>
 #include <errors.h>
 #include <iomem.h>
