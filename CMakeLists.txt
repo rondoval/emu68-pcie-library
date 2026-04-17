@@ -11,4 +11,5 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 add_subdirectory(bcmpcie.library)
+add_subdirectory(openpci.library)
 add_subdirectory(lspci)
