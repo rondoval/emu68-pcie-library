@@ -94,14 +94,15 @@ void pci_assign_irq(struct pci_device *dev)
 
 	/* Map the pin to INT line */
 	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
-	target->irq = irq;
 	Kprintf("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
+	target->irq_pin = (u8)pin;
+	target->irq_line = (u8)irq;
 
 	/*
 	 * Always tell the device, so the driver knows what is the real IRQ
 	 * to use; the device does not use it.
 	 */
-	pci_write_config8(target, PCI_INTERRUPT_LINE, (u32)irq);
+	pci_write_config8(target, PCI_INTERRUPT_LINE, (u32)pin);
 }
 
 BOOL pci_check_and_set_intx_mask(struct pci_device *dev, BOOL mask)

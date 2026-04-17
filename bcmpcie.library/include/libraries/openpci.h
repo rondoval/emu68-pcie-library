@@ -24,6 +24,7 @@
 /* pci_allocdma_mem flags */
 #define MEM_PCI			0x1  /* on the PCI bus, always implied */
 #define MEM_NONCACHEABLE	0x2  /* target memory must not be cachable for 68K */
+#define MEM_24BITDMA		0x4  /* hint: 24-bit DMA address required; no-op on BCM2711 */
 
 #define MIN_OPENPCI_VERSION 3 /* Version 3 or more */
 

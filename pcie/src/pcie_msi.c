@@ -25,7 +25,7 @@
  * and returns a power of two, up to a maximum of 2^5 (32), according to the
  * MSI specification.
  **/
-static s32 pci_msi_vec_count(struct pci_device *dev)
+static s32 __attribute__((unused)) pci_msi_vec_count(struct pci_device *dev)
 {
 	s32 ret;
 	u16 msgctl;
@@ -161,6 +161,7 @@ static s32 msi_setup_msi_desc(struct pci_device *dev, u32 nvec)
 {
 	KprintfH("[pcie] %s: device %04lx:%04lx setting up MSI descriptor with %ld vectors\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, nvec);
+	(void)nvec;
 	u16 control;
 
 	/* MSI Entry Initialization */
@@ -236,7 +237,7 @@ unlock:
 	return ret;
 }
 
-static s32 __pci_enable_msi_range(struct pci_device *dev, u32 minvec, u32 maxvec)
+static s32 __attribute__((unused)) __pci_enable_msi_range(struct pci_device *dev, u32 minvec, u32 maxvec)
 {
 	s32 nvec;
 	s32 rc;

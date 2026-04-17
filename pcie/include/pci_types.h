@@ -157,8 +157,9 @@ struct pci_device
 		u32 msi_mask;
 	} msi;
 
-	s32 irq;
-	BOOL prefer_msi;
+	BOOL prefer_msi; /* TRUE - use MSI when configuring this device */
+	u8 irq_pin; /* INTA=1, INTB=2, INTC=3, INTD=4 */
+	u8 irq_line; /* GIC-400 IRQ line */
 };
 
 #endif

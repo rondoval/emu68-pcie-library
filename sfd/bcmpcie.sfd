@@ -55,8 +55,14 @@ ULONG pcie_private() ()
 ==public
 * -204: v3 tag API
 struct pci_dev *FindBoardA(struct pci_dev *prev, struct TagItem *tags) (A0,A1)
+==varargs
+struct pci_dev *FindBoard(struct pci_dev *prev, Tag firstTag, ...) (A0,A1)
 ULONG GetBoardAttrsA(struct pci_dev *dev, struct TagItem *tags) (A0,A1)
+==varargs
+ULONG GetBoardAttrs(struct pci_dev *dev, Tag firstTag, ...) (A0,A1)
 BOOL SetBoardAttrsA(struct pci_dev *dev, struct TagItem *tags) (A0,A1)
+==varargs
+BOOL SetBoardAttrs(struct pci_dev *dev, Tag firstTag, ...) (A0,A1)
 APTR AllocateDMAMemoryForBoard(struct pci_dev *dev, ULONG size, ULONG flags) (A0,D0,D1)
 void ReleaseDMAMemoryForBoard(struct pci_dev *dev, APTR mem, ULONG size) (A0,A1,D0)
 BOOL AddMemoryHandlerForBoard(struct pci_dev *dev, struct Hook *hk, BYTE pri) (A0,A1,D0)

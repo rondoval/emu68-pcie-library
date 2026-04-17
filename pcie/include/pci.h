@@ -75,10 +75,10 @@
 #define PCIE_ECAM_DEV_SHIFT 15	/* Device number */
 #define PCIE_ECAM_FUNC_SHIFT 12 /* Function number */
 
-#define PCIE_ECAM_BUS_MASK 0xff
-#define PCIE_ECAM_DEV_MASK 0x1f
-#define PCIE_ECAM_FUNC_MASK 0x7
-#define PCIE_ECAM_REG_MASK 0xfff /* Limit offset to a maximum of 4K */
+#define PCIE_ECAM_BUS_MASK 0xffu
+#define PCIE_ECAM_DEV_MASK 0x1fu
+#define PCIE_ECAM_FUNC_MASK 0x7u
+#define PCIE_ECAM_REG_MASK 0xfffu /* Limit offset to a maximum of 4K */
 
 #define PCIE_ECAM_BUS(x) (((x) & PCIE_ECAM_BUS_MASK) << PCIE_ECAM_BUS_SHIFT)
 #define PCIE_ECAM_DEV(x) (((x) & PCIE_ECAM_DEV_MASK) << PCIE_ECAM_DEV_SHIFT)

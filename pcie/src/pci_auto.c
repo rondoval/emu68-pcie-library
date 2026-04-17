@@ -52,9 +52,9 @@ static s32 pciauto_region_allocate(struct pci_region *res, pci_size_t size, pci_
 	if (addr - res->bus_start + size > res->size)
 	{
 		Kprintf("[pcie] %s: No room in resource, avail start=%lx%08lx / size=%lx%08lx, need=%lx%08lx\n", __func__,
-			(ULONG)(res->bus_lower >> 32), (ULONG)(res->bus_lower & 0xffffffff),
-			(ULONG)(res->size >> 32), (ULONG)(res->size & 0xffffffff),
-			(ULONG)(size >> 32), (ULONG)(size & 0xffffffff));
+				(ULONG)((u64)(res->bus_lower) >> 32), (ULONG)(res->bus_lower & 0xffffffff),
+				(ULONG)((u64)(res->size) >> 32), (ULONG)(res->size & 0xffffffff),
+				(ULONG)((u64)(size) >> 32), (ULONG)(size & 0xffffffff));
 		goto error;
 	}
 
@@ -66,7 +66,7 @@ static s32 pciauto_region_allocate(struct pci_region *res, pci_size_t size, pci_
 
 	res->bus_lower = addr + size;
 
-	Kprintf("[pcie] %s: address=0x%lx%08lx bus_lower=0x%lx%08lx\n", __func__, (ULONG)(addr >> 32), (ULONG)(addr & 0xffffffff), (ULONG)(res->bus_lower >> 32), (ULONG)(res->bus_lower & 0xffffffff));
+	Kprintf("[pcie] %s: address=0x%lx%08lx bus_lower=0x%lx%08lx\n", __func__, (ULONG)((u64)(addr) >> 32), (ULONG)(addr & 0xffffffff), (ULONG)((u64)(res->bus_lower) >> 32), (ULONG)(res->bus_lower & 0xffffffff));
 
 	*bar = addr;
 	return 0;
@@ -78,18 +78,19 @@ error:
 
 static void pciauto_show_region(const char *name, struct pci_region *region)
 {
+	(void)name;
 	pciauto_region_init(region);
 	KprintfH("[pcie] %s: Bus %s region: [%lx%08lx-%lx%08lx], Physical Memory [%lx%08lx-%lx%08lx]\n",
-		__func__,
-		name,
-		(ULONG)(region->bus_start >> 32),
-		(ULONG)(region->bus_start & 0xffffffff),
-		(ULONG)((region->bus_start + region->size - 1) >> 32),
-		(ULONG)((region->bus_start + region->size - 1) & 0xffffffff),
-		(ULONG)(region->phys_start >> 32),
-		(ULONG)(region->phys_start & 0xffffffff),
-		(ULONG)((region->phys_start + region->size - 1) >> 32),
-		(ULONG)((region->phys_start + region->size - 1) & 0xffffffff));
+			 __func__,
+			 name,
+			 (ULONG)((u64)(region->bus_start) >> 32),
+			 (ULONG)(region->bus_start & 0xffffffff),
+			 (ULONG)((u64)(region->bus_start + region->size - 1) >> 32),
+			 (ULONG)((region->bus_start + region->size - 1) & 0xffffffff),
+			 (ULONG)(region->phys_start >> 32),
+			 (ULONG)(region->phys_start & 0xffffffff),
+			 (ULONG)((region->phys_start + region->size - 1) >> 32),
+			 (ULONG)((region->phys_start + region->size - 1) & 0xffffffff));
 }
 
 void pciauto_config_init(struct pci_controller *ctrl)
@@ -129,9 +130,9 @@ void pciauto_config_init(struct pci_controller *ctrl)
 }
 
 static void pciauto_setup_device(struct pci_device *dev,
-									struct pci_region *mem,
-									struct pci_region *prefetch,
-									struct pci_region *io)
+								 struct pci_region *mem,
+								 struct pci_region *prefetch,
+								 struct pci_region *io)
 {
 	u32 bar_response;
 	pci_size_t bar_size;
@@ -139,7 +140,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 	u32 cmdstat = 0;
 	u32 bar;
 	u32 bar_nr = 0;
-	u8 bars_num = 0;
+	u32 bars_num = 0;
 	u8 header_type;
 	u16 rom_addr;
 	pci_addr_t bar_value;
@@ -216,12 +217,16 @@ static void pciauto_setup_device(struct pci_device *dev,
 				bar_size = (u32)(~(bar_response & PCI_BASE_ADDRESS_MEM_MASK) + 1u);
 			}
 
-			if (prefetch && (bar_response & PCI_BASE_ADDRESS_MEM_PREFETCH) && (found_mem64 || prefetch->bus_lower < 0x100000000ULL))
+			if (prefetch && (bar_response & PCI_BASE_ADDRESS_MEM_PREFETCH)
+#ifdef CONFIG_SYS_PCI_64BIT
+				&& (found_mem64 || prefetch->bus_lower < 0x100000000ULL)
+#endif
+			)
 				bar_res = prefetch;
 			else
 				bar_res = mem;
 
-			Kprintf("[pcie] %s: BAR %ld, %s%s, size=0x%lx%08lx\n", __func__, bar_nr, bar_res == prefetch ? "Prf" : "Mem", found_mem64 ? "64" : "", (ULONG)(bar_size >> 32), (ULONG)(bar_size & 0xffffffff));
+			Kprintf("[pcie] %s: BAR %ld, %s%s, size=0x%lx%08lx\n", __func__, bar_nr, bar_res == prefetch ? "Prf" : "Mem", found_mem64 ? "64" : "", (ULONG)((u64)(bar_size) >> 32), (ULONG)(bar_size & 0xffffffff));
 		}
 
 		ret = pciauto_region_allocate(bar_res, bar_size, &bar_value, found_mem64);
@@ -231,14 +236,14 @@ static void pciauto_setup_device(struct pci_device *dev,
 		if (!ret)
 		{
 			/* Write it out and update our limit */
-				pci_write_config32(dev, bar, (u32)bar_value);
+			pci_write_config32(dev, bar, (u32)bar_value);
 
 			if (found_mem64)
 			{
 				bar += 4;
 #ifdef CONFIG_SYS_PCI_64BIT
 				pci_write_config32(dev, bar,
-									  (ULONG)(bar_value >> 32));
+								   (ULONG)(bar_value >> 32));
 #else
 				/*
 				 * If we are a 64-bit decoder then increment to
@@ -269,7 +274,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 			if (pciauto_region_allocate(mem, bar_size, &bar_value,
 										FALSE) == 0)
 			{
-				pci_write_config32(dev, rom_addr, bar_value);
+				pci_write_config32(dev, rom_addr, (u32)bar_value);
 			}
 			cmdstat |= PCI_COMMAND_MEMORY;
 			Kprintf("\n");
@@ -283,7 +288,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 
 	pci_write_config16(dev, PCI_COMMAND, cmdstat);
 	pci_write_config8(dev, PCI_CACHE_LINE_SIZE,
-						 CFG_SYS_PCI_CACHE_LINE_SIZE);
+					  CFG_SYS_PCI_CACHE_LINE_SIZE);
 	pci_write_config8(dev, PCI_LATENCY_TIMER, 0x80);
 
 	pci_assign_irq(dev);
@@ -318,7 +323,7 @@ static BOOL pciauto_exp_link_stable(struct pci_device *dev, u32 pcie_off)
 	do
 	{
 		pci_read_config16(dev, pcie_off + PCI_EXP_LNKSTA,
-							 &exp_lnksta);
+						  &exp_lnksta);
 		dllla = !!(exp_lnksta & PCI_EXP_LNKSTA_DLLLA);
 		lnktr = !!(exp_lnksta & PCI_EXP_LNKSTA_LT);
 
@@ -434,10 +439,10 @@ static void pciauto_exp_fixup_link(struct pci_device *dev, u32 pcie_off)
 	pci_read_config16(dev, pcie_off + PCI_EXP_LNKCTL2, &exp_lnkctl2);
 
 	pci_write_config16(dev, pcie_off + PCI_EXP_LNKCTL2,
-					  (u32)((exp_lnkctl2 & ~PCI_EXP_LNKCTL2_TLS) |
-						  PCI_EXP_LNKCTL2_TLS_2_5GT));
+					   (u32)((exp_lnkctl2 & ~PCI_EXP_LNKCTL2_TLS) |
+							 PCI_EXP_LNKCTL2_TLS_2_5GT));
 	pci_write_config16(dev, pcie_off + PCI_EXP_LNKCTL,
-						  exp_lnkctl | PCI_EXP_LNKCTL_RL);
+					   exp_lnkctl | PCI_EXP_LNKCTL_RL);
 
 	if (pciauto_exp_link_stable(dev, pcie_off))
 	{
@@ -450,9 +455,9 @@ static void pciauto_exp_fixup_link(struct pci_device *dev, u32 pcie_off)
 				__func__, PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 
 		pci_write_config16(dev, pcie_off + PCI_EXP_LNKCTL2,
-							  exp_lnkctl2);
+						   exp_lnkctl2);
 		pci_write_config16(dev, pcie_off + PCI_EXP_LNKCTL,
-							  exp_lnkctl | PCI_EXP_LNKCTL_RL);
+						   exp_lnkctl | PCI_EXP_LNKCTL_RL);
 	}
 }
 
@@ -494,7 +499,7 @@ void pciauto_prescan_setup_bridge(struct pci_bus *brd)
 		 * I/O space
 		 */
 		pci_write_config16(dev, PCI_MEMORY_BASE, ((pci_mem->bus_lower & 0xfff00000) >> 16) & PCI_MEMORY_RANGE_MASK);
-		KprintfH("[pcie] %s: Bus %ld memory base set to 0x%lx%08lx\n", __func__, brd->bus_number, (ULONG)(pci_mem->bus_lower >> 32), (ULONG)(pci_mem->bus_lower & 0xffffffff));
+		KprintfH("[pcie] %s: Bus %ld memory base set to 0x%lx%08lx\n", __func__, brd->bus_number, (ULONG)((u64)(pci_mem->bus_lower) >> 32), (ULONG)(pci_mem->bus_lower & 0xffffffff));
 
 		cmdstat |= PCI_COMMAND_MEMORY;
 	}
@@ -508,12 +513,12 @@ void pciauto_prescan_setup_bridge(struct pci_bus *brd)
 		 * Set up memory and I/O filter limits, assume 32-bit
 		 * I/O space
 		 */
-		pci_write_config16(dev, PCI_PREF_MEMORY_BASE, (((pci_prefetch->bus_lower & 0xfff00000) >> 16) & PCI_PREF_RANGE_MASK) | prefechable_64);
-		KprintfH("[pcie] %s: Bus %ld prefetchable memory base set to 0x%lx%08lx\n", __func__, brd->bus_number, (ULONG)(pci_prefetch->bus_lower >> 32), (ULONG)(pci_prefetch->bus_lower & 0xffffffff));
+		pci_write_config16(dev, PCI_PREF_MEMORY_BASE, (u32)(((pci_prefetch->bus_lower & 0xfff00000) >> 16) & PCI_PREF_RANGE_MASK) | prefechable_64);
+		KprintfH("[pcie] %s: Bus %ld prefetchable memory base set to 0x%lx%08lx\n", __func__, brd->bus_number, (ULONG)((u64)(pci_prefetch->bus_lower) >> 32), (ULONG)(pci_prefetch->bus_lower & 0xffffffff));
 		if (prefechable_64 == PCI_PREF_RANGE_TYPE_64)
 #ifdef CONFIG_SYS_PCI_64BIT
 			pci_write_config32(dev, PCI_PREF_BASE_UPPER32,
-								  pci_prefetch->bus_lower >> 32);
+							   (u32)(pci_prefetch->bus_lower >> 32));
 #else
 			pci_write_config32(dev, PCI_PREF_BASE_UPPER32, 0x0);
 #endif
@@ -537,7 +542,7 @@ void pciauto_prescan_setup_bridge(struct pci_bus *brd)
 		/* Round I/O allocator to 4KB boundary */
 		pciauto_region_align(pci_io, 0x1000);
 
-		pci_write_config8(dev, PCI_IO_BASE, (((pci_io->bus_lower & 0x0000f000) >> 8) & PCI_IO_RANGE_MASK) | io_32);
+		pci_write_config8(dev, PCI_IO_BASE, (u32)(((pci_io->bus_lower & 0x0000f000) >> 8) & PCI_IO_RANGE_MASK) | io_32);
 		if (io_32 == PCI_IO_RANGE_TYPE_32)
 			pci_write_config16(dev, PCI_IO_BASE_UPPER16, (pci_io->bus_lower & 0xffff0000) >> 16);
 
@@ -583,7 +588,7 @@ void pciauto_postscan_setup_bridge(struct pci_bus *bus)
 		/* Round memory allocator */
 		pciauto_region_align(pci_mem, CONFIG_PCI_BRIDGE_MEM_ALIGNMENT);
 		pci_write_config16(dev, PCI_MEMORY_LIMIT, ((pci_mem->bus_lower - 1) >> 16) & PCI_MEMORY_RANGE_MASK);
-		KprintfH("[pcie] %s: Bus %ld memory limit set to 0x%lx%08lx\n", __func__, bus->bus_number, (ULONG)((pci_mem->bus_lower - 1) >> 32), (ULONG)((pci_mem->bus_lower - 1) & 0xffffffff));
+		KprintfH("[pcie] %s: Bus %ld memory limit set to 0x%lx%08lx\n", __func__, bus->bus_number, (ULONG)((u64)(pci_mem->bus_lower - 1) >> 32), (ULONG)((pci_mem->bus_lower - 1) & 0xffffffff));
 	}
 
 	if (pci_prefetch)
@@ -596,12 +601,12 @@ void pciauto_postscan_setup_bridge(struct pci_bus *bus)
 		/* Round memory allocator */
 		pciauto_region_align(pci_prefetch, CONFIG_PCI_BRIDGE_MEM_ALIGNMENT);
 
-		pci_write_config16(dev, PCI_PREF_MEMORY_LIMIT, (((pci_prefetch->bus_lower - 1) >> 16) & PCI_PREF_RANGE_MASK) | prefechable_64);
-		KprintfH("[pcie] %s: Bus %ld prefetchable memory limit set to 0x%lx%08lx\n", __func__, bus->bus_number, (ULONG)((pci_prefetch->bus_lower - 1) >> 32), (ULONG)((pci_prefetch->bus_lower - 1) & 0xffffffff));
+		pci_write_config16(dev, PCI_PREF_MEMORY_LIMIT, (u32)(((pci_prefetch->bus_lower - 1) >> 16) & PCI_PREF_RANGE_MASK) | prefechable_64);
+		KprintfH("[pcie] %s: Bus %ld prefetchable memory limit set to 0x%lx%08lx\n", __func__, bus->bus_number, (ULONG)((u64)(pci_prefetch->bus_lower - 1) >> 32), (ULONG)((pci_prefetch->bus_lower - 1) & 0xffffffff));
 		if (prefechable_64 == PCI_PREF_RANGE_TYPE_64)
 #ifdef CONFIG_SYS_PCI_64BIT
 			pci_write_config32(dev, PCI_PREF_LIMIT_UPPER32,
-								  (pci_prefetch->bus_lower - 1) >> 32);
+							   (u32)((pci_prefetch->bus_lower - 1) >> 32));
 #else
 			pci_write_config32(dev, PCI_PREF_LIMIT_UPPER32, 0x0);
 #endif
@@ -617,7 +622,7 @@ void pciauto_postscan_setup_bridge(struct pci_bus *bus)
 		/* Round I/O allocator to 4KB boundary */
 		pciauto_region_align(pci_io, 0x1000);
 
-		pci_write_config8(dev, PCI_IO_LIMIT, ((((pci_io->bus_lower - 1) & 0x0000f000) >> 8) & PCI_IO_RANGE_MASK) | io_32);
+		pci_write_config8(dev, PCI_IO_LIMIT, ((u32)(((pci_io->bus_lower - 1) & 0x0000f000) >> 8) & PCI_IO_RANGE_MASK) | io_32);
 		if (io_32 == PCI_IO_RANGE_TYPE_32)
 			pci_write_config16(dev, PCI_IO_LIMIT_UPPER16, ((pci_io->bus_lower - 1) & 0xffff0000) >> 16);
 	}

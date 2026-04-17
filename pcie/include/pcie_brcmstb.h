@@ -20,4 +20,6 @@ s32 bcm2711_reload_vl805_firmware(void);
 s32 brcm_pcie_enable_msi(struct pci_controller *pcie);
 void brcm_pcie_disable_msi(struct pci_controller *pcie);
 
+s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index);
+
 #endif // PCI_BRCMSTB_H
