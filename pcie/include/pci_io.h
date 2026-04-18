@@ -15,21 +15,6 @@
 #include <pci_types.h>
 
 /**
- * pci_read_config() - Read from PCI configuration space
- *
- * Reads @size bytes from config register @offset of @dev into *@valuep.
- * On error *@valuep is set to the all-ones bus-idle value for @size.
- *
- * @dev:    Device to read from
- * @offset: Byte offset of the register
- * @valuep: Receives the value read
- * @size:   Transfer width (PCI_SIZE_8, PCI_SIZE_16, or PCI_SIZE_32)
- * Return:  0 on success, negative on error
- */
-s32 pci_read_config(const struct pci_device *dev, u32 offset,
-					u32 *valuep, enum pci_size_t size);
-
-/**
  * pci_read_config8() - Read an 8-bit PCI configuration register
  *
  * @dev:    Device to read from
@@ -58,18 +43,6 @@ s32 pci_read_config16(const struct pci_device *dev, u32 offset, u16 *valuep);
  * Return:  0 on success, negative on error
  */
 s32 pci_read_config32(const struct pci_device *dev, u32 offset, u32 *valuep);
-
-/**
- * pci_write_config() - Write to PCI configuration space
- *
- * @dev:    Device to write to
- * @offset: Byte offset of the register
- * @value:  Value to write
- * @size:   Transfer width (PCI_SIZE_8, PCI_SIZE_16, or PCI_SIZE_32)
- * Return:  0 on success, negative on error
- */
-s32 pci_write_config(struct pci_device *dev, u32 offset, u32 value,
-					 enum pci_size_t size);
 
 /**
  * pci_write_config8() - Write an 8-bit PCI configuration register
@@ -156,31 +129,5 @@ s32 pci_clrset_config32(struct pci_device *dev, u32 offset, u32 clr, u32 set);
  */
 s32 pci_bus_clrset_config32(struct pci_bus *bus, pci_dev_t bdf, u32 offset,
 							u32 clr, u32 set);
-
-/**
- * pci_read_bar32() - Read the address stored in a 32-bit BAR register
- *
- * Reads BAR @barnum from config space and returns the assigned bus address
- * with the type/flag bits stripped.  For I/O BARs the PCI_BASE_ADDRESS_IO_MASK
- * is applied; for memory BARs the PCI_BASE_ADDRESS_MEM_MASK is applied.
- * Returns 0xffffffff if the register reads as all-ones (BAR not implemented).
- *
- * @dev:    Device to read from
- * @barnum: BAR index (0–5 for type-0 endpoints, 0–1 for bridges)
- * Return:  Assigned bus address with flags stripped, or 0xffffffff if absent
- */
-u32 pci_read_bar32(const struct pci_device *dev, u32 barnum);
-
-/**
- * pci_write_bar32() - Write a raw 32-bit value to a BAR register
- *
- * Writes @addr directly into BAR register @barnum without masking.  The
- * caller is responsible for preserving the BAR type bits when required.
- *
- * @dev:    Device to write to
- * @barnum: BAR index (0–5 for type-0 endpoints, 0–1 for bridges)
- * @addr:   Full 32-bit value to write to the BAR register
- */
-void pci_write_bar32(struct pci_device *dev, u32 barnum, u32 addr);
 
 #endif /* _PCI_IO_H */

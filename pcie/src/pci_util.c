@@ -102,61 +102,6 @@ u32 pci_conv_32_to_size(u32 value, u32 offset, enum pci_size_t size)
 	}
 }
 
-u32 pci_conv_size_to_32(u32 old, u32 value, u32 offset, enum pci_size_t size)
-{
-	u32 off_mask;
-	u32 val_mask;
-
-	switch (size)
-	{
-	case PCI_SIZE_8:
-		off_mask = 3;
-		val_mask = 0xff;
-		break;
-	case PCI_SIZE_16:
-		off_mask = 2;
-		val_mask = 0xffff;
-		break;
-	default:
-		return value;
-	}
-	u32 shift = (offset & off_mask) * 8;
-	u32 ldata = (value & val_mask) << shift;
-	u32 mask = val_mask << shift;
-	value = (old & ~mask) | ldata;
-
-	return value;
-}
-
-u32 pci_get_regions(struct pci_device *dev, struct pci_region **iop, struct pci_region **memp, struct pci_region **prefp)
-{
-	struct pci_controller *ctrl = pci_get_controller(dev->bus);
-
-	*iop = NULL;
-	*memp = NULL;
-	*prefp = NULL;
-	for (u32 i = 0; i < ctrl->region_count; i++)
-	{
-		switch (ctrl->regions[i].flags)
-		{
-		case PCI_REGION_IO:
-			if (!*iop || (*iop)->size < ctrl->regions[i].size)
-				*iop = ctrl->regions + i;
-			break;
-		case PCI_REGION_MEM:
-			if (!*memp || (*memp)->size < ctrl->regions[i].size)
-				*memp = ctrl->regions + i;
-			break;
-		case (PCI_REGION_MEM | PCI_REGION_PREFETCH):
-			if (!*prefp || (*prefp)->size < ctrl->regions[i].size)
-				*prefp = ctrl->regions + i;
-			break;
-		}
-	}
-
-	return (u32)((*iop != NULL) + (*memp != NULL) + (*prefp != NULL));
-}
-
 /**
  * pci_flr() - Perform a Function Level Reset on a PCIe device
  *

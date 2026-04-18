@@ -503,7 +503,7 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 	return 0;
 }
 
-s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index)
+static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 	u32 cells_per_record, i = 0;

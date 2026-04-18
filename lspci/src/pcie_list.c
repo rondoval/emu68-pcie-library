@@ -11,7 +11,6 @@
 #endif
 
 #include <exec/types.h>
-#include <exec/memory.h>
 #include <exec/tasks.h>
 #include <utility/tagitem.h>
 #include <dos/rdargs.h>

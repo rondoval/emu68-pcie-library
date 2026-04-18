@@ -7,7 +7,7 @@
 #include <pci_capability.h>
 #include <pci_io.h>
 
-static u32 _pci_find_next_capability(struct pci_device *dev, u32 pos, u8 cap)
+static u32 pci_find_next_capability(struct pci_device *dev, u32 pos, u8 cap)
 {
 	u8 ttl = PCI_FIND_CAP_TTL;
 
@@ -34,11 +34,6 @@ static u32 _pci_find_next_capability(struct pci_device *dev, u32 pos, u8 cap)
 	return 0;
 }
 
-u32 pci_find_next_capability(struct pci_device *dev, u8 start, u8 cap)
-{
-	return _pci_find_next_capability(dev, (u32)start + PCI_CAP_LIST_NEXT,
-										cap);
-}
 
 u32 pci_find_capability(struct pci_device *dev, u8 cap)
 {
@@ -56,10 +51,10 @@ u32 pci_find_capability(struct pci_device *dev, u8 cap)
 	else
 		pos = PCI_CAPABILITY_LIST;
 
-	return _pci_find_next_capability(dev, pos, cap);
+	return pci_find_next_capability(dev, pos, cap);
 }
 
-u32 pci_find_next_ext_capability(struct pci_device *dev, u32 start, u16 cap)
+static u32 pci_find_next_ext_capability(struct pci_device *dev, u32 start, u16 cap)
 {
 	u16 pos = PCI_CFG_SPACE_SIZE;
 

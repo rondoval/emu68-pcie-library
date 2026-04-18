@@ -84,37 +84,6 @@ u32 pci_get_ff(enum pci_size_t size);
 u32 pci_conv_32_to_size(u32 value, u32 offset, enum pci_size_t size);
 
 /**
- * pci_conv_size_to_32() - Merge a sub-word value into a 32-bit config word
- *
- * PCI controllers that can only perform 32-bit writes must use this function
- * to splice the narrow @value into the existing 32-bit @old word at the
- * correct byte lane for @offset.
- *
- * @old:    Existing 32-bit value read from (@offset & ~3)
- * @value:  New narrow value to write
- * @offset: Actual byte offset of the register being written
- * @size:   Access size of the write
- * Return:  Updated 32-bit word ready to write back to (@offset & ~3)
- */
-u32 pci_conv_size_to_32(u32 old, u32 value, u32 offset, enum pci_size_t size);
-
-/**
- * pci_get_regions() - Obtain pointers to the I/O, memory, and prefetch regions
- *
- * Scans the controller's region table and selects the largest region of each
- * type.  Any output pointer may be set to NULL if no region of that type
- * exists.
- *
- * @dev:   Device whose controller provides the region table
- * @iop:   Set to the largest I/O region, or NULL if none
- * @memp:  Set to the largest non-prefetchable memory region, or NULL if none
- * @prefp: Set to the largest prefetchable memory region, or NULL if none
- * Return: Number of non-NULL output pointers (0–3)
- */
-u32 pci_get_regions(struct pci_device *dev, struct pci_region **iop,
-					struct pci_region **memp, struct pci_region **prefp);
-
-/**
  * pci_flr() - Perform a Function-Level Reset on a PCIe device
  *
  * Checks the PCIe Device Capabilities register for FLR support, then issues

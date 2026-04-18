@@ -23,7 +23,7 @@ s32 pci_bus_clrset_config32(struct pci_bus *bus, pci_dev_t bdf, u32 offset, u32 
 	return brcm_pcie_write_config(ctlr, bdf, offset, val, PCI_SIZE_32);
 }
 
-s32 pci_write_config(struct pci_device *dev, u32 offset, u32 value, enum pci_size_t size)
+static s32 pci_write_config(struct pci_device *dev, u32 offset, u32 value, enum pci_size_t size)
 {
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 
@@ -45,7 +45,7 @@ s32 pci_write_config32(struct pci_device *dev, u32 offset, u32 value)
 	return pci_write_config(dev, offset, value, PCI_SIZE_32);
 }
 
-s32 pci_read_config(const struct pci_device *dev, u32 offset, u32 *valuep, enum pci_size_t size)
+static s32 pci_read_config(const struct pci_device *dev, u32 offset, u32 *valuep, enum pci_size_t size)
 {
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 
@@ -135,28 +135,4 @@ s32 pci_clrset_config32(struct pci_device *dev, u32 offset, u32 clr, u32 set)
 	val |= set;
 
 	return pci_write_config32(dev, offset, val);
-}
-
-u32 pci_read_bar32(const struct pci_device *dev, u32 barnum)
-{
-	u32 bar = PCI_BASE_ADDRESS_0 + barnum * 4;
-	u32 addr;
-	pci_read_config32(dev, bar, &addr);
-
-	/*
-	 * If we get an invalid address, return this so that comparisons with
-	 * FDT_ADDR_T_NONE work correctly
-	 */
-	if (addr == 0xffffffff)
-		return addr;
-	else if (addr & PCI_BASE_ADDRESS_SPACE_IO)
-		return addr & PCI_BASE_ADDRESS_IO_MASK;
-	else
-		return addr & PCI_BASE_ADDRESS_MEM_MASK;
-}
-
-void pci_write_bar32(struct pci_device *dev, u32 barnum, u32 addr)
-{
-	u32 bar = PCI_BASE_ADDRESS_0 + barnum * 4;
-	pci_write_config32(dev, bar, addr);
 }

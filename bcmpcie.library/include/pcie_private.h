@@ -78,7 +78,6 @@ struct PCIELibBase {
     struct MinList          reservations;  /* list of PCIEReservation nodes */
 
     BOOL                    ctrlReady;     /* TRUE after successful first-open init */
-    phys_addr_t             dma_offset;    /* PCIe bus address minus physical address for DMA window */
     APTR                    dmaPool;       /* exec pool for cache-line-aligned DMA allocations */
 };
 

@@ -233,12 +233,6 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
         goto err_dma_pool;
     }
 
-    struct pci_region dma_r = {0};
-    if (pci_get_devtree_dma_regions(base->ctrl, &dma_r, 0) == 0)
-        base->dma_offset = (phys_addr_t)(dma_r.bus_start - dma_r.phys_start);
-    else
-        base->dma_offset = 0;
-
     return 0;
 
 err_dma_pool:

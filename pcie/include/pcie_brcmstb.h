@@ -115,20 +115,4 @@ s32 brcm_pcie_enable_msi(struct pci_controller *pcie);
  */
 void brcm_pcie_disable_msi(struct pci_controller *pcie);
 
-/**
- * pci_get_devtree_dma_regions() - Read an inbound DMA window from the device tree
- *
- * Parses the "dma-ranges" property of the PCIe controller node to obtain
- * the @index-th inbound window and fills @memp with its bus_start, phys_start,
- * and size.  Used during probe to configure the controller's inbound address
- * translation registers.
- *
- * @ctlr:  Controller whose device-tree node should be queried
- * @memp:  Region structure to fill with the discovered window
- * @index: Zero-based index of the dma-ranges entry to read
- * Return: 0 on success, negative if the property is missing or @index is
- *         out of range
- */
-s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index);
-
 #endif /* _PCI_BRCMSTB_H */
