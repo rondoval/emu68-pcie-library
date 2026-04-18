@@ -69,16 +69,16 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
     pdev->vendor   = idev->vendor;
     pdev->device   = idev->device;
     pdev->devclass = idev->class;
-    pdev->irq      = (ULONG)idev->irq_pin;
+    pdev->irq      = (ULONG)idev->irq_line;
 
     for (u32 i = 0; i < idev->bars_num; ++i)
     {
         if (!idev->bars[i].present)
             continue;
 
-        /* size_mask is pci_size_t (64-bit when CONFIG_SYS_PCI_64BIT is active);
-         * openpci base_size[] is ULONG (32-bit), so clamp. */
-        pdev->base_size[i]    = (ULONG)idev->bars[i].size_mask;
+        /* bar_response is the raw BAR sizing result with flags included (pci_size_t);
+         * clamp to ULONG for the 32-bit openpci base_size[] field. */
+        pdev->base_size[i]    = (ULONG)idev->bars[i].bar_response;
         pdev->base_address[i] = (ULONG)idev->bars[i].virt_addr;
 
         if (idev->bars[i].is64)
@@ -305,7 +305,6 @@ static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist 
     base->libNode.lib_Revision = (UWORD)LIBRARY_REVISION;
 
     InitSemaphore(&base->semaphore);
-    _NewMinList(&base->reservations);
     base->devListHead = NULL;
     base->ctrl        = NULL;
     base->rootBus     = NULL;
@@ -340,8 +339,6 @@ static struct PCIELibBase *LibOpen(ULONG version asm("d0"), struct PCIELibBase *
 static ULONG LibClose(struct PCIELibBase *base asm("a6"))
 {
     ObtainSemaphore(&base->semaphore);
-
-    pcie_release_reservations_for_opener(base, (struct Node *)FindTask(NULL));
 
     base->libNode.lib_OpenCnt--;
 

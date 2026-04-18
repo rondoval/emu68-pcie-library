@@ -15,6 +15,9 @@
 #include <exec/types.h>
 #endif
 
+/* Forward declaration so that pci_dev.owner can be typed without pulling in exec/nodes.h */
+struct Node;
+
 /* pci_bus() result flags
 ** Multiple flags may be set if multiple boards are
 ** found.
@@ -67,6 +70,8 @@ struct pci_dev {
   void             *reserved;         /* never ever used */
   /* the following is new in version 3 */
   UBYTE            *legacy_io;        /* 68K pointer to legacy IO space */
+  /* bcmpcie.library extension  */
+  struct Node      *owner;            /* task that called pci_obtain_card(), or NULL */
 };
 
 /*

@@ -164,7 +164,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 	{
 		const u32 slot = (bar - PCI_BASE_ADDRESS_0) / 4;
 		s32 ret = 0;
-		pci_size_t bar_size_mask = 0; /* full-width sizing mask, set during type detection */
+		pci_size_t full_bar_response = 0; /* full-width raw sizing response (flags included) */
 
 		/* Tickle the BAR and get the response */
 		pci_write_config32(dev, bar, 0xffffffff);
@@ -180,7 +180,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 		if (bar_response & PCI_BASE_ADDRESS_SPACE)
 		{
 			bar_size = (u32)(~(bar_response & PCI_BASE_ADDRESS_IO_MASK) + 1u);
-			bar_size_mask = (pci_size_t)(bar_response & (u32)PCI_BASE_ADDRESS_IO_MASK);
+			full_bar_response = bar_response;
 
 			bar_res = io;
 
@@ -191,21 +191,19 @@ static void pciauto_setup_device(struct pci_device *dev,
 			if ((bar_response & PCI_BASE_ADDRESS_MEM_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64)
 			{
 				u32 bar_response_upper;
-				u64 bar64;
-
 				pci_write_config32(dev, bar + 4, 0xffffffff);
 				pci_read_config32(dev, bar + 4, &bar_response_upper);
 
-				bar64 = ((u64)bar_response_upper << 32) | bar_response;
+				u64 bar64 = ((u64)bar_response_upper << 32) | bar_response;
 
-				bar_size = (pci_size_t)(~(bar64 & (u64)PCI_BASE_ADDRESS_MEM_MASK) + 1);
-				bar_size_mask = (pci_size_t)(bar64 & (u64)PCI_BASE_ADDRESS_MEM_MASK);
+				bar_size = (pci_size_t)(~(bar64 & (u64)PCI_BASE_ADDRESS_MEM_MASK) + 1u);
+				full_bar_response = (pci_size_t)bar64;
 				found_mem64 = TRUE;
 			}
 			else
 			{
 				bar_size = (u32)(~(bar_response & PCI_BASE_ADDRESS_MEM_MASK) + 1u);
-				bar_size_mask = (pci_size_t)(bar_response & (u32)PCI_BASE_ADDRESS_MEM_MASK);
+				full_bar_response = bar_response;
 			}
 
 			if (prefetch && (bar_response & PCI_BASE_ADDRESS_MEM_PREFETCH)
@@ -250,19 +248,19 @@ static void pciauto_setup_device(struct pci_device *dev,
 			dev->bars[slot].is64     = found_mem64;
 			if (bar_response & PCI_BASE_ADDRESS_SPACE)
 			{
-				dev->bars[slot].type      = PCI_REGION_IO;
-				dev->bars[slot].bus_addr  = bar_value;
-				dev->bars[slot].size      = bar_size;
-				dev->bars[slot].size_mask = bar_size_mask;
-				dev->bars[slot].phys_addr = 0;
-				dev->bars[slot].virt_addr = NULL;
+				dev->bars[slot].type         = PCI_REGION_IO;
+				dev->bars[slot].bus_addr     = bar_value;
+				dev->bars[slot].size         = bar_size;
+				dev->bars[slot].bar_response = full_bar_response;
+				dev->bars[slot].phys_addr    = 0;
+				dev->bars[slot].virt_addr    = NULL;
 			}
 			else
 			{
-				dev->bars[slot].type      = PCI_REGION_MEM;
-				dev->bars[slot].bus_addr  = bar_value;
-				dev->bars[slot].size      = bar_size;
-				dev->bars[slot].size_mask = bar_size_mask;
+				dev->bars[slot].type         = PCI_REGION_MEM;
+				dev->bars[slot].bus_addr     = bar_value;
+				dev->bars[slot].size         = bar_size;
+				dev->bars[slot].bar_response = full_bar_response;
 				dev->bars[slot].phys_addr = pci_bus_to_phys(dev, bar_value,
 				                                            (size_t)(bar_size ? bar_size : 1),
 				                                            PCI_REGION_TYPE, PCI_REGION_MEM);

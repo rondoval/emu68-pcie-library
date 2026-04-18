@@ -75,21 +75,8 @@ struct PCIELibBase {
      */
     struct pci_dev         *devListHead;   /* first pci_dev, or NULL */
 
-    struct MinList          reservations;  /* list of PCIEReservation nodes */
-
     BOOL                    ctrlReady;     /* TRUE after successful first-open init */
     APTR                    dmaPool;       /* exec pool for cache-line-aligned DMA allocations */
-};
-
-/*
- * One reservation entry per pci_obtain_card() call.
- * Cleaned up by pci_release_card() or automatically on LibClose.
- */
-struct PCIEReservation {
-    struct MinNode          node;
-    struct pci_dev         *dev;           /* the reserved board (public handle) */
-    struct Node            *owner;         /* opener that called pci_obtain_card */
-    struct MinList          dmaAllocs;     /* tracked DMA buffers for auto-free on close */
 };
 
 /* Extract the internal pci_device pointer stored in pci_dev.reserved. */
@@ -164,8 +151,6 @@ ULONG LibFindExtCapability(struct pci_dev *dev asm("a0"), UWORD cap asm("d0"), s
 /* -----------------------------------------------------------------------
  * pcie_board.c — device reservation and board attribute access/mutation
  * ----------------------------------------------------------------------- */
-void  pcie_release_reservations_for_opener(struct PCIELibBase *base, struct Node *opener);
-void  pcie_drain_reservation_dma(struct PCIEReservation *res, APTR pool);
 BOOL  LibObtainCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));
 void  LibReleaseCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));
 LONG  LibFLR(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));

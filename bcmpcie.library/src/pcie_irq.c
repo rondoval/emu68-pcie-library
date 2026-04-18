@@ -96,11 +96,11 @@ BOOL LibAddIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a
         /* INTx path: traditional PCI interrupt line via GIC */
         if (!base->gic400Base)
             return FALSE;
-        LONG ret = AddIntServerEx((ULONG)idev->irq_line + 32, 0, FALSE, isr);
+        LONG ret = AddIntServerEx((ULONG)idev->irq_line_gic + 32, 0, FALSE, isr);
         if (ret != 0)
         {
             Kprintf("[pcie] %s: AddIntServerEx(irq=%ld) failed (%ld)\n",
-                    __func__, (LONG)idev->irq_line + 32, ret);
+                    __func__, (LONG)idev->irq_line_gic + 32, ret);
         }
         else
         {
@@ -141,7 +141,7 @@ void LibRemIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a
         {
             Kprintf("[pcie] %s: failed to mask INTx line for device %04x:%04x\n", __func__, idev->vendor, idev->device);
         }
-        RemIntServerEx((ULONG)idev->irq_line + 32, isr);
+        RemIntServerEx((ULONG)idev->irq_line_gic + 32, isr);
     }
 }
 

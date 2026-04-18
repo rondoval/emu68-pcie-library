@@ -33,7 +33,7 @@ void pci_intx(struct pci_device *pdev, int enable);
  * chain to the root bus performing the standard PCI slot-based swizzle at
  * each hop.  The final pin index is looked up in the root controller's
  * INT_x_mapping[] array to obtain the GIC IRQ number, which is stored in
- * dev->irq_pin and dev->irq_line.
+ * dev->irq_line and dev->irq_line_gic.
  *
  * Does nothing if PCI_INTERRUPT_PIN is 0 (device uses no interrupt pin).
  *

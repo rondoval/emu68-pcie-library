@@ -33,10 +33,10 @@
 
 #define CONFIG_PCI_BRIDGE_MEM_ALIGNMENT 0x100000 /* minimum alignment for bridge memory windows (1 MiB) */
 // #define CONFIG_SYS_PCI_64BIT             /* enable 64-bit PCI bus addresses (pci_addr_t = u64); disabled: u32 */
-#define CONFIG_PHYS_64BIT                    /* CPU physical addresses are 64-bit (phys_addr_t = u64) */
+#define CONFIG_PHYS_64BIT /* CPU physical addresses are 64-bit (phys_addr_t = u64) */
 // #define CONFIG_PCI_MAP_SYSTEM_MEMORY     /* define if Fast RAM has a 1:1 virt-to-phys mapping */
-#define CONFIG_NR_DRAM_BANKS 4               /* number of Fast RAM regions exposed to the allocator (Pi4 has 3 + 1 reserved) */
-#define MSI_MAX_VECTORS 32                   /* maximum MSI vectors per controller; sized to the BCM2711 MSI register width */
+#define CONFIG_NR_DRAM_BANKS 4 /* number of Fast RAM regions exposed to the allocator (Pi4 has 3 + 1 reserved) */
+#define MSI_MAX_VECTORS 32	   /* maximum MSI vectors per controller; sized to the BCM2711 MSI register width */
 
 typedef uint64_t u64;
 
@@ -57,7 +57,7 @@ typedef u32 size_t;
 #endif
 
 /* Device state flags stored in pci_device.flags */
-#define DM_FLAG_BOUND     BIT(0) /* device has been bound to a driver (pci_bind_bus_devices completed) */
+#define DM_FLAG_BOUND BIT(0)	 /* device has been bound to a driver (pci_bind_bus_devices completed) */
 #define DM_FLAG_ACTIVATED BIT(1) /* device resources have been activated (BARs assigned, bus mastering enabled) */
 
 /* Access sizes for PCI reads and writes */
@@ -92,7 +92,7 @@ struct pci_region
 	pci_size_t size;		/* size of the window in bytes */
 	u32 flags;				/* PCI_REGION_* type flags (e.g. PCI_REGION_MEM, PCI_REGION_IO, PCI_REGION_PREFETCH) */
 
-	pci_addr_t bus_lower;   /* rolling BAR-allocation pointer; advanced by pciauto_config_device(), reset by pciauto_config_init() */
+	pci_addr_t bus_lower; /* rolling BAR-allocation pointer; advanced by pciauto_config_device(), reset by pciauto_config_init() */
 };
 
 /**
@@ -135,11 +135,11 @@ struct pci_controller
 	u8 *mmio_window_virtual;	  /* CPU virtual address of the outbound MMIO aperture */
 	size_t mmio_window_size;	  /* size of the outbound MMIO aperture in bytes */
 
-	u32 region_count;           /* number of entries in the regions array */
+	u32 region_count;			/* number of entries in the regions array */
 	struct pci_region *regions; /* array of all outbound address-translation windows */
 
-	struct pci_region *pci_io;       /* pointer into regions[] for the I/O window (or NULL) */
-	struct pci_region *pci_mem;      /* pointer into regions[] for the non-prefetchable memory window (or NULL) */
+	struct pci_region *pci_io;		 /* pointer into regions[] for the I/O window (or NULL) */
+	struct pci_region *pci_mem;		 /* pointer into regions[] for the non-prefetchable memory window (or NULL) */
 	struct pci_region *pci_prefetch; /* pointer into regions[] for the prefetchable memory window (or NULL) */
 
 	CONST_STRPTR dt_node_name; /* device-tree node name, used for diagnostic messages */
@@ -149,15 +149,15 @@ struct pci_controller
 
 	struct pcie_msi
 	{
-		pci_addr_t target_addr;                     /* MSI doorbell PCI address programmed into device MSI capability registers */
+		pci_addr_t target_addr;						/* MSI doorbell PCI address programmed into device MSI capability registers */
 		struct Interrupt *vectors[MSI_MAX_VECTORS]; /* Exec Interrupt server for each allocated MSI vector slot */
-		s32 num_vectors;                            /* number of vector slots currently allocated */
-		s32 gic_irq;                               /* GIC-400 SPI interrupt line for the BCM2711 MSI aggregation interrupt */
-		struct Interrupt isr;                       /* Exec Interrupt structure registered with gic400.library for MSI dispatch */
-		BOOL enabled;                              /* TRUE once brcm_pcie_enable_msi() has succeeded */
+		s32 num_vectors;							/* number of vector slots currently allocated */
+		s32 gic_irq;								/* GIC-400 SPI interrupt line for the BCM2711 MSI aggregation interrupt */
+		struct Interrupt isr;						/* Exec Interrupt structure registered with gic400.library for MSI dispatch */
+		BOOL enabled;								/* TRUE once brcm_pcie_enable_msi() has succeeded */
 	} msi;
 
-	struct MinList buses;       /* doubly-linked list of all pci_bus structs reachable from this controller */
+	struct MinList buses;		/* doubly-linked list of all pci_bus structs reachable from this controller */
 	struct Library *gic400Base; /* open gic400.library base pointer used for MSI interrupt registration */
 
 	s32 INT_x_mapping[4]; /* GIC-400 IRQ line for INTx pins A–D (index 0–3); -1 if not connected */
@@ -172,14 +172,14 @@ struct pci_controller
  */
 struct pci_bus
 {
-	struct MinNode node;                /* linkage in pci_controller.buses */
+	struct MinNode node;			   /* linkage in pci_controller.buses */
 	struct pci_controller *controller; /* controller this bus belongs to */
 	struct pci_bus *parent;			   /* parent bus, or NULL for the root bus */
 	struct pci_device *pci_bridge;	   /* bridge device on the parent bus that created this bus, or NULL for root */
 
-	char name[30];                   /* human-readable name for diagnostic output (e.g. "PCI Bus 0") */
+	char name[30]; /* human-readable name for diagnostic output (e.g. "PCI Bus 0") */
 
-	u32 bus_number;          /* PCI bus number assigned to this segment */
+	u32 bus_number;			 /* PCI bus number assigned to this segment */
 	u32 bus_number_last_sub; /* highest bus number in the subtree rooted at this bus */
 
 	struct MinList devices; /* doubly-linked list of pci_device structs directly on this bus */
@@ -197,18 +197,17 @@ struct pci_bus
  */
 struct pci_bar_info
 {
-	BOOL        present;   /* TRUE if this slot holds a successfully assigned BAR */
-	u8          type;      /* PCI_REGION_MEM (0) or PCI_REGION_IO (1) */
-	BOOL        is64;      /* TRUE for the low slot of a 64-bit MEM BAR;
-	                          slot+1 is consumed and stays not-present */
-	pci_addr_t  bus_addr;  /* assigned PCIe bus address (u32 today, u64 with CONFIG_SYS_PCI_64BIT) */
-	pci_size_t  size;      /* BAR size in bytes */
-	pci_size_t  size_mask; /* full-width sizing mask (response & ADDR_MASK);
-	                          for 64-bit MEM BARs this is the full bar64 & MEM_MASK;
-	                          consumers that target a 32-bit ABI must clamp to ULONG */
-	/* NOTE: both size and size_mask widen to u64 when CONFIG_SYS_PCI_64BIT is enabled */
+	BOOL present;			 /* TRUE if this slot holds a successfully assigned BAR */
+	u8 type;				 /* PCI_REGION_MEM (0) or PCI_REGION_IO (1) */
+	BOOL is64;				 /* TRUE for the low slot of a 64-bit MEM BAR;
+								slot+1 is consumed and stays not-present */
+	pci_addr_t bus_addr;	 /* assigned PCIe bus address (u32 today, u64 with CONFIG_SYS_PCI_64BIT) */
+	pci_size_t size;		 /* BAR size in bytes */
+	pci_size_t bar_response; /* raw BAR sizing response (all-1s write-back) including flag bits;
+								for 64-bit MEM BARs this is the full bar64 value; */
+	/* NOTE: size and bar_response widen to u64 when CONFIG_SYS_PCI_64BIT is enabled */
 	phys_addr_t phys_addr; /* ARM physical address; 0 for I/O BARs (BCM2711 does not map PCI I/O) */
-	void       *virt_addr; /* emu68 virtual address; NULL for I/O BARs */
+	void *virt_addr;	   /* emu68 virtual address; NULL for I/O BARs */
 };
 
 /**
@@ -220,27 +219,27 @@ struct pci_bar_info
  */
 struct pci_device
 {
-	struct MinNode node;     /* linkage in pci_bus.devices */
-	struct pci_bus *bus;     /* bus this device lives on */
+	struct MinNode node; /* linkage in pci_bus.devices */
+	struct pci_bus *bus; /* bus this device lives on */
 
-	char name[30];           /* human-readable name for diagnostic output (e.g. "00:00.0") */
-	u32 flags;               /* DM_FLAG_* state bits */
+	char name[30]; /* human-readable name for diagnostic output (e.g. "00:00.0") */
+	u32 flags;	   /* DM_FLAG_* state bits */
 
-	pci_dev_t bdf;           /* packed bus/device/function — use PCI_BUS/PCI_DEV/PCI_FUNC to unpack */
-	u32 devfn;               /* raw devfn encoding: bits [7:3] = device, bits [2:0] = function */
+	pci_dev_t bdf; /* packed bus/device/function — use PCI_BUS/PCI_DEV/PCI_FUNC to unpack */
+	u32 devfn;	   /* raw devfn encoding: bits [7:3] = device, bits [2:0] = function */
 
-	u16 vendor;              /* PCI vendor ID read from config space (offset 0x00) */
-	u16 device;              /* PCI device ID read from config space (offset 0x02) */
-	u32 class;               /* 24-bit class/subclass/prog-if read from config space (offset 0x09) */
-	u8  revision;            /* revision ID read from config space (offset 0x08); cached at probe time */
-	u16 subsys_vendor;       /* subsystem vendor ID (offset 0x2C); cached at probe time */
-	u16 subsys_id;           /* subsystem device ID (offset 0x2E); cached at probe time */
+	u16 vendor;		   /* PCI vendor ID read from config space (offset 0x00) */
+	u16 device;		   /* PCI device ID read from config space (offset 0x02) */
+	u32 class;		   /* 24-bit class/subclass/prog-if read from config space (offset 0x09) */
+	u8 revision;	   /* revision ID read from config space (offset 0x08); cached at probe time */
+	u16 subsys_vendor; /* subsystem vendor ID (offset 0x2C); cached at probe time */
+	u16 subsys_id;	   /* subsystem device ID (offset 0x2E); cached at probe time */
 
 	/* MSI capability flags decoded from PCI_MSI_FLAGS at msi_capability_init() time */
 	struct flags_msi
 	{
-		u8 addr64;        /* 1 if device supports 64-bit MSI address (PCI_MSI_FLAGS_64BIT) */
-		u8 maskable;      /* 1 if device has a per-vector mask register (PCI_MSI_FLAGS_MASKBIT) */
+		u8 addr64;		  /* 1 if device supports 64-bit MSI address (PCI_MSI_FLAGS_64BIT) */
+		u8 maskable;	  /* 1 if device has a per-vector mask register (PCI_MSI_FLAGS_MASKBIT) */
 		u8 log2_max_vecs; /* log2 of the maximum number of vectors the device can use (PCI_MSI_FLAGS_QMASK) */
 		u8 log2_num_vecs; /* log2 of the number of vectors actually allocated (PCI_MSI_FLAGS_QSIZE) */
 		u16 mask_offset;  /* byte offset of PCI_MSI_MASK_32/64 within config space, or 0 if not maskable */
@@ -250,20 +249,21 @@ struct pci_device
 	struct device_msi
 	{
 		u32 cap_offset; /* byte offset of the MSI capability structure in config space, or 0 if no MSI */
-		BOOL enabled;   /* TRUE once msi_capability_init() has enabled MSI on this device */
-		s32 vector;     /* controller MSI vector slot assigned to this device; TODO: extend for multi-vector */
-		u32 mask;       /* shadow copy of the MSI mask register (kept in sync with hardware) */
+		BOOL enabled;	/* TRUE once msi_capability_init() has enabled MSI on this device */
+		s32 vector;		/* controller MSI vector slot assigned to this device; TODO: extend for multi-vector */
+		u32 mask;		/* shadow copy of the MSI mask register (kept in sync with hardware) */
 	} msi;
 
 	BOOL prefer_msi; /* TRUE if the driver requests MSI rather than INTx when both are available */
-	u8 irq_pin;      /* INTx pin reported in PCI_INTERRUPT_PIN: 1=INTA, 2=INTB, 3=INTC, 4=INTD, 0=none */
-	u8 irq_line;     /* GIC-400 SPI line assigned by pci_assign_irq() via INT_x_mapping[] */
+	u8 irq_pin;		 /* INTx pin number (1–4 for INTA–INTD, 0 if no INTx) as read from PCI_INTERRUPT_PIN */
+	u8 irq_line;	 /* INTx pin at the controller, reported in PCI_INTERRUPT_PIN: 1=INTA, 2=INTB, 3=INTC, 4=INTD, 0=none */
+	u8 irq_line_gic; /* GIC-400 SPI line assigned by pci_assign_irq() via INT_x_mapping[] */
 
-	u8 header_type;              /* PCI header type [6:0] (multifunction bit cleared):
-	                                PCI_HEADER_TYPE_NORMAL / BRIDGE / CARDBUS */
-	u8 bars_num;                 /* number of BAR slots for this header type (6 / 2 / 0) */
+	u8 header_type;				 /* PCI header type [6:0] (multifunction bit cleared):
+									PCI_HEADER_TYPE_NORMAL / BRIDGE / CARDBUS */
+	u8 bars_num;				 /* number of BAR slots for this header type (6 / 2 / 0) */
 	struct pci_bar_info bars[6]; /* BAR assignments cached by pciauto_setup_device();
-	                                indexed by physical slot 0–5 */
+									indexed by physical slot 0–5 */
 };
 
 #endif

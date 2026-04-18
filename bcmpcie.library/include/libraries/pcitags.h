@@ -88,15 +88,6 @@
 ** PRM_LegacyIOSpace. It is always 64K in size.
 */
 
-/*
- * pcie.library-specific SetBoardAttrsA tags (not part of the openpci standard set).
- *
- * PRM_Command [SG]: read or write the full PCI command register (16-bit).
- *   SetBoardAttrsA: ti_Data is the new UWORD value to write directly.
- *   GetBoardAttrsA: *ti_Data receives the current UWORD command register value.
- */
-#define PRM_Command 0x6EDA0100
-
 #endif /* LIBRARIES_PCITAGS_H */
 
 

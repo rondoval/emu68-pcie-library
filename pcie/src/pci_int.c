@@ -79,6 +79,7 @@ void pci_assign_irq(struct pci_device *dev)
 	 * apply the swizzle function.
 	 */
 	pci_read_config8(dev, PCI_INTERRUPT_PIN, &pin_byte);
+	target->irq_pin = pin_byte;
 	pin = pin_byte;
 	/* Cope with illegal. */
 	if (pin > 4)
@@ -98,8 +99,8 @@ void pci_assign_irq(struct pci_device *dev)
 	/* Map the pin to INT line */
 	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
 	Kprintf("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
-	target->irq_pin = (u8)pin;
-	target->irq_line = (u8)irq;
+	target->irq_line = (u8)pin;
+	target->irq_line_gic = (u8)irq;
 
 	/*
 	 * Always tell the device, so the driver knows what is the real IRQ
