@@ -78,6 +78,8 @@ struct PCIELibBase {
     struct MinList          reservations;  /* list of PCIEReservation nodes */
 
     BOOL                    ctrlReady;     /* TRUE after successful first-open init */
+    phys_addr_t             dma_offset;    /* PCIe bus address minus physical address for DMA window */
+    APTR                    dmaPool;       /* exec pool for cache-line-aligned DMA allocations */
 };
 
 /*
@@ -87,7 +89,8 @@ struct PCIELibBase {
 struct PCIEReservation {
     struct MinNode          node;
     struct pci_dev         *dev;           /* the reserved board (public handle) */
-    struct Task            *owner;         /* task that called pci_obtain_card */
+    struct Node            *owner;         /* opener that called pci_obtain_card */
+    struct MinList          dmaAllocs;     /* tracked DMA buffers for auto-free on close */
 };
 
 /* Extract the internal pci_device pointer stored in pci_dev.reserved. */
@@ -146,8 +149,6 @@ APTR LibLogicToPhysic(APTR addr asm("a0"), struct pci_dev *dev asm("a1"), struct
 APTR LibPhysicToLogic(APTR addr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"));
 BOOL LibAddMemHandler(struct pci_dev *dev asm("a0"), struct Hook *hk asm("a1"), BYTE pri asm("d0"), struct PCIELibBase *base asm("a6"));
 BOOL LibRemMemHandler(struct pci_dev *dev asm("a0"), struct Hook *hk asm("a1"), struct PCIELibBase *base asm("a6"));
-APTR LibMapBAR(struct pci_dev *dev asm("a0"), ULONG bar asm("d0"), ULONG offset asm("d1"), ULONG len asm("d2"), ULONG flags asm("d3"), struct PCIELibBase *base asm("a6"));
-BOOL LibGetBARInfo(struct pci_dev *dev asm("a0"), ULONG bar asm("d0"), ULONG *addrp asm("a1"), ULONG *sizep asm("a2"), struct PCIELibBase *base asm("a6"));
 APTR LibObtainPCIRegion(struct pci_dev *dev asm("a0"), ULONG region asm("a1"), ULONG size asm("d0"), struct PCIELibBase *base asm("a6"));
 void LibReleasePCIRegion(struct pci_dev *dev asm("a0"), APTR addr asm("a1"), struct PCIELibBase *base asm("a6"));
 
@@ -164,7 +165,8 @@ ULONG LibFindExtCapability(struct pci_dev *dev asm("a0"), UWORD cap asm("d0"), s
 /* -----------------------------------------------------------------------
  * pcie_board.c — device reservation and board attribute access/mutation
  * ----------------------------------------------------------------------- */
-void  pcie_release_task_reservations(struct PCIELibBase *base, struct Task *task);
+void  pcie_release_reservations_for_opener(struct PCIELibBase *base, struct Node *opener);
+void  pcie_drain_reservation_dma(struct PCIEReservation *res, APTR pool);
 BOOL  LibObtainCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));
 void  LibReleaseCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));
 LONG  LibFLR(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));

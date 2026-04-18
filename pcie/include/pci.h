@@ -129,7 +129,7 @@ static inline void pci_set_region(struct pci_region *reg,
 /*
  * Function declarations have been moved to per-unit headers:
  *   pci_io.h         — config space read/write, BAR register helpers
- *   pci_bar.h        — address translation (bus<->phys<->virt), pci_map_bar
+ *   pci_bar.h        — address translation (bus<->phys<->virt)
  *   pci_capability.h — PCI/PCIe capability list search
  *   pci_lookup.h     — device lookup by BDF, vendor/device ID, class
  *   pci_probe.h      — bus/device creation and probe

@@ -598,10 +598,10 @@ static void dump_vl805_registers(struct pci_dev *dev)
     if (!dev)
         return;
 
-    void *bar0 = MapBAR(dev, 0, 0, 0x1000, PCI_REGION_MEM);
+    void *bar0 = (void *)dev->base_address[0];
     if (!bar0)
     {
-        Printf((CONST_STRPTR) "  Failed to map VL805 BAR0\n");
+        Printf((CONST_STRPTR) "  VL805 BAR0 not mapped\n");
         return;
     }
 

@@ -76,16 +76,14 @@ ULONG FindExtCapability(struct pci_dev *dev, UWORD cap) (A0,D0)
 LONG EnableMSI(struct pci_dev *dev) (A0)
 void DisableMSI(struct pci_dev *dev) (A0)
 LONG FLR(struct pci_dev *dev) (A0)
-APTR MapBAR(struct pci_dev *dev, ULONG bar, ULONG offset, ULONG len, ULONG flags) (A0,D0,D1,D2,D3)
-BOOL GetBARInfo(struct pci_dev *dev, ULONG bar, ULONG *addrp, ULONG *sizep) (A0,D0,A1,A2)
-* -300: Extended config space access (ULONG register argument; supports offsets >= 0x100)
+* -288: Extended config space access (ULONG register argument; supports offsets >= 0x100)
 UBYTE ReadExtConfigByte(ULONG reg, struct pci_dev *dev) (D0,A0)
 UWORD ReadExtConfigWord(ULONG reg, struct pci_dev *dev) (D0,A0)
 ULONG ReadExtConfigLong(ULONG reg, struct pci_dev *dev) (D0,A0)
 void WriteExtConfigByte(ULONG reg, UBYTE val, struct pci_dev *dev) (D0,D1,A0)
 void WriteExtConfigWord(ULONG reg, UWORD val, struct pci_dev *dev) (D0,D1,A0)
 void WriteExtConfigLong(ULONG reg, ULONG val, struct pci_dev *dev) (D0,D1,A0)
-* -336: ISR-safe interrupt control
+* -324: ISR-safe interrupt control
 * These functions do NOT acquire the library semaphore and are safe to call
 * from interrupt context (e.g. from within an installed interrupt server).
 void MaskMSI(struct pci_dev *dev) (A0)

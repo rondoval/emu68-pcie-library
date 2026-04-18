@@ -118,36 +118,3 @@ pci_addr_t pci_virt_to_bus(struct pci_device *dev, void *virt_addr, size_t len, 
 	return pci_phys_to_bus(dev, phys_addr, len, mask, flags);
 }
 
-void *pci_map_bar(struct pci_device *dev, u32 bar, pci_addr_t offset, size_t len,
-					 u32 mask, u32 flags)
-{
-	u32 bar_response;
-
-	/* read BAR address */
-	pci_read_config32(dev, bar, &bar_response);
-	pci_addr_t pci_bus_addr = bar_response & ~0x0fUL;
-	KprintfH("[pcie] %s: BAR%ld response %lx, addr %lx%08lx\n", __func__, (bar - PCI_BASE_ADDRESS_0) / 4, bar_response, (ULONG)(pci_bus_addr >> 32), (ULONG)(pci_bus_addr & 0xffffffff));
-
-	/* This has a lot of baked in assumptions, but essentially tries
-	 * to mirror the behavior of BAR assignment for 64 Bit enabled
-	 * hosts and 64 bit placeable BARs in the auto assign code.
-	 */
-#if defined(CONFIG_SYS_PCI_64BIT)
-	if (bar_response & PCI_BASE_ADDRESS_MEM_TYPE_64)
-	{
-		pci_read_config32(dev, bar + 4, &bar_response);
-		pci_bus_addr |= (pci_addr_t)bar_response << 32;
-	}
-#endif /* CONFIG_SYS_PCI_64BIT */
-
-	if (~((pci_addr_t)0) - pci_bus_addr < offset)
-		return NULL;
-
-	/*
-	 * Forward the length argument to pci_bus_to_virt. The length will
-	 * be used to check that the entire address range has been declared as
-	 * a PCI range, but a better check would be to probe for the size of
-	 * the bar and prevent overflow more locally.
-	 */
-	return pci_bus_to_virt(dev, pci_bus_addr + offset, len, mask, flags);
-}

@@ -98,15 +98,17 @@ s32 pci_auto_config_devices(struct pci_bus *bus);
  * Allocates a pci_device structure, populates it from the supplied fields,
  * and links it into @bus's device list.
  *
- * @bus:    Bus the device lives on
- * @bdf:    Full bus/device/function address (see PCI_BDF())
- * @vendor: PCI vendor ID read from config space
- * @device: PCI device ID read from config space
- * @class:  24-bit class code (base << 16 | sub << 8 | prog-if)
- * @devp:   Receives the pointer to the new device on success
- * Return:  0 on success, -ENOMEM if allocation fails
+ * @bus:         Bus the device lives on
+ * @bdf:         Full bus/device/function address (see PCI_BDF())
+ * @vendor:      PCI vendor ID read from config space
+ * @device:      PCI device ID read from config space
+ * @class:       24-bit class code (base << 16 | sub << 8 | prog-if)
+ * @header_type: PCI_HEADER_TYPE value with multifunction bit already cleared
+ * @devp:        Receives the pointer to the new device on success
+ * Return:       0 on success, -ENOMEM if allocation fails
  */
 s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor,
-					  u16 device, u32 class, struct pci_device **devp);
+					  u16 device, u32 class, u8 header_type,
+					  struct pci_device **devp);
 
 #endif /* _PCI_PROBE_H */

@@ -186,6 +186,32 @@ struct pci_bus
 };
 
 /**
+ * struct pci_bar_info - Cached BAR assignment from auto-configuration
+ *
+ * Populated by pciauto_setup_device() for every BAR that is successfully
+ * assigned a bus address.  Slots that are absent, failed allocation, or are
+ * the upper 32-bit half of a 64-bit pair are left zeroed (present == FALSE).
+ *
+ * Using pci_addr_t / pci_size_t ensures the cache remains correct when
+ * CONFIG_SYS_PCI_64BIT is enabled without any further changes here.
+ */
+struct pci_bar_info
+{
+	BOOL        present;   /* TRUE if this slot holds a successfully assigned BAR */
+	u8          type;      /* PCI_REGION_MEM (0) or PCI_REGION_IO (1) */
+	BOOL        is64;      /* TRUE for the low slot of a 64-bit MEM BAR;
+	                          slot+1 is consumed and stays not-present */
+	pci_addr_t  bus_addr;  /* assigned PCIe bus address (u32 today, u64 with CONFIG_SYS_PCI_64BIT) */
+	pci_size_t  size;      /* BAR size in bytes */
+	pci_size_t  size_mask; /* full-width sizing mask (response & ADDR_MASK);
+	                          for 64-bit MEM BARs this is the full bar64 & MEM_MASK;
+	                          consumers that target a 32-bit ABI must clamp to ULONG */
+	/* NOTE: both size and size_mask widen to u64 when CONFIG_SYS_PCI_64BIT is enabled */
+	phys_addr_t phys_addr; /* ARM physical address; 0 for I/O BARs (BCM2711 does not map PCI I/O) */
+	void       *virt_addr; /* emu68 virtual address; NULL for I/O BARs */
+};
+
+/**
  * struct pci_device - One enumerated PCI function
  *
  * Created during bus scanning for every function that responds to a config
@@ -232,6 +258,12 @@ struct pci_device
 	BOOL prefer_msi; /* TRUE if the driver requests MSI rather than INTx when both are available */
 	u8 irq_pin;      /* INTx pin reported in PCI_INTERRUPT_PIN: 1=INTA, 2=INTB, 3=INTC, 4=INTD, 0=none */
 	u8 irq_line;     /* GIC-400 SPI line assigned by pci_assign_irq() via INT_x_mapping[] */
+
+	u8 header_type;              /* PCI header type [6:0] (multifunction bit cleared):
+	                                PCI_HEADER_TYPE_NORMAL / BRIDGE / CARDBUS */
+	u8 bars_num;                 /* number of BAR slots for this header type (6 / 2 / 0) */
+	struct pci_bar_info bars[6]; /* BAR assignments cached by pciauto_setup_device();
+	                                indexed by physical slot 0–5 */
 };
 
 #endif

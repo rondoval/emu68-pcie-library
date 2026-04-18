@@ -89,25 +89,6 @@ void *pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr,
 pci_addr_t pci_virt_to_bus(struct pci_device *dev, void *virt_addr,
 							size_t len, u32 mask, u32 flags);
 
-/**
- * pci_map_bar() - Map a window within a device BAR into virtual address space
- *
- * Reads the BAR register at config offset @bar, adds @offset to the decoded
- * bus base address, and translates the result to a driver virtual pointer via
- * pci_bus_to_virt().  Supports 32-bit BARs; 64-bit BARs are also handled when
- * CONFIG_SYS_PCI_64BIT is defined.  Returns NULL on any failure.
- *
- * @dev:    Device whose BAR to map
- * @bar:    BAR config register offset (e.g. PCI_BASE_ADDRESS_0 + n*4)
- * @offset: Byte offset from the BAR base bus address to start mapping from
- * @len:    Length of the window to map, in bytes
- * @mask:   Mask applied to region flags during matching
- * @flags:  Required flag bits after masking (e.g. PCI_REGION_MEM)
- * Return:  Virtual pointer, or NULL on failure
- */
-void *pci_map_bar(struct pci_device *dev, u32 bar, pci_addr_t offset,
-				  size_t len, u32 mask, u32 flags);
-
 /*
  * Convenience wrappers that select the memory or I/O region automatically.
  * The pci_virt_to_mem / pci_io_to_virt / pci_mem_to_virt / pci_io_to_virt

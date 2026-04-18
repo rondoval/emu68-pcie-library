@@ -139,7 +139,7 @@ s32 pci_auto_config_devices(struct pci_bus *bus)
 	return 0;
 }
 
-s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device, u32 class, struct pci_device **devp)
+s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device, u32 class, u8 header_type, struct pci_device **devp)
 {
 	KprintfH("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
 	*devp = NULL;
@@ -155,6 +155,15 @@ s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device
 	dev->vendor = vendor;
 	dev->device = device;
 	dev->class = class;
+
+	/* Cache header type and derive the number of BAR slots */
+	dev->header_type = header_type; /* already masked to [6:0] by caller */
+	switch (header_type)
+	{
+	case PCI_HEADER_TYPE_NORMAL:  dev->bars_num = 6; break;
+	case PCI_HEADER_TYPE_BRIDGE:  dev->bars_num = 2; break;
+	default:                      dev->bars_num = 0; break;
+	}
 
 	/* Cache identity fields that are static after enumeration */
 	u32 tmp = 0;
@@ -219,7 +228,8 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		/* If nothing in the device tree, bind a device */
 		if (ret == -ENODEV)
 		{
-			ret = pci_create_device(bus, bdf, vendor, device, class, &dev);
+			ret = pci_create_device(bus, bdf, vendor, device, class,
+			                        header_type & 0x7f, &dev);
 		}
 		else
 		{

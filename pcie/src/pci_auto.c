@@ -13,6 +13,7 @@
  */
 
 #include <pci.h>
+#include <pci_bar.h>
 #include <debug.h>
 #include <timing.h>
 #include <pci_auto.h>
@@ -147,8 +148,8 @@ static void pciauto_setup_device(struct pci_device *dev,
 	u32 cmdstat = 0;
 	u32 bar;
 	u32 bar_nr = 0;
-	u32 bars_num = 0;
-	u8 header_type;
+	const u32 bars_num = dev->bars_num;
+	const u8 header_type = dev->header_type;
 	u16 rom_addr;
 	pci_addr_t bar_value;
 	struct pci_region *bar_res = NULL;
@@ -159,30 +160,11 @@ static void pciauto_setup_device(struct pci_device *dev,
 	cmdstat = _cmdstat_raw;
 	cmdstat = (cmdstat & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY)) | PCI_COMMAND_MASTER;
 
-	pci_read_config8(dev, PCI_HEADER_TYPE, &header_type);
-	header_type &= 0x7f;
-
-	switch (header_type)
-	{
-	case PCI_HEADER_TYPE_NORMAL:
-		bars_num = 6;
-		break;
-	case PCI_HEADER_TYPE_BRIDGE:
-		bars_num = 2;
-		break;
-	case PCI_HEADER_TYPE_CARDBUS:
-		/* CardBus header does not have any BAR */
-		bars_num = 0;
-		break;
-	default:
-		/* Skip configuring BARs for unknown header types */
-		bars_num = 0;
-		break;
-	}
-
 	for (bar = PCI_BASE_ADDRESS_0; bar < PCI_BASE_ADDRESS_0 + (bars_num * 4); bar += 4)
 	{
+		const u32 slot = (bar - PCI_BASE_ADDRESS_0) / 4;
 		s32 ret = 0;
+		pci_size_t bar_size_mask = 0; /* full-width sizing mask, set during type detection */
 
 		/* Tickle the BAR and get the response */
 		pci_write_config32(dev, bar, 0xffffffff);
@@ -198,6 +180,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 		if (bar_response & PCI_BASE_ADDRESS_SPACE)
 		{
 			bar_size = (u32)(~(bar_response & PCI_BASE_ADDRESS_IO_MASK) + 1u);
+			bar_size_mask = (pci_size_t)(bar_response & (u32)PCI_BASE_ADDRESS_IO_MASK);
 
 			bar_res = io;
 
@@ -215,12 +198,14 @@ static void pciauto_setup_device(struct pci_device *dev,
 
 				bar64 = ((u64)bar_response_upper << 32) | bar_response;
 
-				bar_size = (pci_size_t)(~(bar64 & PCI_BASE_ADDRESS_MEM_MASK) + 1);
+				bar_size = (pci_size_t)(~(bar64 & (u64)PCI_BASE_ADDRESS_MEM_MASK) + 1);
+				bar_size_mask = (pci_size_t)(bar64 & (u64)PCI_BASE_ADDRESS_MEM_MASK);
 				found_mem64 = TRUE;
 			}
 			else
 			{
 				bar_size = (u32)(~(bar_response & PCI_BASE_ADDRESS_MEM_MASK) + 1u);
+				bar_size_mask = (pci_size_t)(bar_response & (u32)PCI_BASE_ADDRESS_MEM_MASK);
 			}
 
 			if (prefetch && (bar_response & PCI_BASE_ADDRESS_MEM_PREFETCH)
@@ -258,6 +243,32 @@ static void pciauto_setup_device(struct pci_device *dev,
 				 */
 				pci_write_config32(dev, bar, 0x00000000);
 #endif
+			}
+
+			/* Cache BAR info for fast access at LibOpen without reprobing hardware */
+			dev->bars[slot].present  = TRUE;
+			dev->bars[slot].is64     = found_mem64;
+			if (bar_response & PCI_BASE_ADDRESS_SPACE)
+			{
+				dev->bars[slot].type      = PCI_REGION_IO;
+				dev->bars[slot].bus_addr  = bar_value;
+				dev->bars[slot].size      = bar_size;
+				dev->bars[slot].size_mask = bar_size_mask;
+				dev->bars[slot].phys_addr = 0;
+				dev->bars[slot].virt_addr = NULL;
+			}
+			else
+			{
+				dev->bars[slot].type      = PCI_REGION_MEM;
+				dev->bars[slot].bus_addr  = bar_value;
+				dev->bars[slot].size      = bar_size;
+				dev->bars[slot].size_mask = bar_size_mask;
+				dev->bars[slot].phys_addr = pci_bus_to_phys(dev, bar_value,
+				                                            (size_t)(bar_size ? bar_size : 1),
+				                                            PCI_REGION_TYPE, PCI_REGION_MEM);
+				dev->bars[slot].virt_addr = pci_bus_to_virt(dev, bar_value,
+				                                            (size_t)(bar_size ? bar_size : 1),
+				                                            PCI_REGION_TYPE, PCI_REGION_MEM);
 			}
 		}
 

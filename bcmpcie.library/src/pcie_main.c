@@ -7,6 +7,10 @@
 #include <pcie_private.h>
 #include <pcie_brcmstb.h>
 #include <pci.h>
+#include <pci_util.h>
+#include <pci_bar.h>
+#include <pci_probe.h>
+#include <pci_io.h>
 #include <minlist.h>
 #include <timing.h>
 #include <debug.h>
@@ -41,6 +45,51 @@ const struct Resident pcieResident __attribute__((used)) = {
  * ----------------------------------------------------------------------- */
 
 /*
+ * Allocate and populate one openpci pci_dev from an internal pci_device.
+ *
+ * base_address[i] is set to the 68k-accessible virtual address of each BAR.
+ * The BCM2711 PCIe controller maps the PCIe bus addresses through an outbound
+ * window to ARM physical addresses above 4 GB; the ARM MMU then maps those into
+ * a 32-bit MMIO window so that emu68 can reach them.  pci_bus_to_virt() performs
+ * both steps (bus → phys via regions[], phys → virt via mmio_window_virtual).
+ *
+ * base_size[i] stores the raw openpci sizing mask (~(size - 1) & addr_mask),
+ * following the convention in libraries/openpci.h.
+ *
+ * Returns the allocated pdev on success, NULL on allocation failure.
+ */
+static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
+{
+    struct pci_dev *pdev = AllocMem(sizeof(*pdev), MEMF_CLEAR | MEMF_PUBLIC);
+    if (!pdev)
+        return NULL;
+
+    /* Convert U-Boot devfn (device<<11 | func<<8) to Linux/openpci (device<<3 | func) */
+    pdev->devfn    = (UBYTE)((PCI_DEV(idev->devfn) << 3) | PCI_FUNC(idev->devfn));
+    pdev->vendor   = idev->vendor;
+    pdev->device   = idev->device;
+    pdev->devclass = idev->class;
+    pdev->irq      = (ULONG)idev->irq_pin;
+
+    for (u32 i = 0; i < idev->bars_num; ++i)
+    {
+        if (!idev->bars[i].present)
+            continue;
+
+        /* size_mask is pci_size_t (64-bit when CONFIG_SYS_PCI_64BIT is active);
+         * openpci base_size[] is ULONG (32-bit), so clamp. */
+        pdev->base_size[i]    = (ULONG)idev->bars[i].size_mask;
+        pdev->base_address[i] = (ULONG)idev->bars[i].virt_addr;
+
+        if (idev->bars[i].is64)
+            ++i;
+    }
+
+    pdev->reserved = idev;
+    return pdev;
+}
+
+/*
  * Walk all buses in the controller and build the pci_dev linked list.
  * Returns 0 on success, negative on allocation failure.
  */
@@ -64,87 +113,12 @@ static s32 pcie_build_dev_list(struct PCIELibBase *base)
                     (ULONG)idev->vendor, (ULONG)idev->device,
                     (ULONG)bus_index, (ULONG)PCI_DEV(idev->devfn), (ULONG)PCI_FUNC(idev->devfn));
 
-            struct pci_dev *pdev = AllocMem(sizeof(*pdev), MEMF_CLEAR | MEMF_PUBLIC);
+            struct pci_dev *pdev = pcie_make_pdev(idev);
             if (!pdev)
             {
                 Kprintf("[pcie] %s: out of memory building device list\n", __func__);
                 return -1;
             }
-
-            /* Convert U-Boot devfn (device<<11 | func<<8) to Linux/openpci (device<<3 | func) */
-            pdev->devfn   = (UBYTE)((PCI_DEV(idev->devfn) << 3) | PCI_FUNC(idev->devfn));
-            pdev->vendor  = idev->vendor;
-            pdev->device  = idev->device;
-            pdev->devclass = idev->class;
-            pdev->irq     = (ULONG)idev->irq;
-
-            /* Populate base_address[] and base_size[] from config space.
-             *
-             * Size probing: write all-ones to the BAR register, read back a
-             * sizing response, restore the original assigned address.
-             *
-             * base_size[n] follows the openpci convention documented in
-             * libraries/openpci.h: it stores the raw sizing mask
-             * (response & address_mask), which equals ~(actual_size - 1).
-             * A consumer must apply ~base_size[n] + 1 to recover the actual
-             * byte size.  Zero means the BAR is not implemented.
-             *
-             * pcie.library's own GetBARInfo extension decodes this
-             * internally and returns the actual size directly.
-             *
-             * This probing is safe here because it runs only once, at first
-             * LibOpen, before any consumer starts using the devices.
-             */
-            for (u32 i = 0; i < 6; ++i)
-            {
-                u32 bar_reg = PCI_BASE_ADDRESS_0 + i * 4;
-                u32 saved;
-                pci_read_config32(idev, bar_reg, &saved);
-
-                /* Read assigned address (flag bits masked out) */
-                pdev->base_address[i] = pci_read_bar32(idev, i);
-
-                /* Probe size */
-                pci_write_config32(idev, bar_reg, 0xFFFFFFFFu);
-                u32 response;
-                pci_read_config32(idev, bar_reg, &response);
-                pci_write_config32(idev, bar_reg, saved); /* restore */
-
-                if (response == 0 || response == 0xFFFFFFFFu)
-                {
-                    pdev->base_size[i] = 0; /* BAR not present */
-                }
-                else if (response & PCI_BASE_ADDRESS_SPACE_IO)
-                {
-                    /* Store raw I/O sizing mask per openpci convention */
-                    pdev->base_size[i] = response & (u32)PCI_BASE_ADDRESS_IO_MASK;
-                }
-                else
-                {
-                    u32 type = (response >> 1) & 3u;
-                    if (type == 2)
-                    {
-                        /* 64-bit BAR: next slot holds the high 32 bits (unused) */
-                        u32 hi;
-                        pci_read_config32(idev, bar_reg + 4, &hi);
-                        (void)hi; /* we only support 32-bit addresses for now */
-                        /* Store raw MEM sizing mask per openpci convention */
-                        pdev->base_size[i] = response & (u32)PCI_BASE_ADDRESS_MEM_MASK;
-                        /* Mark the high-word slot as padding */
-                        if (i + 1 < 6)
-                            pdev->base_size[i + 1] = 0;
-                        ++i;
-                    }
-                    else
-                    {
-                        /* Store raw MEM sizing mask per openpci convention */
-                        pdev->base_size[i] = response & (u32)PCI_BASE_ADDRESS_MEM_MASK;
-                    }
-                }
-            }
-
-            /* Store back-pointer to the internal pci_device in the reserved field */
-            pdev->reserved = idev;
 
             if (prev == NULL)
             {
@@ -197,9 +171,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     if (!base->ctrl)
     {
         Kprintf("[pcie] %s: out of memory for pci_controller\n", __func__);
-        CloseLibrary(base->gic400Base);
-        base->gic400Base = NULL;
-        return -1;
+        goto err_ctrl_alloc;
     }
     _NewMinList(&base->ctrl->buses);
     base->ctrl->gic400Base = base->gic400Base;
@@ -208,11 +180,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     if (res < 0)
     {
         Kprintf("[pcie] %s: brcm_pcie_probe failed (%ld)\n", __func__, (LONG)res);
-        FreeMem(base->ctrl, sizeof(*base->ctrl));
-        base->ctrl = NULL;
-        CloseLibrary(base->gic400Base);
-        base->gic400Base = NULL;
-        return -1;
+        goto err_probe;
     }
     Kprintf("[pcie] %s: controller probed successfully\n", __func__);
 
@@ -220,12 +188,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     if (!base->rootBus)
     {
         Kprintf("[pcie] %s: out of memory for root bus\n", __func__);
-        brcm_pcie_remove(base->ctrl);
-        FreeMem(base->ctrl, sizeof(*base->ctrl));
-        base->ctrl = NULL;
-        CloseLibrary(base->gic400Base);
-        base->gic400Base = NULL;
-        return -1;
+        goto err_root_bus;
     }
     _NewMinList(&base->rootBus->devices);
     base->rootBus->controller = base->ctrl;
@@ -240,14 +203,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     if (res != 0)
     {
         Kprintf("[pcie] %s: pci_bind_bus_devices failed (%ld)\n", __func__, (LONG)res);
-        FreeMem(base->rootBus, sizeof(*base->rootBus));
-        base->rootBus = NULL;
-        brcm_pcie_remove(base->ctrl);
-        FreeMem(base->ctrl, sizeof(*base->ctrl));
-        base->ctrl = NULL;
-        CloseLibrary(base->gic400Base);
-        base->gic400Base = NULL;
-        return -1;
+        goto err_dev_list;
     }
     Kprintf("[pcie] %s: bus devices bound successfully\n", __func__);
 
@@ -255,14 +211,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     if (res < 0)
     {
         Kprintf("[pcie] %s: pci_auto_config_devices failed (%ld)\n", __func__, (LONG)res);
-        FreeMem(base->rootBus, sizeof(*base->rootBus));
-        base->rootBus = NULL;
-        brcm_pcie_remove(base->ctrl);
-        FreeMem(base->ctrl, sizeof(*base->ctrl));
-        base->ctrl = NULL;
-        CloseLibrary(base->gic400Base);
-        base->gic400Base = NULL;
-        return -1;
+        goto err_dev_list;
     }
     Kprintf("[pcie] %s: devices auto-configured successfully\n", __func__);
 
@@ -272,21 +221,41 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
 
     res = pcie_build_dev_list(base);
     if (res != 0)
-    {
-        pcie_free_dev_list(base);
-        FreeMem(base->rootBus, sizeof(*base->rootBus));
-        base->rootBus = NULL;
-        brcm_pcie_remove(base->ctrl);
-        FreeMem(base->ctrl, sizeof(*base->ctrl));
-        base->ctrl = NULL;
-        CloseLibrary(base->gic400Base);
-        base->gic400Base = NULL;
-        return -1;
-    }
+        goto err_dev_list;
 
     base->ctrlReady = TRUE;
     Kprintf("[pcie] %s: controller ready\n", __func__);
+
+    base->dmaPool = CreatePool(MEMF_PUBLIC | MEMF_FAST, 4096, 4096);
+    if (!base->dmaPool)
+    {
+        Kprintf("[pcie] %s: out of memory for DMA pool\n", __func__);
+        goto err_dma_pool;
+    }
+
+    struct pci_region dma_r = {0};
+    if (pci_get_devtree_dma_regions(base->ctrl, &dma_r, 0) == 0)
+        base->dma_offset = (phys_addr_t)(dma_r.bus_start - dma_r.phys_start);
+    else
+        base->dma_offset = 0;
+
     return 0;
+
+err_dma_pool:
+    base->ctrlReady = FALSE;
+err_dev_list:
+    pcie_free_dev_list(base);
+    FreeMem(base->rootBus, sizeof(*base->rootBus));
+    base->rootBus = NULL;
+err_root_bus:
+    brcm_pcie_remove(base->ctrl);
+err_probe:
+    FreeMem(base->ctrl, sizeof(*base->ctrl));
+    base->ctrl = NULL;
+err_ctrl_alloc:
+    CloseLibrary(base->gic400Base);
+    base->gic400Base = NULL;
+    return -1;
 }
 
 /*
@@ -304,6 +273,7 @@ static void pcie_hw_shutdown(struct PCIELibBase *base)
     base->ctrl = NULL;
     CloseLibrary(base->gic400Base);
     base->gic400Base = NULL;
+    if (base->dmaPool) { DeletePool(base->dmaPool); base->dmaPool = NULL; }
     base->ctrlReady = FALSE;
     Kprintf("[pcie] %s: controller shut down\n", __func__);
 }
@@ -377,7 +347,7 @@ static ULONG LibClose(struct PCIELibBase *base asm("a6"))
 {
     ObtainSemaphore(&base->semaphore);
 
-    pcie_release_task_reservations(base, FindTask(NULL));
+    pcie_release_reservations_for_opener(base, (struct Node *)FindTask(NULL));
 
     base->libNode.lib_OpenCnt--;
 
@@ -400,34 +370,16 @@ static ULONG LibNull(void)
     return 0;
 }
 
-/* -----------------------------------------------------------------------
- * pci_bus() — the only real implementation in Phase 1
- * ----------------------------------------------------------------------- */
-
 static UWORD LibPCIBus(struct PCIELibBase *base asm("a6"))
 {
     return base->ctrlReady ? BCM2711PCIeBus : 0;
 }
-
-/* -----------------------------------------------------------------------
- * Phase 3 — device reservation
- * ----------------------------------------------------------------------- */
 
 static ULONG LibPrivate(struct PCIELibBase *base asm("a6"))
 {
     (void)base;
     return 0;
 }
-
-/*
- * Install an interrupt server for the given device's IRQ.
- * The IRQ number stored in pci_dev.irq maps directly to the GIC-400 SPI line
- * (i.e. it is the GIC interrupt number as assigned by the static lib during
- * device enumeration, shifted by +32 on the Pi4 to reach the SPI range).
- * Returns TRUE on success.
- * Implemented in pcie_irq.c to keep gic400.library headers isolated from
- * this file's library-vector function definitions.
- */
 
 /* -----------------------------------------------------------------------
  * Function table and init table
@@ -484,19 +436,17 @@ static const APTR funcTable[] = {
     (APTR)LibEnableMSI,           /* -270 */
     (APTR)LibDisableMSI,          /* -276 */
     (APTR)LibFLR,                 /* -282 */
-    (APTR)LibMapBAR,              /* -288 */
-    (APTR)LibGetBARInfo,          /* -294 */
     /* Extended config-space access (ULONG reg, supports offsets >= 0x100) */
-    (APTR)LibReadExtConfigByte,   /* -300 */
-    (APTR)LibReadExtConfigWord,   /* -306 */
-    (APTR)LibReadExtConfigLong,   /* -312 */
-    (APTR)LibWriteExtConfigByte,  /* -318 */
-    (APTR)LibWriteExtConfigWord,  /* -324 */
-    (APTR)LibWriteExtConfigLong,  /* -330 */
+    (APTR)LibReadExtConfigByte,   /* -288 */
+    (APTR)LibReadExtConfigWord,   /* -294 */
+    (APTR)LibReadExtConfigLong,   /* -300 */
+    (APTR)LibWriteExtConfigByte,  /* -306 */
+    (APTR)LibWriteExtConfigWord,  /* -312 */
+    (APTR)LibWriteExtConfigLong,  /* -318 */
     /* ISR-safe interrupt control */
-    (APTR)LibMaskMSI,             /* -336 */
-    (APTR)LibUnmaskMSI,           /* -342 */
-    (APTR)LibCheckSetINTxMask,    /* -348 */
+    (APTR)LibMaskMSI,             /* -324 */
+    (APTR)LibUnmaskMSI,           /* -330 */
+    (APTR)LibCheckSetINTxMask,    /* -336 */
     (APTR)-1,
 };
 
