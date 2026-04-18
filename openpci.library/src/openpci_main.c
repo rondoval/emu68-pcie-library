@@ -104,7 +104,9 @@ static ULONG LibExpunge(struct OpenPCIBase *base asm("a6"))
         base->libNode.lib_Flags |= LIBF_DELEXP;
         return 0;
     }
+    Forbid();
     Remove((struct Node *)base);
+    Permit();
     ULONG size = (ULONG)base->libNode.lib_NegSize + base->libNode.lib_PosSize;
     FreeMem((APTR)((ULONG)base - base->libNode.lib_NegSize), size);
     return segList;
