@@ -153,7 +153,7 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 	Kprintf("[pcie] %s: disabling MSI\n", __func__);
 	if (pcie->msi.enabled)
 	{
-		RemIntServerEx((ULONG)(pcie->msi.gic_irq + 32), &pcie->msi.isr);
+		RemIntServerEx((ULONG)pcie->msi.gic_irq, &pcie->msi.isr);
 		pcie->msi.enabled = FALSE;
 	}
 	brcm_pcie_close_gic400(pcie);
@@ -192,7 +192,7 @@ s32 brcm_pcie_enable_msi(struct pci_controller *pcie)
 	pcie->msi.isr.is_Data = (APTR)pcie;
 	pcie->msi.isr.is_Code = (APTR)brcm_pcie_msi_isr;
 
-	s32 ret = AddIntServerEx((ULONG)(pcie->msi.gic_irq + 32), 0, FALSE, &pcie->msi.isr);
+	s32 ret = AddIntServerEx((ULONG)pcie->msi.gic_irq, 0, FALSE, &pcie->msi.isr);
 	if (ret < 0)
 	{
 		Kprintf("[pcie] %s: can't register IRQ %ld\n", __func__, pcie->msi.gic_irq);
