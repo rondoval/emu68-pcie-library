@@ -92,7 +92,7 @@ s32 pci_probe_bus(struct pci_bus *bus)
 	bus->bus_number = ++bus->controller->bus_number_last;
 	bus->bus_number_last_sub = bus->bus_number;
 
-	Kprintf("[pcie] %s: probing bus %ld/%s\n", __func__, bus->bus_number, bus->name);
+	KprintfH("[pcie] %s: probing bus %ld/%s\n", __func__, bus->bus_number, bus->name);
 	pciauto_prescan_setup_bridge(bus);
 
 	ret = pci_bind_bus_devices(bus);
@@ -125,7 +125,7 @@ s32 pci_auto_config_devices(struct pci_bus *bus)
 	{
 		struct pci_device *device = (struct pci_device *)node;
 
-		Kprintf("[pcie] %s: device %s\n", __func__, device->name);
+		KprintfH("[pcie] %s: device %s\n", __func__, device->name);
 		s32 ret = pciauto_config_device(device);
 		if (ret < 0)
 		{
@@ -160,9 +160,15 @@ s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device
 	dev->header_type = header_type; /* already masked to [6:0] by caller */
 	switch (header_type)
 	{
-	case PCI_HEADER_TYPE_NORMAL:  dev->bars_num = 6; break;
-	case PCI_HEADER_TYPE_BRIDGE:  dev->bars_num = 2; break;
-	default:                      dev->bars_num = 0; break;
+	case PCI_HEADER_TYPE_NORMAL:
+		dev->bars_num = 6;
+		break;
+	case PCI_HEADER_TYPE_BRIDGE:
+		dev->bars_num = 2;
+		break;
+	default:
+		dev->bars_num = 0;
+		break;
 	}
 
 	/* Cache identity fields that are static after enumeration */
@@ -208,7 +214,7 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		if (!PCI_FUNC(bdf))
 			found_multi = header_type & 0x80;
 
-		Kprintf("[pcie] %s: bus %ld/%s: found device %lx, function %ld\n", __func__, bus->bus_number, bus->name, PCI_DEV(bdf), PCI_FUNC(bdf));
+		KprintfH("[pcie] %s: bus %ld/%s: found device %lx, function %ld\n", __func__, bus->bus_number, bus->name, PCI_DEV(bdf), PCI_FUNC(bdf));
 		u16 device;
 		u32 class;
 		brcm_pcie_read_config(bus->controller, bdf, PCI_DEVICE_ID, &config_value, PCI_SIZE_16);
@@ -225,11 +231,11 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		if (ret == -ENODEV)
 		{
 			ret = pci_create_device(bus, bdf, vendor, device, class,
-			                        header_type & 0x7f, &dev);
+									header_type & 0x7f, &dev);
 		}
 		else
 		{
-			Kprintf("[pcie] device: %s\n", dev->name);
+			KprintfH("[pcie] device: %s\n", dev->name);
 		}
 		if (ret == -EPERM)
 			continue;

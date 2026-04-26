@@ -102,7 +102,7 @@ static void brcm_pcie_close_gic400(struct pci_controller *pcie)
 //      see __pci_enable_msi_range()
 s32 add_int_server(struct pci_device *dev, struct Interrupt *isr)
 {
-	Kprintf("[pcie] %s: adding MSI interrupt server for device %04lx:%04lx\n", __func__, dev->vendor, dev->device);
+	KprintfH("[pcie] %s: adding MSI interrupt server for device %04lx:%04lx\n", __func__, dev->vendor, dev->device);
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
 	if (pcie->msi.num_vectors >= MSI_MAX_VECTORS)
 		return -1;
@@ -129,7 +129,7 @@ s32 add_int_server(struct pci_device *dev, struct Interrupt *isr)
 
 s32 rem_int_server(struct pci_device *dev)
 {
-	Kprintf("[pcie] %s: removing MSI interrupt server for device %04x:%04x\n", __func__, dev->vendor, dev->device);
+	KprintfH("[pcie] %s: removing MSI interrupt server for device %04x:%04x\n", __func__, dev->vendor, dev->device);
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
 	if (!pcie)
 		return -1;
@@ -161,7 +161,7 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 
 static void brcm_msi_set_regs(struct pci_controller *pcie)
 {
-	Kprintf("[pcie] %s: setting MSI registers\n", __func__);
+	KprintfH("[pcie] %s: setting MSI registers\n", __func__);
 	u32 val = (u32)((1ULL << MSI_MAX_VECTORS) - 1ULL);
 
 	mmio_write32(val, pcie->base + PCIE_MSI_INTR2_MASK_CLR);
@@ -172,9 +172,9 @@ static void brcm_msi_set_regs(struct pci_controller *pcie)
 	 * enable, which we set to 1.
 	 */
 	mmio_write32(u64_lo32(pcie->msi.target_addr) | 0x1,
-		   pcie->base + PCIE_MISC_MSI_BAR_CONFIG_LO);
+				 pcie->base + PCIE_MISC_MSI_BAR_CONFIG_LO);
 	mmio_write32(u64_hi32(pcie->msi.target_addr),
-		   pcie->base + PCIE_MISC_MSI_BAR_CONFIG_HI);
+				 pcie->base + PCIE_MISC_MSI_BAR_CONFIG_HI);
 
 	val = PCIE_MISC_MSI_DATA_CONFIG_VAL_32;
 	mmio_write32(val, pcie->base + PCIE_MISC_MSI_DATA_CONFIG);

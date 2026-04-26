@@ -39,7 +39,6 @@ const struct Resident pcieResident __attribute__((used)) = {
     (APTR)initTable,
 };
 
-
 /* -----------------------------------------------------------------------
  * Internal helpers
  * ----------------------------------------------------------------------- */
@@ -65,11 +64,11 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
         return NULL;
 
     /* Convert U-Boot devfn (device<<11 | func<<8) to Linux/openpci (device<<3 | func) */
-    pdev->devfn    = (UBYTE)((PCI_DEV(idev->devfn) << 3) | PCI_FUNC(idev->devfn));
-    pdev->vendor   = idev->vendor;
-    pdev->device   = idev->device;
+    pdev->devfn = (UBYTE)((PCI_DEV(idev->devfn) << 3) | PCI_FUNC(idev->devfn));
+    pdev->vendor = idev->vendor;
+    pdev->device = idev->device;
     pdev->devclass = idev->class;
-    pdev->irq      = (ULONG)idev->irq_line;
+    pdev->irq = (ULONG)idev->irq_line;
 
     for (u32 i = 0; i < idev->bars_num; ++i)
     {
@@ -78,7 +77,7 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
 
         /* bar_response is the raw BAR sizing result with flags included (pci_size_t);
          * clamp to ULONG for the 32-bit openpci base_size[] field. */
-        pdev->base_size[i]    = (ULONG)idev->bars[i].bar_response;
+        pdev->base_size[i] = (ULONG)idev->bars[i].bar_response;
         pdev->base_address[i] = (ULONG)idev->bars[i].virt_addr;
 
         if (idev->bars[i].is64)
@@ -95,13 +94,13 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
  */
 static s32 pcie_build_dev_list(struct PCIELibBase *base)
 {
-    Kprintf("[pcie] Building device list...\n");
+    KprintfH("[pcie] Building device list...\n");
     struct pci_dev *prev = NULL;
     s32 bus_max = pci_get_bus_max(base->ctrl);
 
     for (u32 bus_index = 0; bus_max >= 0 && bus_index <= (u32)bus_max; ++bus_index)
     {
-        Kprintf("[pcie] Scanning bus %ld...\n", (ULONG)bus_index);
+        KprintfH("[pcie] Scanning bus %ld...\n", (ULONG)bus_index);
         struct pci_bus *bus;
         if (pci_get_bus(base->ctrl, bus_index, &bus) != 0)
             continue;
@@ -109,7 +108,7 @@ static s32 pcie_build_dev_list(struct PCIELibBase *base)
         for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
         {
             struct pci_device *idev = (struct pci_device *)node;
-            Kprintf("[pcie] Found device %04x:%04x (bus %ld dev %ld func %ld)\n",
+            Kprintf("[pcie] Found device %04lx:%04lx (bus %ld dev %ld func %ld)\n",
                     (ULONG)idev->vendor, (ULONG)idev->device,
                     (ULONG)bus_index, (ULONG)PCI_DEV(idev->devfn), (ULONG)PCI_FUNC(idev->devfn));
 
@@ -159,13 +158,13 @@ static void pcie_free_dev_list(struct PCIELibBase *base)
  */
 static s32 pcie_hw_init(struct PCIELibBase *base)
 {
-    base->gic400Base = OpenLibrary((CONST_STRPTR)"gic400.library", 1);
+    base->gic400Base = OpenLibrary((CONST_STRPTR) "gic400.library", 1);
     if (!base->gic400Base)
     {
         Kprintf("[pcie] %s: failed to open gic400.library\n", __func__);
         return -1;
     }
-    Kprintf("[pcie] %s: gic400.library opened successfully\n", __func__);
+    KprintfH("[pcie] %s: gic400.library opened successfully\n", __func__);
 
     base->ctrl = AllocMem(sizeof(*base->ctrl), MEMF_CLEAR | MEMF_PUBLIC);
     if (!base->ctrl)
@@ -192,12 +191,12 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     }
     _NewMinList(&base->rootBus->devices);
     base->rootBus->controller = base->ctrl;
-    base->rootBus->parent     = NULL;
+    base->rootBus->parent = NULL;
     base->rootBus->pci_bridge = NULL;
-    CopyMem((APTR)"pcie0", base->rootBus->name, 6);
+    CopyMem((APTR) "pcie0", base->rootBus->name, 6);
     base->rootBus->bus_number = 0;
     AddTailMinList(&base->ctrl->buses, (struct MinNode *)base->rootBus);
-    Kprintf("[pcie] %s: root bus initialized\n", __func__);
+    KprintfH("[pcie] %s: root bus initialized\n", __func__);
 
     res = pci_bind_bus_devices(base->rootBus);
     if (res != 0)
@@ -205,7 +204,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
         Kprintf("[pcie] %s: pci_bind_bus_devices failed (%ld)\n", __func__, (LONG)res);
         goto err_dev_list;
     }
-    Kprintf("[pcie] %s: bus devices bound successfully\n", __func__);
+    KprintfH("[pcie] %s: bus devices bound successfully\n", __func__);
 
     res = pci_auto_config_devices(base->rootBus);
     if (res < 0)
@@ -217,14 +216,14 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
 
     (void)bcm2711_reload_vl805_firmware();
     delay_us(1000);
-    Kprintf("[pcie] %s: VL805 firmware reloaded\n", __func__);
+    KprintfH("[pcie] %s: VL805 firmware reloaded\n", __func__);
 
     res = pcie_build_dev_list(base);
     if (res != 0)
         goto err_dev_list;
 
     base->ctrlReady = TRUE;
-    Kprintf("[pcie] %s: controller ready\n", __func__);
+    KprintfH("[pcie] %s: controller ready\n", __func__);
 
     base->dmaPool = CreatePool(MEMF_PUBLIC | MEMF_FAST, 4096, 4096);
     if (!base->dmaPool)
@@ -267,7 +266,11 @@ static void pcie_hw_shutdown(struct PCIELibBase *base)
     base->ctrl = NULL;
     CloseLibrary(base->gic400Base);
     base->gic400Base = NULL;
-    if (base->dmaPool) { DeletePool(base->dmaPool); base->dmaPool = NULL; }
+    if (base->dmaPool)
+    {
+        DeletePool(base->dmaPool);
+        base->dmaPool = NULL;
+    }
     base->ctrlReady = FALSE;
     Kprintf("[pcie] %s: controller shut down\n", __func__);
 }
@@ -306,10 +309,10 @@ static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist 
 
     InitSemaphore(&base->semaphore);
     base->devListHead = NULL;
-    base->ctrl        = NULL;
-    base->rootBus     = NULL;
-    base->gic400Base  = NULL;
-    base->ctrlReady   = FALSE;
+    base->ctrl = NULL;
+    base->rootBus = NULL;
+    base->gic400Base = NULL;
+    base->ctrlReady = FALSE;
 
     return libBase;
 }
@@ -383,61 +386,61 @@ static const APTR funcTable[] = {
     (APTR)LibExpunge,
     (APTR)LibNull,
     /* openpci-compatible API — LVO -30 onwards */
-    (APTR)LibPCIBus,              /* -30  */
-    (APTR)LibPCIInb,              /* -36  */
-    (APTR)LibPCIOutb,             /* -42  */
-    (APTR)LibPCIInw,              /* -48  */
-    (APTR)LibPCIOutw,             /* -54  */
-    (APTR)LibPCIInl,              /* -60  */
-    (APTR)LibPCIOutl,             /* -66  */
-    (APTR)LibPCIToHostCpy,        /* -72  */
-    (APTR)LibHostToPCICpy,        /* -78  */
-    (APTR)LibPCIToPCICpy,         /* -84  */
-    (APTR)LibFindDevice,          /* -90  */
-    (APTR)LibFindClass,           /* -96  */
-    (APTR)LibFindSlot,            /* -102 */
-    (APTR)LibReadConfigByte,      /* -108 */
-    (APTR)LibReadConfigWord,      /* -114 */
-    (APTR)LibReadConfigLong,      /* -120 */
-    (APTR)LibWriteConfigByte,     /* -126 */
-    (APTR)LibWriteConfigWord,     /* -132 */
-    (APTR)LibWriteConfigLong,     /* -138 */
-    (APTR)LibSetMaster,           /* -144 */
-    (APTR)LibAddIntServer,        /* -150 */
-    (APTR)LibRemIntServer,        /* -156 */
-    (APTR)LibAllocDMAMem,         /* -162 */
-    (APTR)LibFreeDMAMem,          /* -168 */
-    (APTR)LibLogicToPhysic,       /* -174 */
-    (APTR)LibPhysicToLogic,       /* -180 */
-    (APTR)LibObtainCard,          /* -186 */
-    (APTR)LibReleaseCard,         /* -192 */
-    (APTR)LibPrivate,             /* -198 */
-    (APTR)LibFindBoardA,          /* -204 */
-    (APTR)LibGetBoardAttrsA,      /* -210 */
-    (APTR)LibSetBoardAttrsA,      /* -216 */
-    (APTR)LibAllocDMAForBoard,    /* -222 */
-    (APTR)LibReleaseDMAForBoard,  /* -228 */
-    (APTR)LibAddMemHandler,       /* -234 */
-    (APTR)LibRemMemHandler,       /* -240 */
-    (APTR)LibObtainPCIRegion,     /* -246 */
-    (APTR)LibReleasePCIRegion,    /* -252 */
+    (APTR)LibPCIBus,             /* -30  */
+    (APTR)LibPCIInb,             /* -36  */
+    (APTR)LibPCIOutb,            /* -42  */
+    (APTR)LibPCIInw,             /* -48  */
+    (APTR)LibPCIOutw,            /* -54  */
+    (APTR)LibPCIInl,             /* -60  */
+    (APTR)LibPCIOutl,            /* -66  */
+    (APTR)LibPCIToHostCpy,       /* -72  */
+    (APTR)LibHostToPCICpy,       /* -78  */
+    (APTR)LibPCIToPCICpy,        /* -84  */
+    (APTR)LibFindDevice,         /* -90  */
+    (APTR)LibFindClass,          /* -96  */
+    (APTR)LibFindSlot,           /* -102 */
+    (APTR)LibReadConfigByte,     /* -108 */
+    (APTR)LibReadConfigWord,     /* -114 */
+    (APTR)LibReadConfigLong,     /* -120 */
+    (APTR)LibWriteConfigByte,    /* -126 */
+    (APTR)LibWriteConfigWord,    /* -132 */
+    (APTR)LibWriteConfigLong,    /* -138 */
+    (APTR)LibSetMaster,          /* -144 */
+    (APTR)LibAddIntServer,       /* -150 */
+    (APTR)LibRemIntServer,       /* -156 */
+    (APTR)LibAllocDMAMem,        /* -162 */
+    (APTR)LibFreeDMAMem,         /* -168 */
+    (APTR)LibLogicToPhysic,      /* -174 */
+    (APTR)LibPhysicToLogic,      /* -180 */
+    (APTR)LibObtainCard,         /* -186 */
+    (APTR)LibReleaseCard,        /* -192 */
+    (APTR)LibPrivate,            /* -198 */
+    (APTR)LibFindBoardA,         /* -204 */
+    (APTR)LibGetBoardAttrsA,     /* -210 */
+    (APTR)LibSetBoardAttrsA,     /* -216 */
+    (APTR)LibAllocDMAForBoard,   /* -222 */
+    (APTR)LibReleaseDMAForBoard, /* -228 */
+    (APTR)LibAddMemHandler,      /* -234 */
+    (APTR)LibRemMemHandler,      /* -240 */
+    (APTR)LibObtainPCIRegion,    /* -246 */
+    (APTR)LibReleasePCIRegion,   /* -252 */
     /* PCIe extensions */
-    (APTR)LibFindCapability,      /* -258 */
-    (APTR)LibFindExtCapability,   /* -264 */
-    (APTR)LibEnableMSI,           /* -270 */
-    (APTR)LibDisableMSI,          /* -276 */
-    (APTR)LibFLR,                 /* -282 */
+    (APTR)LibFindCapability,    /* -258 */
+    (APTR)LibFindExtCapability, /* -264 */
+    (APTR)LibEnableMSI,         /* -270 */
+    (APTR)LibDisableMSI,        /* -276 */
+    (APTR)LibFLR,               /* -282 */
     /* Extended config-space access (ULONG reg, supports offsets >= 0x100) */
-    (APTR)LibReadExtConfigByte,   /* -288 */
-    (APTR)LibReadExtConfigWord,   /* -294 */
-    (APTR)LibReadExtConfigLong,   /* -300 */
-    (APTR)LibWriteExtConfigByte,  /* -306 */
-    (APTR)LibWriteExtConfigWord,  /* -312 */
-    (APTR)LibWriteExtConfigLong,  /* -318 */
+    (APTR)LibReadExtConfigByte,  /* -288 */
+    (APTR)LibReadExtConfigWord,  /* -294 */
+    (APTR)LibReadExtConfigLong,  /* -300 */
+    (APTR)LibWriteExtConfigByte, /* -306 */
+    (APTR)LibWriteExtConfigWord, /* -312 */
+    (APTR)LibWriteExtConfigLong, /* -318 */
     /* ISR-safe interrupt control */
-    (APTR)LibMaskMSI,             /* -324 */
-    (APTR)LibUnmaskMSI,           /* -330 */
-    (APTR)LibCheckSetINTxMask,    /* -336 */
+    (APTR)LibMaskMSI,          /* -324 */
+    (APTR)LibUnmaskMSI,        /* -330 */
+    (APTR)LibCheckSetINTxMask, /* -336 */
     (APTR)-1,
 };
 

@@ -150,9 +150,9 @@ void pci_write_msg_msi(struct pci_device *dev)
 
 static void pci_msi_set_enable(struct pci_device *dev, int enable)
 {
-	Kprintf("[pcie] %s: device %04lx:%04lx %s MSI\n", __func__,
-			(ULONG)dev->vendor, (ULONG)dev->device,
-			enable ? "enable" : "disable");
+	KprintfH("[pcie] %s: device %04lx:%04lx %s MSI\n", __func__,
+			 (ULONG)dev->vendor, (ULONG)dev->device,
+			 enable ? "enable" : "disable");
 	u16 control;
 
 	pci_read_config16(dev, dev->msi.cap_offset + PCI_MSI_FLAGS, &control);
@@ -308,8 +308,8 @@ void pci_msi_init(struct pci_device *dev)
 	if (!dev->msi.cap_offset)
 		return;
 
-	Kprintf("[pcie] %s: device %04lx:%04lx is MSI capable\n", __func__,
-			(ULONG)dev->vendor, (ULONG)dev->device);
+	KprintfH("[pcie] %s: device %04lx:%04lx is MSI capable\n", __func__,
+			 (ULONG)dev->vendor, (ULONG)dev->device);
 
 	pci_read_config16(dev, dev->msi.cap_offset + PCI_MSI_FLAGS, &ctrl);
 	if (ctrl & PCI_MSI_FLAGS_ENABLE)

@@ -74,7 +74,7 @@ static s32 pciauto_region_allocate(struct pci_region *res, pci_size_t size, pci_
 
 	res->bus_lower = addr + size;
 
-	Kprintf("[pcie] %s: address=0x%lx%08lx bus_lower=0x%lx%08lx\n", __func__, (ULONG)((u64)(addr) >> 32), (ULONG)(addr & 0xffffffff), (ULONG)((u64)(res->bus_lower) >> 32), (ULONG)(res->bus_lower & 0xffffffff));
+	KprintfH("[pcie] %s: address=0x%lx%08lx bus_lower=0x%lx%08lx\n", __func__, (ULONG)((u64)(addr) >> 32), (ULONG)(addr & 0xffffffff), (ULONG)((u64)(res->bus_lower) >> 32), (ULONG)(res->bus_lower & 0xffffffff));
 
 	*bar = addr;
 	return 0;
@@ -184,7 +184,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 
 			bar_res = io;
 
-			Kprintf("[pcie] %s: BAR %ld, I/O, size=0x%lx, ", __func__, bar_nr, bar_size);
+			KprintfH("[pcie] %s: BAR %ld, I/O, size=0x%lx, ", __func__, bar_nr, bar_size);
 		}
 		else
 		{
@@ -215,7 +215,7 @@ static void pciauto_setup_device(struct pci_device *dev,
 			else
 				bar_res = mem;
 
-			Kprintf("[pcie] %s: BAR %ld, %s%s, size=0x%lx%08lx\n", __func__, bar_nr, bar_res == prefetch ? "Prf" : "Mem", found_mem64 ? "64" : "", (ULONG)((u64)(bar_size) >> 32), (ULONG)(bar_size & 0xffffffff));
+			KprintfH("[pcie] %s: BAR %ld, %s%s, size=0x%lx%08lx\n", __func__, bar_nr, bar_res == prefetch ? "Prf" : "Mem", found_mem64 ? "64" : "", (ULONG)((u64)(bar_size) >> 32), (ULONG)(bar_size & 0xffffffff));
 		}
 
 		ret = pciauto_region_allocate(bar_res, bar_size, &bar_value, found_mem64);
@@ -244,29 +244,29 @@ static void pciauto_setup_device(struct pci_device *dev,
 			}
 
 			/* Cache BAR info for fast access at LibOpen without reprobing hardware */
-			dev->bars[slot].present  = TRUE;
-			dev->bars[slot].is64     = found_mem64;
+			dev->bars[slot].present = TRUE;
+			dev->bars[slot].is64 = found_mem64;
 			if (bar_response & PCI_BASE_ADDRESS_SPACE)
 			{
-				dev->bars[slot].type         = PCI_REGION_IO;
-				dev->bars[slot].bus_addr     = bar_value;
-				dev->bars[slot].size         = bar_size;
+				dev->bars[slot].type = PCI_REGION_IO;
+				dev->bars[slot].bus_addr = bar_value;
+				dev->bars[slot].size = bar_size;
 				dev->bars[slot].bar_response = full_bar_response;
-				dev->bars[slot].phys_addr    = 0;
-				dev->bars[slot].virt_addr    = NULL;
+				dev->bars[slot].phys_addr = 0;
+				dev->bars[slot].virt_addr = NULL;
 			}
 			else
 			{
-				dev->bars[slot].type         = PCI_REGION_MEM;
-				dev->bars[slot].bus_addr     = bar_value;
-				dev->bars[slot].size         = bar_size;
+				dev->bars[slot].type = PCI_REGION_MEM;
+				dev->bars[slot].bus_addr = bar_value;
+				dev->bars[slot].size = bar_size;
 				dev->bars[slot].bar_response = full_bar_response;
 				dev->bars[slot].phys_addr = pci_bus_to_phys(dev, bar_value,
-				                                            (size_t)(bar_size ? bar_size : 1),
-				                                            PCI_REGION_TYPE, PCI_REGION_MEM);
+															(size_t)(bar_size ? bar_size : 1),
+															PCI_REGION_TYPE, PCI_REGION_MEM);
 				dev->bars[slot].virt_addr = pci_bus_to_virt(dev, bar_value,
-				                                            (size_t)(bar_size ? bar_size : 1),
-				                                            PCI_REGION_TYPE, PCI_REGION_MEM);
+															(size_t)(bar_size ? bar_size : 1),
+															PCI_REGION_TYPE, PCI_REGION_MEM);
 			}
 		}
 
@@ -285,14 +285,14 @@ static void pciauto_setup_device(struct pci_device *dev,
 		if (bar_response)
 		{
 			bar_size = -(bar_response & ~1U);
-			Kprintf("[pcie] %s: ROM, size=%#x, ", __func__, bar_size);
+			KprintfH("[pcie] %s: ROM, size=%#x, ", __func__, bar_size);
 			if (pciauto_region_allocate(mem, bar_size, &bar_value,
 										FALSE) == 0)
 			{
 				pci_write_config32(dev, rom_addr, (u32)bar_value);
 			}
 			cmdstat |= PCI_COMMAND_MEMORY;
-			Kprintf("\n");
+			KprintfH("\n");
 		}
 	}
 
@@ -662,7 +662,7 @@ s32 pciauto_config_device(struct pci_device *dev)
 	switch (class)
 	{
 	case PCI_CLASS_BRIDGE_PCI:
-		Kprintf("[pcie] %s: Found P2P bridge, device %ld\n", __func__, PCI_DEV(pci_get_bdf(dev)));
+		KprintfH("[pcie] %s: Found P2P bridge, device %ld\n", __func__, PCI_DEV(pci_get_bdf(dev)));
 
 		pciauto_setup_device(dev, pci_mem, pci_prefetch, pci_io);
 
@@ -679,7 +679,7 @@ s32 pciauto_config_device(struct pci_device *dev)
 		break;
 
 	case PCI_CLASS_BRIDGE_CARDBUS:
-		Kprintf("[pcie] %s: Found P2CardBus bridge, device %ld\n", __func__, PCI_DEV(pci_get_bdf(dev)));
+		KprintfH("[pcie] %s: Found P2CardBus bridge, device %ld\n", __func__, PCI_DEV(pci_get_bdf(dev)));
 		/*
 		 * just do a minimal setup of the bridge,
 		 * let the OS take care of the rest
@@ -689,7 +689,7 @@ s32 pciauto_config_device(struct pci_device *dev)
 
 #if defined(CONFIG_PCIAUTO_SKIP_HOST_BRIDGE)
 	case PCI_CLASS_BRIDGE_OTHER:
-		Kprintf("[pcie] %s: Skipping bridge device %ld\n", __func__, PCI_DEV(pci_get_bdf(dev)));
+		KprintfH("[pcie] %s: Skipping bridge device %ld\n", __func__, PCI_DEV(pci_get_bdf(dev)));
 		break;
 #endif
 

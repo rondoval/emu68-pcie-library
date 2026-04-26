@@ -57,8 +57,8 @@ static u32 pci_swizzle_interrupt_pin(const struct pci_device *dev, u32 pin)
 	// if (pci_ari_enabled(dev->bus))
 	// 	slot = 0;
 	// else
-		//slot = PCI_SLOT(dev->devfn);
-		u32 slot = PCI_DEV(dev->devfn);
+	// slot = PCI_SLOT(dev->devfn);
+	u32 slot = PCI_DEV(dev->devfn);
 
 	return (((pin - 1) + slot) % 4) + 1;
 }
@@ -87,18 +87,19 @@ void pci_assign_irq(struct pci_device *dev)
 
 	if (pin == 0)
 		return;
-	Kprintf("[pcie] %s: initial pin %ld\n", __func__, pin);
+	KprintfH("[pcie] %s: initial pin %ld\n", __func__, pin);
 
 	/* Follow the chain of bridges, swizzling as we go. */
-	while (!pci_is_root_bus(walker->bus)) {
+	while (!pci_is_root_bus(walker->bus))
+	{
 		pin = pci_swizzle_interrupt_pin(walker, pin);
-		Kprintf("[pcie] %s: swizzle to pin %ld\n", __func__, pin);
+		KprintfH("[pcie] %s: swizzle to pin %ld\n", __func__, pin);
 		walker = walker->bus->pci_bridge;
 	}
 
 	/* Map the pin to INT line */
 	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
-	Kprintf("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
+	KprintfH("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
 	target->irq_line = (u8)pin;
 	target->irq_line_gic = (u8)irq;
 
