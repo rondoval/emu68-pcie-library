@@ -7,6 +7,9 @@ PCIe bus.  The CM4 exposes the PCIe interface externally; common use cases inclu
 storage (as on PiStorm32-lite) and other PCIe endpoints.
 
 For installation and build instructions see [README.md](README.md).
+The bundled `lspci` command described there is also the quickest way to confirm
+that enumeration, BAR assignment, and capability discovery are behaving as
+expected before you start debugging a driver.
 
 ---
 
@@ -23,7 +26,9 @@ must be open to call it and whether it is forwarded by the `openpci.library` shi
 
 New drivers should open `bcmpcie.library` directly to access the full API.
 `openpci.library` is a compatibility shim for existing binaries that already open it by
-name.
+name.  It is mainly intended for openpci-aware tooling and compatibility probes;
+driver compatibility with historical third-party binaries should still be
+validated case by case.
 
 ---
 
@@ -193,8 +198,8 @@ The full set of tags:
 | `PRM_InterruptLine` | R | IRQ line from config space |
 | `PRM_InterruptPin` | R | IRQ pin from config space |
 | `PRM_MemoryAddr0..5` | R | 68K virtual MMIO base address for BAR 0–5 |
-| `PRM_MemorySize0..5` | R | Raw BAR sizing response (flags in low 4 bits) |
-| `PRM_MemoryFlags0..5` | R | Low 4 bits of BAR sizing response (type/prefetchable) |
+| `PRM_MemorySize0..5` | R | Decoded BAR size in bytes |
+| `PRM_MemoryFlags0..5` | R | Low 4 bits of the raw BAR sizing response (type/prefetchable) |
 | `PRM_ROM_Address` | R | 68K address of mapped ROM BAR, or 0 |
 | `PRM_ROM_Size` | R | ROM BAR sizing response |
 | `PRM_ConfigArea` | R | Base of config space window |
@@ -203,7 +208,10 @@ The full set of tags:
 | `PRM_LegacyIOSpace` | R | Always NULL (0) on BCM2711 — IO space is not mapped |
 | `PRM_PCIToHostOffset` | R | Always 0 on BCM2711 — 68K and PCI bus addresses for Fast RAM are identical (1:1) |
 | `PRM_BoardOwner` | **R/W** | Task pointer for exclusive ownership (see §6) |
->>are you sure PRM_MemorySize0..5 returns Raw sizing response?
+
+`PRM_MemorySize*` differs from `struct pci_dev.base_size[]`: the tag API returns the
+already-decoded BAR size, while `base_size[]` preserves the raw sizing response and
+flag bits from enumeration.
 ---
 
 ## 5. `struct pci_dev` Fields
@@ -690,6 +698,9 @@ Drivers that need any of these must open `bcmpcie.library` directly.
 
 The shim exists for backward compatibility with applications that call
 `OpenLibrary("openpci.library", …)` and expect the classic openpci interface.
+That makes it useful for utilities such as `identify.library` and similar
+openpci-oriented tools, but it should still be treated as a targeted compatibility
+layer rather than a blanket guarantee for every legacy PCI driver.
 
 ---
 
