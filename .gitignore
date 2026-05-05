@@ -56,7 +56,5 @@ dkms.conf
 
 # pcielib specific
 .vscode/
-rom/
-openpci/
 build/
 install/

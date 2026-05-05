@@ -1,38 +1,23 @@
-// Standalone PCIe enumeration tool (integrated, no external library)
-// SPDX-License-Identifier: GPL-2.0+
+// Standalone PCIe device listing tool using pcie.library
+// SPDX-License-Identifier: GPL-2.0-only
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
 #include <clib/dos_protos.h>
-#include <clib/utility_protos.h>
-#include <clib/devicetree_protos.h>
-#include <clib/gic400_protos.h>
+#include <clib/bcmpcie_protos.h>
 #else
 #include <proto/exec.h>
 #include <proto/dos.h>
-#include <proto/utility.h>
-#include <proto/devicetree.h>
-#include <proto/gic400.h>
+#include <proto/bcmpcie.h>
 #endif
 
 #include <exec/types.h>
-#include <exec/memory.h>
-#include <utility/utility.h>
+#include <exec/tasks.h>
+#include <utility/tagitem.h>
+#include <dos/rdargs.h>
 
-#include <pcie_brcmstb.h>
-#include <pci.h>
-#include <compat.h>
-#include <devtree.h>
-#include <debug.h>
-#include <minlist.h>
-#include <mbox.h>
-#include <msg.h>
-
-struct ExecBase *SysBase;
-struct Library *UtilityBase;
-struct DosLibrary *DOSBase;
-struct Library *GIC400_Base = NULL;
-
-extern struct MinList pci_bus_list;
+/* PCI capability IDs, EA fields, extended cap IDs */
+#include <libraries/pci_constants.h>
+#include <libraries/pcitags.h>
 
 #ifndef PCI_HEADER_TYPE_MASK
 #define PCI_HEADER_TYPE_MASK 0x7f
@@ -41,21 +26,84 @@ extern struct MinList pci_bus_list;
 #define PCI_HEADER_TYPE_MULTI 0x80
 #endif
 
-static void dump_vl805_registers(struct pci_device *dev);
-static CONST_STRPTR pci_header_type_name(UBYTE header_type);
-static void dump_bridge_config(struct pci_device *dev);
+struct ExecBase *SysBase;
+struct DosLibrary *DOSBase;
+struct Library *BCMPCIEBase;
 
-static void print_device(struct pci_device *dev)
+static BOOL quiet_mode = FALSE;
+
+static void dump_vl805_registers(struct pci_dev *dev);
+static CONST_STRPTR pci_header_type_name(u8 header_type);
+static void dump_bridge_config(struct pci_dev *dev);
+static void list_bars(struct pci_dev *dev);
+static void print_device_machine(struct pci_dev *dev);
+
+static void list_bars(struct pci_dev *dev)
 {
-    Printf((CONST_STRPTR) "Bus %ld Dev %ld Func %ld: Vendor %04lx Device %04lx Class %02lx:%02lx:%02lx\n",
-           (LONG)PCI_BUS(dev->bdf), (LONG)PCI_DEV(dev->bdf), (LONG)PCI_FUNC(dev->bdf),
-           (ULONG)dev->vendor, (ULONG)dev->device,
-           (ULONG)((dev->class >> 16) & 0xff),
-           (ULONG)((dev->class >> 8) & 0xff),
-           (ULONG)(dev->class & 0xff));
+    ULONG addr0 = 0, addr1 = 0, addr2 = 0, addr3 = 0, addr4 = 0, addr5 = 0;
+    ULONG size0 = 0, size1 = 0, size2 = 0, size3 = 0, size4 = 0, size5 = 0;
+    struct TagItem tags[] = {
+        {PRM_MemoryAddr0, (ULONG)&addr0},
+        {PRM_MemoryAddr1, (ULONG)&addr1},
+        {PRM_MemoryAddr2, (ULONG)&addr2},
+        {PRM_MemoryAddr3, (ULONG)&addr3},
+        {PRM_MemoryAddr4, (ULONG)&addr4},
+        {PRM_MemoryAddr5, (ULONG)&addr5},
+        {PRM_MemorySize0, (ULONG)&size0},
+        {PRM_MemorySize1, (ULONG)&size1},
+        {PRM_MemorySize2, (ULONG)&size2},
+        {PRM_MemorySize3, (ULONG)&size3},
+        {PRM_MemorySize4, (ULONG)&size4},
+        {PRM_MemorySize5, (ULONG)&size5},
+        {TAG_DONE, 0}
+    };
+    GetBoardAttrsA(dev, tags);
+    ULONG sz0 = size0 ? (~size0 + 1u) : 0u;
+    if (addr0 != 0 || sz0 != 0)
+        Printf((CONST_STRPTR) "  BAR0: addr=0x%08lx size=0x%08lx\n", addr0, sz0);
+    ULONG sz1 = size1 ? (~size1 + 1u) : 0u;
+    if (addr1 != 0 || sz1 != 0)
+        Printf((CONST_STRPTR) "  BAR1: addr=0x%08lx size=0x%08lx\n", addr1, sz1);
+    ULONG sz2 = size2 ? (~size2 + 1u) : 0u;
+    if (addr2 != 0 || sz2 != 0)
+        Printf((CONST_STRPTR) "  BAR2: addr=0x%08lx size=0x%08lx\n", addr2, sz2);
+    ULONG sz3 = size3 ? (~size3 + 1u) : 0u;
+    if (addr3 != 0 || sz3 != 0)
+        Printf((CONST_STRPTR) "  BAR3: addr=0x%08lx size=0x%08lx\n", addr3, sz3);
+    ULONG sz4 = size4 ? (~size4 + 1u) : 0u;
+    if (addr4 != 0 || sz4 != 0)
+        Printf((CONST_STRPTR) "  BAR4: addr=0x%08lx size=0x%08lx\n", addr4, sz4);
+    ULONG sz5 = size5 ? (~size5 + 1u) : 0u;
+    if (addr5 != 0 || sz5 != 0)
+        Printf((CONST_STRPTR) "  BAR5: addr=0x%08lx size=0x%08lx\n", addr5, sz5);
 }
 
-static CONST_STRPTR pci_capability_name(UBYTE cap_id)
+static void print_device(struct pci_dev *dev)
+{
+    ULONG bus_num = 0;
+    ULONG owner_ptr = 0;
+    struct TagItem tags[] = {
+        {PRM_BusNumber,  (ULONG)&bus_num},
+        {PRM_BoardOwner, (ULONG)&owner_ptr},
+        {TAG_DONE, 0}
+    };
+    GetBoardAttrsA(dev, tags);
+    Printf((CONST_STRPTR) "Bus %ld Dev %ld Func %ld: Vendor %04lx Device %04lx Class %02lx:%02lx:%02lx\n",
+           bus_num,
+           (ULONG)((dev->devfn >> 3) & 0x1f),
+           (ULONG)(dev->devfn & 0x07),
+           (ULONG)dev->vendor, (ULONG)dev->device,
+           (ULONG)((dev->devclass >> 16) & 0xff),
+           (ULONG)((dev->devclass >> 8) & 0xff),
+           (ULONG)(dev->devclass & 0xff));
+    if (owner_ptr != 0) {
+        CONST_STRPTR owner_name = (CONST_STRPTR)((struct Task *)owner_ptr)->tc_Node.ln_Name;
+        Printf((CONST_STRPTR) "  Owner: %s\n", (ULONG)owner_name);
+    }
+    list_bars(dev);
+}
+
+static CONST_STRPTR pci_capability_name(u8 cap_id)
 {
     switch (cap_id)
     {
@@ -98,7 +146,7 @@ static CONST_STRPTR pci_capability_name(UBYTE cap_id)
     }
 }
 
-static CONST_STRPTR pcie_ext_capability_name(UWORD cap_id)
+static CONST_STRPTR pcie_ext_capability_name(u16 cap_id)
 {
     switch (cap_id)
     {
@@ -153,7 +201,7 @@ static CONST_STRPTR pcie_ext_capability_name(UWORD cap_id)
     }
 }
 
-static CONST_STRPTR pci_header_type_name(UBYTE header_type)
+static CONST_STRPTR pci_header_type_name(u8 header_type)
 {
     switch (header_type)
     {
@@ -168,44 +216,25 @@ static CONST_STRPTR pci_header_type_name(UBYTE header_type)
     }
 }
 
-static void dump_bridge_config(struct pci_device *dev)
+static void dump_bridge_config(struct pci_dev *dev)
 {
-    ULONG bus_numbers = 0;
-    UBYTE primary = 0;
-    UBYTE secondary = 0;
-    UBYTE subordinate = 0;
-    UBYTE sec_latency = 0;
-    UBYTE io_base = 0;
-    UBYTE io_limit = 0;
-    UWORD io_base_upper = 0;
-    UWORD io_limit_upper = 0;
-    UWORD mem_base = 0;
-    UWORD mem_limit = 0;
-    UWORD pref_mem_base = 0;
-    UWORD pref_mem_limit = 0;
-    ULONG pref_base_upper = 0;
-    ULONG pref_limit_upper = 0;
-    UWORD sec_status = 0;
-    UWORD bridge_ctrl = 0;
+    UBYTE primary = (UBYTE)(pci_read_config_long(PCI_PRIMARY_BUS, dev) & 0xff);
+    UBYTE secondary = (UBYTE)((pci_read_config_long(PCI_PRIMARY_BUS, dev) >> 8) & 0xff);
+    UBYTE subordinate = (UBYTE)((pci_read_config_long(PCI_PRIMARY_BUS, dev) >> 16) & 0xff);
+    UBYTE sec_latency = (UBYTE)((pci_read_config_long(PCI_PRIMARY_BUS, dev) >> 24) & 0xff);
 
-    dm_pci_read_config32(dev, PCI_PRIMARY_BUS, &bus_numbers);
-    primary = (UBYTE)(bus_numbers & 0xff);
-    secondary = (UBYTE)((bus_numbers >> 8) & 0xff);
-    subordinate = (UBYTE)((bus_numbers >> 16) & 0xff);
-    sec_latency = (UBYTE)((bus_numbers >> 24) & 0xff);
-
-    dm_pci_read_config8(dev, PCI_IO_BASE, &io_base);
-    dm_pci_read_config8(dev, PCI_IO_LIMIT, &io_limit);
-    dm_pci_read_config16(dev, PCI_IO_BASE_UPPER16, &io_base_upper);
-    dm_pci_read_config16(dev, PCI_IO_LIMIT_UPPER16, &io_limit_upper);
-    dm_pci_read_config16(dev, PCI_MEMORY_BASE, &mem_base);
-    dm_pci_read_config16(dev, PCI_MEMORY_LIMIT, &mem_limit);
-    dm_pci_read_config16(dev, PCI_PREF_MEMORY_BASE, &pref_mem_base);
-    dm_pci_read_config16(dev, PCI_PREF_MEMORY_LIMIT, &pref_mem_limit);
-    dm_pci_read_config32(dev, PCI_PREF_BASE_UPPER32, &pref_base_upper);
-    dm_pci_read_config32(dev, PCI_PREF_LIMIT_UPPER32, &pref_limit_upper);
-    dm_pci_read_config16(dev, PCI_SEC_STATUS, &sec_status);
-    dm_pci_read_config16(dev, PCI_BRIDGE_CONTROL, &bridge_ctrl);
+    UBYTE io_base = pci_read_config_byte(PCI_IO_BASE, dev);
+    UBYTE io_limit = pci_read_config_byte(PCI_IO_LIMIT, dev);
+    UWORD io_base_upper = pci_read_config_word(PCI_IO_BASE_UPPER16, dev);
+    UWORD io_limit_upper = pci_read_config_word(PCI_IO_LIMIT_UPPER16, dev);
+    UWORD mem_base = pci_read_config_word(PCI_MEMORY_BASE, dev);
+    UWORD mem_limit = pci_read_config_word(PCI_MEMORY_LIMIT, dev);
+    UWORD pref_mem_base = pci_read_config_word(PCI_PREF_MEMORY_BASE, dev);
+    UWORD pref_mem_limit = pci_read_config_word(PCI_PREF_MEMORY_LIMIT, dev);
+    ULONG pref_base_upper = pci_read_config_long(PCI_PREF_BASE_UPPER32, dev);
+    ULONG pref_limit_upper = pci_read_config_long(PCI_PREF_LIMIT_UPPER32, dev);
+    UWORD sec_status = pci_read_config_word(PCI_SEC_STATUS, dev);
+    UWORD bridge_ctrl = pci_read_config_word(PCI_BRIDGE_CONTROL, dev);
 
     ULONG io_base_addr = (ULONG)((io_base & 0xf0) << 8);
     ULONG io_limit_addr = (ULONG)((io_limit & 0xf0) << 8) | 0xfff;
@@ -252,7 +281,7 @@ static void dump_bridge_config(struct pci_device *dev)
            (ULONG)sec_status, (ULONG)bridge_ctrl);
 }
 
-static CONST_STRPTR pci_ea_bei_name(UBYTE bei)
+static CONST_STRPTR pci_ea_bei_name(u8 bei)
 {
     switch (bei)
     {
@@ -291,7 +320,7 @@ static CONST_STRPTR pci_ea_bei_name(UBYTE bei)
     }
 }
 
-static CONST_STRPTR pci_ea_property_name(UBYTE prop)
+static CONST_STRPTR pci_ea_property_name(u8 prop)
 {
     switch (prop)
     {
@@ -339,28 +368,27 @@ static void dump_ea_print_u64(CONST_STRPTR label, unsigned long long value)
     }
 }
 
-static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
+static s32 dump_ea_entry(struct pci_dev *dev, u32 entry_offset, u32 index)
 {
-    int start_offset = entry_offset;
-    ULONG dw0 = 0;
-    dm_pci_read_config32(dev, entry_offset, &dw0);
+    u32 start_offset = entry_offset;
+    u32 dw0 = pci_read_config_long((UBYTE)entry_offset, dev);
     entry_offset += 4;
 
-    int entry_size = (((int)(dw0 & PCI_EA_ES)) + 1) << 2;
-    UBYTE bei = (UBYTE)((dw0 & PCI_EA_BEI) >> 4);
-    UBYTE primary_prop = (UBYTE)((dw0 & PCI_EA_PP) >> 8);
-    UBYTE secondary_prop = (UBYTE)((dw0 & PCI_EA_SP) >> 16);
-    UBYTE property = primary_prop;
+    u32 entry_size = (u32)(((dw0 & PCI_EA_ES) + 1u) << 2);
+    u8 bei = (u8)((dw0 & PCI_EA_BEI) >> 4);
+    u8 primary_prop = (u8)((dw0 & PCI_EA_PP) >> 8);
+    u8 secondary_prop = (u8)((dw0 & PCI_EA_SP) >> 16);
+    u8 property = primary_prop;
 
     if (property > PCI_EA_P_BRIDGE_IO && property < PCI_EA_P_MEM_RESERVED)
         property = secondary_prop;
 
-    int enabled = (dw0 & PCI_EA_ENABLE) ? 1 : 0;
-    int writable = (dw0 & PCI_EA_WRITABLE) ? 1 : 0;
+    u32 enabled = (dw0 & PCI_EA_ENABLE) ? 1u : 0u;
+    u32 writable = (dw0 & PCI_EA_WRITABLE) ? 1u : 0u;
     CONST_STRPTR bei_name = pci_ea_bei_name(bei);
     CONST_STRPTR prop_name = pci_ea_property_name(property);
 
-    Printf((CONST_STRPTR) "        EA[%ld]: size=%ld bytes BEI=%ld (%s) prop=0x%02lx (%s) enabled=%ld writable=%ld\n",
+	Printf((CONST_STRPTR) "        EA[%ld]: size=%ld bytes BEI=%ld (%s) prop=0x%02lx (%s) enabled=%ld writable=%ld\n",
            (ULONG)index,
            (ULONG)entry_size,
            (ULONG)bei,
@@ -371,13 +399,10 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
            (ULONG)writable);
 
     if (!enabled)
-        return start_offset + entry_size;
-
-    ULONG base_lo = 0;
-    dm_pci_read_config32(dev, entry_offset, &base_lo);
+		return (s32)(start_offset + entry_size);
+    u32 base_lo = pci_read_config_long((UBYTE)entry_offset, dev);
     entry_offset += 4;
-    ULONG max_offset_lo = 0;
-    dm_pci_read_config32(dev, entry_offset, &max_offset_lo);
+    u32 max_offset_lo = pci_read_config_long((UBYTE)entry_offset, dev);
     entry_offset += 4;
 
     unsigned long long start = (unsigned long long)(base_lo & PCI_EA_FIELD_MASK);
@@ -385,16 +410,14 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
 
     if (base_lo & PCI_EA_IS_64)
     {
-        ULONG base_hi = 0;
-        dm_pci_read_config32(dev, entry_offset, &base_hi);
+        u32 base_hi = pci_read_config_long((UBYTE)entry_offset, dev);
         entry_offset += 4;
         start |= ((unsigned long long)base_hi << 32);
     }
 
     if (max_offset_lo & PCI_EA_IS_64)
     {
-        ULONG max_offset_hi = 0;
-        dm_pci_read_config32(dev, entry_offset, &max_offset_hi);
+        u32 max_offset_hi = pci_read_config_long((UBYTE)entry_offset, dev);
         entry_offset += 4;
         max_offset |= ((unsigned long long)max_offset_hi << 32);
     }
@@ -408,27 +431,25 @@ static int dump_ea_entry(struct pci_device *dev, int entry_offset, int index)
     dump_ea_print_u64((CONST_STRPTR) "Limit", limit);
     dump_ea_print_u64((CONST_STRPTR) "Size", length);
 
-    int consumed = entry_offset - start_offset;
+    u32 consumed = (u32)(entry_offset - start_offset);
     if (consumed < entry_size)
         entry_offset = start_offset + entry_size;
 
-    return entry_offset;
+    return (s32)entry_offset;
 }
 
-static void dump_ea_capability(struct pci_device *dev, int cap_offset, UBYTE header_layout)
+static void dump_ea_capability(struct pci_dev *dev, u32 cap_offset, u8 header_layout)
 {
-    UBYTE num_entries = 0;
-    dm_pci_read_config8(dev, cap_offset + PCI_EA_NUM_ENT, &num_entries);
-    num_entries &= PCI_EA_NUM_ENT_MASK;
+    u8 num_entries = (u8)(pci_read_config_byte((UBYTE)(cap_offset + PCI_EA_NUM_ENT), dev)
+                         & PCI_EA_NUM_ENT_MASK);
 
     Printf((CONST_STRPTR) "        Enhanced Allocation entries: %ld\n", (ULONG)num_entries);
 
     if (header_layout == PCI_HEADER_TYPE_BRIDGE)
     {
-        ULONG bus_info = 0;
-        dm_pci_read_config32(dev, cap_offset + PCI_EA_FIRST_ENT, &bus_info);
-        UBYTE ea_secondary = (UBYTE)(bus_info & PCI_EA_SEC_BUS_MASK);
-        UBYTE ea_subordinate = (UBYTE)((bus_info & PCI_EA_SUB_BUS_MASK) >> PCI_EA_SUB_BUS_SHIFT);
+        u32 bus_info = pci_read_config_long((UBYTE)(cap_offset + PCI_EA_FIRST_ENT), dev);
+        u8 ea_secondary = (u8)(bus_info & PCI_EA_SEC_BUS_MASK);
+        u8 ea_subordinate = (u8)((bus_info & PCI_EA_SUB_BUS_MASK) >> PCI_EA_SUB_BUS_SHIFT);
 
         if (ea_secondary != 0 && ea_subordinate >= ea_secondary)
         {
@@ -441,48 +462,38 @@ static void dump_ea_capability(struct pci_device *dev, int cap_offset, UBYTE hea
         }
     }
 
-    int entry_offset = cap_offset + ((header_layout == PCI_HEADER_TYPE_BRIDGE) ? PCI_EA_FIRST_ENT_BRIDGE : PCI_EA_FIRST_ENT);
+    u32 entry_offset = cap_offset + (u32)((header_layout == PCI_HEADER_TYPE_BRIDGE) ? PCI_EA_FIRST_ENT_BRIDGE : PCI_EA_FIRST_ENT);
 
-    for (int index = 0; index < num_entries; ++index)
+    for (u32 index = 0; index < num_entries; ++index)
     {
-        int next = dump_ea_entry(dev, entry_offset, index);
-        if (next <= entry_offset)
+        s32 next = dump_ea_entry(dev, entry_offset, index);
+        if (next <= (s32)entry_offset)
         {
             Printf((CONST_STRPTR) "          Failed to parse EA entry %ld\n", (ULONG)index);
             break;
         }
-        entry_offset = next;
+        entry_offset = (u32)next;
     }
 }
 
-static void probe_pci_device(struct pci_device *dev)
+static void probe_pci_device(struct pci_dev *dev)
 {
     if (!dev)
         return;
-    UWORD status = 0;
-    UWORD command = 0;
-    UBYTE revision = 0;
-    UBYTE prog_if = 0;
-    UBYTE subclass = 0;
-    UBYTE baseclass = 0;
-    UBYTE capability_pointer = 0;
-    UBYTE interrupt_line = 0;
-    UBYTE interrupt_pin = 0;
-    UBYTE header_type = 0;
 
-    dm_pci_read_config16(dev, PCI_STATUS, &status);
-    dm_pci_read_config16(dev, PCI_COMMAND, &command);
-    dm_pci_read_config8(dev, PCI_REVISION_ID, &revision);
-    dm_pci_read_config8(dev, PCI_CLASS_PROG, &prog_if);
-    dm_pci_read_config8(dev, PCI_CLASS_DEVICE, &subclass);
-    dm_pci_read_config8(dev, PCI_CLASS_DEVICE + 1, &baseclass);
-    dm_pci_read_config8(dev, PCI_CAPABILITY_LIST, &capability_pointer);
-    dm_pci_read_config8(dev, PCI_INTERRUPT_LINE, &interrupt_line);
-    dm_pci_read_config8(dev, PCI_INTERRUPT_PIN, &interrupt_pin);
-    dm_pci_read_config8(dev, PCI_HEADER_TYPE, &header_type);
+    UWORD status = pci_read_config_word(PCI_STATUS, dev);
+    UWORD command = pci_read_config_word(PCI_COMMAND, dev);
+    UBYTE revision = pci_read_config_byte(PCI_REVISION_ID, dev);
+    UBYTE prog_if = pci_read_config_byte(PCI_CLASS_PROG, dev);
+    UBYTE subclass = pci_read_config_byte(PCI_CLASS_DEVICE, dev);
+    UBYTE baseclass = pci_read_config_byte((UBYTE)(PCI_CLASS_DEVICE + 1), dev);
+    UBYTE capability_pointer = pci_read_config_byte(PCI_CAPABILITY_LIST, dev);
+    UBYTE interrupt_line = pci_read_config_byte(PCI_INTERRUPT_LINE, dev);
+    UBYTE interrupt_pin = pci_read_config_byte(PCI_INTERRUPT_PIN, dev);
+    UBYTE header_type = pci_read_config_byte(PCI_HEADER_TYPE, dev);
 
-    UBYTE header_layout = (UBYTE)(header_type & PCI_HEADER_TYPE_MASK);
-    int multi_function = (header_type & PCI_HEADER_TYPE_MULTI) ? 1 : 0;
+    u8 header_layout = (u8)(header_type & PCI_HEADER_TYPE_MASK);
+    u32 multi_function = (header_type & PCI_HEADER_TYPE_MULTI) ? 1u : 0u;
     CONST_STRPTR header_desc = pci_header_type_name(header_layout);
 
     Printf((CONST_STRPTR) "  Class = %02lx:%02lx:%02lx (rev %02lx)\n",
@@ -511,21 +522,17 @@ static void probe_pci_device(struct pci_device *dev)
     else
     {
         Printf((CONST_STRPTR) "\n    Standard PCI capabilities:\n");
-        for (int cap_id = 1; cap_id <= PCI_CAP_ID_MAX; ++cap_id)
+        for (u32 cap_id = 1; cap_id <= PCI_CAP_ID_MAX; ++cap_id)
         {
-            int offset = dm_pci_find_capability(dev, cap_id);
-            if (offset <= 0)
+            u32 offset = FindCapability(dev, (UBYTE)cap_id);
+            if (offset == 0)
                 continue;
 
-            UBYTE next_ptr = 0;
-            ULONG dword0 = 0;
-            ULONG dword1 = 0;
+            UBYTE next_ptr = pci_read_config_byte((UBYTE)(offset + PCI_CAP_LIST_NEXT), dev);
+            ULONG dword0 = pci_read_config_long((UBYTE)offset, dev);
+            ULONG dword1 = pci_read_config_long((UBYTE)(offset + 4), dev);
 
-            dm_pci_read_config8(dev, offset + PCI_CAP_LIST_NEXT, &next_ptr);
-            dm_pci_read_config32(dev, offset + 0, &dword0);
-            dm_pci_read_config32(dev, offset + 4, &dword1);
-
-            CONST_STRPTR name = pci_capability_name((UBYTE)cap_id);
+            CONST_STRPTR name = pci_capability_name((u8)cap_id);
             Printf((CONST_STRPTR) "      off=0x%02lx id=0x%02lx (%s) next=0x%02lx\n",
                    (ULONG)offset, (ULONG)cap_id, (ULONG)name, (ULONG)next_ptr);
             Printf((CONST_STRPTR) "        dword0=0x%08lx dword1=0x%08lx\n",
@@ -533,28 +540,22 @@ static void probe_pci_device(struct pci_device *dev)
 
             if (cap_id == PCI_CAP_ID_MSI)
             {
-                UWORD msg_ctl = 0;
-                ULONG addr_lo = 0;
-                dm_pci_read_config16(dev, offset + PCI_MSI_FLAGS, &msg_ctl);
-                dm_pci_read_config32(dev, offset + PCI_MSI_ADDRESS_LO, &addr_lo);
+                UWORD msg_ctl = pci_read_config_word((UBYTE)(offset + PCI_MSI_FLAGS), dev);
+                ULONG addr_lo = pci_read_config_long((UBYTE)(offset + PCI_MSI_ADDRESS_LO), dev);
                 Printf((CONST_STRPTR) "        MSI: ctl=0x%04lx addr_lo=0x%08lx\n",
                        (ULONG)msg_ctl, addr_lo);
             }
             else if (cap_id == PCI_CAP_ID_MSIX)
             {
-                UWORD msg_ctl = 0;
-                ULONG table = 0;
-                ULONG pba = 0;
-                dm_pci_read_config16(dev, offset + PCI_MSI_FLAGS, &msg_ctl);
-                dm_pci_read_config32(dev, offset + 4, &table);
-                dm_pci_read_config32(dev, offset + 8, &pba);
+                UWORD msg_ctl = pci_read_config_word((UBYTE)(offset + PCI_MSI_FLAGS), dev);
+                ULONG table = pci_read_config_long((UBYTE)(offset + 4), dev);
+                ULONG pba = pci_read_config_long((UBYTE)(offset + 8), dev);
                 Printf((CONST_STRPTR) "        MSI-X: ctl=0x%04lx table=0x%08lx pba=0x%08lx\n",
                        (ULONG)msg_ctl, table, pba);
             }
             else if (cap_id == PCI_CAP_ID_EXP)
             {
-                UWORD exp_flags = 0;
-                dm_pci_read_config16(dev, offset + PCI_EXP_FLAGS, &exp_flags);
+                UWORD exp_flags = pci_read_config_word((UBYTE)(offset + PCI_EXP_FLAGS), dev);
                 Printf((CONST_STRPTR) "        PCIe Flags=0x%04lx\n",
                        (ULONG)exp_flags);
             }
@@ -566,169 +567,80 @@ static void probe_pci_device(struct pci_device *dev)
     }
 
     Printf((CONST_STRPTR) "\n    PCIe extended capabilities:\n");
-    for (int cap_id = 1; cap_id <= PCI_EXT_CAP_ID_MAX; ++cap_id)
+    for (u32 cap_id = 1; cap_id <= PCI_EXT_CAP_ID_MAX; ++cap_id)
     {
-        int offset = dm_pci_find_ext_capability(dev, cap_id);
-        if (offset <= 0 || offset >= PCI_CFG_SPACE_EXP_SIZE)
+        u32 offset = FindExtCapability(dev, (UWORD)cap_id);
+        if (offset == 0 || offset >= PCI_CFG_SPACE_EXP_SIZE)
             continue;
 
-        ULONG header = 0;
-        ULONG dword1 = 0;
-
-        dm_pci_read_config32(dev, offset, &header);
-        dm_pci_read_config32(dev, offset + 4, &dword1);
-
-        UBYTE version = (UBYTE)PCI_EXT_CAP_VER(header);
-        UWORD next_ptr = (UWORD)PCI_EXT_CAP_NEXT(header);
-        CONST_STRPTR name = pcie_ext_capability_name((UWORD)cap_id);
-
-        Printf((CONST_STRPTR) "      off=0x%03lx id=0x%04lx (%s) ver=%lu next=0x%03lx\n",
-               (ULONG)offset, (ULONG)cap_id, (ULONG)name, (ULONG)version, (ULONG)next_ptr);
-        Printf((CONST_STRPTR) "        dword0=0x%08lx dword1=0x%08lx\n",
-               header, dword1);
+        ULONG dword0 = ReadExtConfigLong(offset,     dev);
+        ULONG dword1 = ReadExtConfigLong(offset + 4, dev);
+        ULONG ext_ver  = (ULONG)PCI_EXT_CAP_VER(dword0);
+        ULONG ext_next = (ULONG)PCI_EXT_CAP_NEXT(dword0);
+        CONST_STRPTR name = pcie_ext_capability_name((u16)cap_id);
+        Printf((CONST_STRPTR) "      off=0x%03lx id=0x%04lx (%s) ver=%ld next=0x%03lx\n",
+               (ULONG)offset, (ULONG)cap_id, (ULONG)name, ext_ver, ext_next);
+        Printf((CONST_STRPTR) "        dword0=0x%08lx dword1=0x%08lx\n", dword0, dword1);
     }
 
     Printf((CONST_STRPTR) "\n");
-
-    if (dev->vendor == 0x1106 && dev->device == 0x3483)
-    {
-        Printf((CONST_STRPTR) "  VL805 specific MMIO dump:\n");
-        dump_vl805_registers(dev);
-    }
 }
 
-static void dump_vl805_registers(struct pci_device *dev)
+static void print_device_machine(struct pci_dev *dev)
 {
-    if (!dev)
-        return;
-
-    void *bar0 = dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0, 0x1000, PCI_REGION_TYPE, PCI_REGION_MEM);
-    if (!bar0)
-    {
-        Printf((CONST_STRPTR) "  Failed to map VL805 BAR0\n");
-        return;
-    }
-
-    Printf((CONST_STRPTR) "  VL805 BAR0 mapped at 0x%08lx\n", (ULONG)bar0);
-
-    volatile UBYTE *regs8 = (volatile UBYTE *)bar0;
-    volatile ULONG *regs32 = (volatile ULONG *)bar0;
-
-    UBYTE cap_length = regs8[0];
-    UWORD hci_version = *(volatile UWORD *)(regs8 + 2);
-    ULONG hcs_params1 = regs32[1];
-    ULONG hcs_params2 = regs32[2];
-    ULONG hcs_params3 = regs32[3];
-    ULONG hcc_params1 = regs32[4];
-    ULONG doorbell_offset = regs32[5];
-    ULONG runtime_offset = regs32[6];
-    ULONG hcc_params2 = regs32[7];
-
-    Printf((CONST_STRPTR) "    xHCI Capability Registers:\n");
-    Printf((CONST_STRPTR) "      CAPLENGTH = 0x%02lx\n", (ULONG)cap_length);
-    Printf((CONST_STRPTR) "      HCIVERSION = 0x%04lx\n", (ULONG)hci_version);
-    Printf((CONST_STRPTR) "      HCSPARAMS1 = 0x%08lx (Slots=%ld Intrs=%ld Ports=%ld)\n",
-           hcs_params1,
-           (ULONG)(hcs_params1 & 0xff),
-           (ULONG)((hcs_params1 >> 8) & 0x7ff),
-           (ULONG)((hcs_params1 >> 24) & 0xff));
-    Printf((CONST_STRPTR) "      HCSPARAMS2 = 0x%08lx (IST=%ld ERST=%ld Scratch=%ld)\n",
-           hcs_params2,
-           (ULONG)(hcs_params2 & 0xf),
-           (ULONG)((hcs_params2 >> 4) & 0xf),
-           (ULONG)((hcs_params2 >> 27) & 0x1f));
-    Printf((CONST_STRPTR) "      HCSPARAMS3 = 0x%08lx (U1=%ld U2=%ld)\n",
-           hcs_params3,
-           (ULONG)(hcs_params3 & 0xff),
-           (ULONG)((hcs_params3 >> 16) & 0xffff));
-    Printf((CONST_STRPTR) "      HCCPARAMS1 = 0x%08lx\n", hcc_params1);
-    Printf((CONST_STRPTR) "      HBOFF = 0x%08lx\n", doorbell_offset);
-    Printf((CONST_STRPTR) "      RTSOFF = 0x%08lx\n", runtime_offset);
-    Printf((CONST_STRPTR) "      HCCPARAMS2 = 0x%08lx\n", hcc_params2);
-
-    volatile ULONG *op_regs = (volatile ULONG *)(regs8 + cap_length);
-    ULONG usbcmd = op_regs[0];
-    ULONG usbsts = op_regs[1];
-    ULONG pagesize = op_regs[2];
-    ULONG dnctrl = op_regs[3];
-    ULONG crcr_lo = op_regs[4];
-    ULONG crcr_hi = op_regs[5];
-    ULONG dcbaap_lo = op_regs[6];
-    ULONG dcbaap_hi = op_regs[7];
-    ULONG config = op_regs[8];
-
-    Printf((CONST_STRPTR) "    xHCI Operational Registers (offset 0x%02lx):\n", (ULONG)cap_length);
-    Printf((CONST_STRPTR) "      USBCMD = 0x%08lx (Run=%ld Reset=%ld IntEn=%ld HSErr=%ld)\n",
-           usbcmd,
-           (ULONG)(usbcmd & 1),
-           (ULONG)((usbcmd >> 1) & 1),
-           (ULONG)((usbcmd >> 2) & 1),
-           (ULONG)((usbcmd >> 3) & 1));
-    Printf((CONST_STRPTR) "      USBSTS = 0x%08lx (Halted=%ld HSE=%ld EINT=%ld PCD=%ld CNR=%ld)\n",
-           usbsts,
-           (ULONG)(usbsts & 1),
-           (ULONG)((usbsts >> 2) & 1),
-           (ULONG)((usbsts >> 3) & 1),
-           (ULONG)((usbsts >> 4) & 1),
-           (ULONG)((usbsts >> 11) & 1));
-    Printf((CONST_STRPTR) "      PAGESIZE = 0x%08lx (Page=%ld bytes)\n",
-           pagesize,
-           (ULONG)(pagesize << 12));
-    Printf((CONST_STRPTR) "      DNCTRL = 0x%08lx\n", dnctrl);
-    Printf((CONST_STRPTR) "      CRCR = 0x%08lx%08lx\n", crcr_hi, crcr_lo);
-    Printf((CONST_STRPTR) "      DCBAAP = 0x%08lx%08lx\n", dcbaap_hi, dcbaap_lo);
-    Printf((CONST_STRPTR) "      CONFIG = 0x%08lx (Slots=%ld)\n",
-           config,
-           (ULONG)(config & 0xff));
-
-    volatile ULONG *port_regs = (volatile ULONG *)(regs8 + cap_length + 0x400);
-    ULONG max_ports = (hcs_params1 >> 24) & 0xff;
-
-    Printf((CONST_STRPTR) "    xHCI Port Registers (offset 0x%02lx):\n", (ULONG)(cap_length + 0x400));
-    for (ULONG port = 0; port < max_ports && port < 4; ++port)
-    {
-        ULONG portsc = port_regs[port * 4];
-        ULONG portpmsc = port_regs[port * 4 + 1];
-        ULONG portli = port_regs[port * 4 + 2];
-        ULONG porthlpmc = port_regs[port * 4 + 3];
-
-        Printf((CONST_STRPTR) "      Port %ld:\n", port + 1);
-        Printf((CONST_STRPTR) "        PORTSC = 0x%08lx (CCS=%ld PED=%ld PP=%ld Speed=%ld PIC=%ld)\n",
-               portsc,
-               (ULONG)(portsc & 1),
-               (ULONG)((portsc >> 1) & 1),
-               (ULONG)((portsc >> 9) & 1),
-               (ULONG)((portsc >> 10) & 0xf),
-               (ULONG)((portsc >> 14) & 3));
-        Printf((CONST_STRPTR) "        PORTPMSC = 0x%08lx\n", portpmsc);
-        Printf((CONST_STRPTR) "        PORTLI = 0x%08lx\n", portli);
-        Printf((CONST_STRPTR) "        PORTHLPMC = 0x%08lx\n", porthlpmc);
-    }
-
-    volatile ULONG *rt_regs = (volatile ULONG *)(regs8 + (runtime_offset & 0xffff));
-    ULONG mfindex = rt_regs[0];
-
-    Printf((CONST_STRPTR) "    xHCI Runtime Registers (offset 0x%04lx):\n", (ULONG)(runtime_offset & 0xffff));
-    Printf((CONST_STRPTR) "      MFINDEX = 0x%08lx\n", mfindex);
-
-    volatile ULONG *iman = &rt_regs[8];
-    Printf((CONST_STRPTR) "      Interrupter 0:\n");
-    Printf((CONST_STRPTR) "        IMAN = 0x%08lx (IP=%ld IE=%ld)\n",
-           iman[0],
-           (ULONG)(iman[0] & 1),
-           (ULONG)((iman[0] >> 1) & 1));
-    Printf((CONST_STRPTR) "        IMOD = 0x%08lx\n", iman[1]);
-    Printf((CONST_STRPTR) "        ERSTSZ = 0x%08lx\n", iman[2]);
-    Printf((CONST_STRPTR) "        ERSTBA = 0x%08lx%08lx\n", iman[4], iman[3]);
-    Printf((CONST_STRPTR) "        ERDP = 0x%08lx%08lx\n", iman[6], iman[5]);
-
-    volatile ULONG *db_regs = (volatile ULONG *)(regs8 + (doorbell_offset & 0xffff));
-    Printf((CONST_STRPTR) "    xHCI Doorbell Array (offset 0x%04lx):\n", (ULONG)(doorbell_offset & 0xffff));
-    Printf((CONST_STRPTR) "      DB[0] = 0x%08lx\n", db_regs[0]);
-    for (ULONG i = 1; i <= max_ports && i <= 4; ++i)
-    {
-        Printf((CONST_STRPTR) "      DB[%ld] = 0x%08lx\n", i, db_regs[i]);
-    }
+    ULONG bus_num = 0;
+    ULONG owner_ptr = 0;
+    ULONG addr0 = 0, addr1 = 0, addr2 = 0, addr3 = 0, addr4 = 0, addr5 = 0;
+    ULONG size0 = 0, size1 = 0, size2 = 0, size3 = 0, size4 = 0, size5 = 0;
+    struct TagItem tags[] = {
+        {PRM_BusNumber,   (ULONG)&bus_num},
+        {PRM_BoardOwner,  (ULONG)&owner_ptr},
+        {PRM_MemoryAddr0, (ULONG)&addr0},
+        {PRM_MemoryAddr1, (ULONG)&addr1},
+        {PRM_MemoryAddr2, (ULONG)&addr2},
+        {PRM_MemoryAddr3, (ULONG)&addr3},
+        {PRM_MemoryAddr4, (ULONG)&addr4},
+        {PRM_MemoryAddr5, (ULONG)&addr5},
+        {PRM_MemorySize0, (ULONG)&size0},
+        {PRM_MemorySize1, (ULONG)&size1},
+        {PRM_MemorySize2, (ULONG)&size2},
+        {PRM_MemorySize3, (ULONG)&size3},
+        {PRM_MemorySize4, (ULONG)&size4},
+        {PRM_MemorySize5, (ULONG)&size5},
+        {TAG_DONE, 0}
+    };
+    GetBoardAttrsA(dev, tags);
+    CONST_STRPTR owner_name = owner_ptr ?
+        (CONST_STRPTR)((struct Task *)owner_ptr)->tc_Node.ln_Name :
+        (CONST_STRPTR)"-";
+    Printf((CONST_STRPTR) "%ld:%02lx.%lx vendor=%04lx device=%04lx class=%02lx:%02lx:%02lx owner=%s",
+           bus_num,
+           (ULONG)((dev->devfn >> 3) & 0x1f),
+           (ULONG)(dev->devfn & 0x07),
+           (ULONG)dev->vendor, (ULONG)dev->device,
+           (ULONG)((dev->devclass >> 16) & 0xff),
+           (ULONG)((dev->devclass >> 8) & 0xff),
+           (ULONG)(dev->devclass & 0xff),
+           (ULONG)owner_name);
+    ULONG sz0 = size0 ? (~size0 + 1u) : 0u;
+    if (addr0 != 0 || sz0 != 0)
+        Printf((CONST_STRPTR) " bar0=0x%08lx,0x%08lx", addr0, sz0);
+    ULONG sz1 = size1 ? (~size1 + 1u) : 0u;
+    if (addr1 != 0 || sz1 != 0)
+        Printf((CONST_STRPTR) " bar1=0x%08lx,0x%08lx", addr1, sz1);
+    ULONG sz2 = size2 ? (~size2 + 1u) : 0u;
+    if (addr2 != 0 || sz2 != 0)
+        Printf((CONST_STRPTR) " bar2=0x%08lx,0x%08lx", addr2, sz2);
+    ULONG sz3 = size3 ? (~size3 + 1u) : 0u;
+    if (addr3 != 0 || sz3 != 0)
+        Printf((CONST_STRPTR) " bar3=0x%08lx,0x%08lx", addr3, sz3);
+    ULONG sz4 = size4 ? (~size4 + 1u) : 0u;
+    if (addr4 != 0 || sz4 != 0)
+        Printf((CONST_STRPTR) " bar4=0x%08lx,0x%08lx", addr4, sz4);
+    ULONG sz5 = size5 ? (~size5 + 1u) : 0u;
+    if (addr5 != 0 || sz5 != 0)
+        Printf((CONST_STRPTR) " bar5=0x%08lx,0x%08lx", addr5, sz5);
+    Printf((CONST_STRPTR) "\n");
 }
 
 int main(void)
@@ -737,129 +649,37 @@ int main(void)
 
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR) "dos.library", 0);
     if (!DOSBase)
-    {
-        Printf((CONST_STRPTR) "Failed to open dos.library\n");
         return 50;
+
+    LONG rda_args[1] = {0};
+    struct RDArgs *rda = ReadArgs((CONST_STRPTR) "QUIET/S", rda_args, NULL);
+    if (rda) {
+        quiet_mode = (rda_args[0] != 0) ? TRUE : FALSE;
+        FreeArgs(rda);
     }
 
-    UtilityBase = OpenLibrary((CONST_STRPTR) "utility.library", 0);
-    if (!UtilityBase)
+    BCMPCIEBase = OpenLibrary((CONST_STRPTR) "bcmpcie.library", 1);
+    if (!BCMPCIEBase)
     {
-        Printf((CONST_STRPTR) "Failed to open utility.library\n");
-        CloseLibrary((struct Library *)DOSBase);
-        return 40;
-    }
-
-    GIC400_Base = OpenLibrary((CONST_STRPTR) "gic400.library", 0);
-    if (!GIC400_Base)
-    {
-        Printf((CONST_STRPTR) "Failed to open gic400.library\n");
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 45;
-    }
-
-    struct pci_controller *pcie = AllocMem(sizeof(*pcie), MEMF_CLEAR | MEMF_PUBLIC);
-    if (!pcie)
-    {
-        Printf((CONST_STRPTR) "Failed to allocate memory for PCIe controller\n");
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 30;
-    }
-
-    int ret = mbox_parse_devtree();
-    if (ret != 0)
-    {
-        Printf((CONST_STRPTR) "Failed to parse mailbox devtree\n");
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 20;
-    }
-
-    int res = brcm_pcie_probe(pcie, 0);
-    if (res < 0)
-    {
-        Printf((CONST_STRPTR) "Failed to probe PCIe controller\n");
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 10;
-    }
-    Printf((CONST_STRPTR) "PCIe controller probed successfully\n");
-
-    _NewMinList(&pci_bus_list);
-
-    struct pci_bus *root_bus = AllocMem(sizeof(*root_bus), MEMF_CLEAR | MEMF_PUBLIC);
-    if (!root_bus)
-    {
-        Printf((CONST_STRPTR) "Failed to allocate memory for root bus\n");
-        brcm_pcie_remove(pcie);
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 30;
-    }
-
-    _NewMinList(&root_bus->devices);
-    root_bus->controller = pcie;
-    root_bus->parent = NULL;
-    root_bus->pci_bridge = NULL;
-    CopyMem((APTR)"pcie0", root_bus->name, sizeof("pcie0"));
-    root_bus->bus_number = 0;
-    root_bus->bus_number_last_sub = 0;
-    AddTailMinList(&pci_bus_list, (struct MinNode *)root_bus);
-
-    ret = pci_bind_bus_devices(root_bus);
-    if (ret)
-    {
-        Printf((CONST_STRPTR) "Failed to bind devices on bus 0\n");
-        brcm_pcie_remove(pcie);
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
-        CloseLibrary((struct Library *)DOSBase);
-        return 20;
-    }
-
-    ret = pci_auto_config_devices(root_bus);
-    if (ret < 0)
-    {
-        Printf((CONST_STRPTR) "Failed to configure devices on bus 0\n");
-        brcm_pcie_remove(pcie);
-        CloseLibrary(GIC400_Base);
-        CloseLibrary((struct Library *)UtilityBase);
+        Printf((CONST_STRPTR) "Failed to open bcmpcie.library\n");
         CloseLibrary((struct Library *)DOSBase);
         return 10;
     }
 
-    ret = bcm2711_notify_vl805_reset();
-    if (ret != 0)
+    static struct TagItem empty_tags[] = { {TAG_DONE, 0} };
+    struct pci_dev *dev = FindBoardA(NULL, empty_tags);
+    while (dev != NULL)
     {
-        Printf((CONST_STRPTR) "Failed to notify VL805 reset\n");
-    }
-    delay_us(1000);
-
-    int bus_max = pci_get_bus_max();
-    for (int bus_index = 0; bus_index <= bus_max; ++bus_index)
-    {
-        struct pci_bus *bus;
-        if (pci_get_bus(bus_index, &bus) == 0)
-        {
-            for (struct MinNode *node = bus->devices.mlh_Head; node->mln_Succ; node = node->mln_Succ)
-            {
-                struct pci_device *dev = (struct pci_device *)node;
-                print_device(dev);
-                probe_pci_device(dev);
-            }
+        if (quiet_mode) {
+            print_device_machine(dev);
+        } else {
+            print_device(dev);
+            probe_pci_device(dev);
         }
+        dev = FindBoardA(dev, empty_tags);
     }
 
-    brcm_pcie_remove(pcie);
-
-    CloseLibrary(GIC400_Base);
-    CloseLibrary((struct Library *)UtilityBase);
+    CloseLibrary(BCMPCIEBase);
     CloseLibrary((struct Library *)DOSBase);
 
     return 0;
