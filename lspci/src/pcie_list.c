@@ -665,13 +665,9 @@ int main(void)
         CloseLibrary((struct Library *)DOSBase);
         return 10;
     }
-    if (!quiet_mode)
-        Printf((CONST_STRPTR) "bcmpcie.library opened successfully\n");
 
     static struct TagItem empty_tags[] = { {TAG_DONE, 0} };
     struct pci_dev *dev = FindBoardA(NULL, empty_tags);
-    if (!quiet_mode)
-        Printf((CONST_STRPTR) "Starting PCIe device enumeration:\n");
     while (dev != NULL)
     {
         if (quiet_mode) {
