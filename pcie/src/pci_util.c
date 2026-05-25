@@ -125,7 +125,7 @@ s32 pci_flr(struct pci_device *dev)
 						   PCI_EXP_DEVCTL_BCR_FLR);
 
 	/* wait 100ms, per PCI spec */
-	delay_us(100 * 1000);
+	delay_ms(100);
 
 	return 0;
 }

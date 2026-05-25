@@ -215,7 +215,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     Kprintf("[pcie] %s: devices auto-configured successfully\n", __func__);
 
     (void)bcm2711_reload_vl805_firmware();
-    delay_us(1000);
+    delay_ms(1);
     KprintfH("[pcie] %s: VL805 firmware reloaded\n", __func__);
 
     res = pcie_build_dev_list(base);

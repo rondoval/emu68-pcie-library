@@ -332,7 +332,7 @@ static s32 brcm_pcie_set_ssc(void *base)
 	if (ret < 0)
 		return ret;
 
-	delay_us(1000);
+	delay_ms(1);
 	ret = brcm_pcie_mdio_read(base, MDIO_PORT0, SSC_STATUS_OFFSET, &tmp);
 	if (ret < 0)
 		return ret;
@@ -787,13 +787,13 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 	mmio_clear32(ctlr->base + PCIE_RGR1_SW_INIT_1,
 				 PCIE_RGR1_SW_INIT_1_PERST_MASK);
 	/* 100ms after PERST# deassertion per PCIe CEM */
-	delay_us(100 * 1000);
+	delay_ms(100);
 
 	/* Give the RC/EP time to wake up, before trying to configure RC.
 	 * Intermittently check status for link-up, up to a total of 100ms.
 	 */
 	for (u32 i = 0; i < 100 && !brcm_pcie_link_up(ctlr); i += 5)
-		delay_us(5 * 1000);
+		delay_ms(5);
 
 	if (!brcm_pcie_link_up(ctlr))
 	{
