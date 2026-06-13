@@ -26,15 +26,14 @@ s32 bcm2711_reload_vl805_firmware(void)
 		return -EIO;
 	}
 
-	ULONG command[] = {
-		7 * sizeof(u32), /* buffer size */
-		MAILBOX_PROP_REQ_CODE, /* request code */
-		MAILBOX_TAG_NOTIFY_XHCI_RESET, /* tag id */
-		sizeof(u32), /* value buffer size */
-		sizeof(u32), /* value length */
-		0x100000, /* Hardwired RPi4 VL805 PCI address. */
-		0, /* end tag */
-	};
+	ULONG command[7];
+	command[0] = 7 * sizeof(u32);                /* buffer size */
+	command[1] = MAILBOX_PROP_REQ_CODE;          /* request code */
+	command[2] = MAILBOX_TAG_NOTIFY_XHCI_RESET;  /* tag id */
+	command[3] = sizeof(u32);                    /* value buffer size */
+	command[4] = sizeof(u32);                    /* value length */
+	command[5] = 0x100000;                       /* Hardwired RPi4 VL805 PCI address. */
+	command[6] = 0;                              /* end tag */
 
 	MB_RawCommand(command);
 	if (command[0] == 0xffffffff || command[1] != MAILBOX_PROP_RESP_CODE_SUCCESS)

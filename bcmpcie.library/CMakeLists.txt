@@ -126,6 +126,9 @@ target_link_libraries(pcie_library
         gcc
 )
 
+# ROM-able: no writable .data/.bss may sneak in (see driver-stack TODO.md)
+emu68_rom_check(pcie_library)
+
 set_target_properties(pcie_library PROPERTIES
     OUTPUT_NAME bcmpcie
     SUFFIX ".library"
