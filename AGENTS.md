@@ -2,13 +2,13 @@
 
 ## Role
 
-- This repo currently ships the PCIe support code as a static library linked into consumers, not as a shared opened-by-name Amiga library.
-- The intended direction is to turn `pcie.library` into a real dynamic library shared between multiple users; treat upcoming work in this repo as part of that transition unless a task is explicitly limited to current behavior.
+- This repo ships `bcmpcie.library`, a real AmigaOS dynamic library opened by name (`OpenLibrary("bcmpcie.library", …)`) and shared by multiple consumers. It is built ROM-able (no writable `.data`/`.bss`, enforced by `emu68_rom_check`).
+- Consumers (`emu68-xhci-driver`, `lspci`) link only its headers (`Emu68PCIe::pcie_headers`), not the implementation, and open it at runtime by name.
 - `lspci` is the standalone bring-up and debugging tool for enumeration and BAR assignment.
 
 ## Build
 
-- Required installed dependencies: `emu68-common` and `emu68-gic400-library`.
+- Required installed dependencies: `emu68-common`, `emu68-gic400-library`, and `mailbox` (mailbox.resource, used for VL805 firmware reload).
 - Preferred commands:
   - `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake -DCMAKE_PREFIX_PATH=/path/to/emu68-driver-stack -DCMAKE_INSTALL_PREFIX=/path/to/emu68-driver-stack`
   - `cmake --build build`
@@ -16,12 +16,11 @@
 
 ## Code Handling
 
-- Be conservative with public PCIe API changes; `emu68-xhci-driver` links this directly.
-- Keep the future shared-library design in mind when introducing new state, ownership assumptions, or APIs, even if the current implementation is still static-linked.
+- Be conservative with public PCIe API changes — the SFD jump table is the ABI; `emu68-xhci-driver` and `lspci` open the library by name and link only its headers.
+- It is a shared, opened-by-name library: when introducing new state, ownership, or APIs, account for multiple concurrent consumers and guard shared runtime state under `base->semaphore`.
 - Preserve the current BCM2711 + VL805 assumptions unless the task is explicitly widening hardware support.
 - Changes to enumeration, BAR assignment, or MSI setup should be validated with both library consumers and `lspci` where possible.
-- Do not treat `pcie.library` as a real shared library yet when reasoning about current runtime state ownership, but avoid cementing assumptions that would block the planned multi-user dynamic-library model.
-- Licensing in this repo was audited against its U-Boot/Linux provenance. Preserve existing file-level SPDX headers; in particular, do not overwrite the special non-GPL provenance on `pcie.library/include/bcm2711.h`.
+- Licensing in this repo was audited against its U-Boot/Linux provenance. Preserve existing file-level SPDX headers; in particular, do not overwrite the special non-GPL provenance on `pcie/include/bcm2711.h`.
 
 ## SFD and Jump Table Discipline
 

@@ -22,6 +22,7 @@
 #include <exec/tasks.h>
 #include <types.h>
 #include <debug.h>
+#include <dma_mem.h>
 #include <libraries/openpci.h>
 #include <libraries/pcitags.h>
 #include <pci_types.h>
@@ -76,7 +77,8 @@ struct PCIELibBase {
     struct pci_dev         *devListHead;   /* first pci_dev, or NULL */
 
     BOOL                    ctrlReady;     /* TRUE after successful first-open init */
-    APTR                    dmaPool;       /* exec pool for cache-line-aligned DMA allocations */
+    struct dma_mem_ctx      dma_ctx;       /* Emu68 (DMA-reachable) RAM regions; backs dmaPool */
+    struct dma_pool        *dmaPool;       /* region-restricted DMA pool (Emu68 RAM) for DMA buffers */
 };
 
 /* Extract the internal pci_device pointer stored in pci_dev.reserved. */

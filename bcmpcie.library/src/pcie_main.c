@@ -215,7 +215,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     Kprintf("[pcie] %s: devices auto-configured successfully\n", __func__);
 
     (void)bcm2711_reload_vl805_firmware();
-    delay_us(1000);
+    delay_ms(1);
     KprintfH("[pcie] %s: VL805 firmware reloaded\n", __func__);
 
     res = pcie_build_dev_list(base);
@@ -225,10 +225,14 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     base->ctrlReady = TRUE;
     KprintfH("[pcie] %s: controller ready\n", __func__);
 
-    base->dmaPool = CreatePool(MEMF_PUBLIC | MEMF_FAST, 4096, 4096);
+    /* DMA buffers handed to clients must live in Emu68 (Pi-DRAM) RAM the PCIe engine
+     * can reach, so the pool is region-restricted; with no device tree there is no
+     * reachable region and we refuse to come up. */
+    dma_mem_init(&base->dma_ctx);
+    base->dmaPool = dma_pool_create(&base->dma_ctx);
     if (!base->dmaPool)
     {
-        Kprintf("[pcie] %s: out of memory for DMA pool\n", __func__);
+        Kprintf("[pcie] %s: no DMA-reachable region for pool\n", __func__);
         goto err_dma_pool;
     }
 
@@ -268,7 +272,7 @@ static void pcie_hw_shutdown(struct PCIELibBase *base)
     base->gic400Base = NULL;
     if (base->dmaPool)
     {
-        DeletePool(base->dmaPool);
+        dma_pool_delete(base->dmaPool);
         base->dmaPool = NULL;
     }
     base->ctrlReady = FALSE;

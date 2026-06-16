@@ -14,7 +14,8 @@ interrupt lines and MSI.  It is actively used by `emu68-xhci-driver` to reach th
 USB 3.0 host controller soldered onto every Raspberry Pi 4.
 
 `bcmpcie.library` is an AmigaOS dynamic library opened by name — multiple drivers can open
-it concurrently.
+it concurrently.  It is built ROM-able (it contains no writable `.data`/`.bss`), so it can
+be placed in `LIBS:` or embedded in a ROM image without modification.
 
 An `openpci.library` compatibility shim is also provided for software that opens the library
 by that name.  It forwards the classic openpci API but does not expose the BCM2711-specific
