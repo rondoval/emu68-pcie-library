@@ -3,9 +3,11 @@
  * pcie_mem.c — DMA allocation, address translation, BAR mapping, and
  *              PCI memory-region reservation shims.
  *
- * All memory is coherent on Pi4/emu68 (1:1 virtual-to-physical mapping,
- * no separate DMA window), so address translation is identity and DMA
- * allocation is ordinary fast public memory.
+ * Fast RAM is 1:1 virtual-to-physical on Pi4/emu68, so address translation for
+ * DMA buffers is identity.  But only *Emu68* Fast RAM (Pi DRAM) is reachable by
+ * the PCIe DMA engine; Chip RAM and any Zorro/accelerator Fast RAM are not.  DMA
+ * buffers therefore come from a region-restricted pool (see dma_mem.h) rather
+ * than ordinary AllocMem(MEMF_FAST).
  */
 
 #include <pcie_private.h>
@@ -18,13 +20,11 @@
 #endif
 
 /* -----------------------------------------------------------------------
- * DMA memory allocation — cache-line-aligned pool on Pi4/emu68.
+ * DMA memory allocation — region-restricted, cache-line-aligned pool.
  *
- * On BCM2711 all Fast RAM is DMA-reachable from PCIe (1:1 physical
- * mapping), so the device argument only identifies the requesting device
- * for diagnostic purposes; any allocation from the shared DMA pool is
- * suitable regardless of which device will use it.  The caller is
- * responsible for freeing buffers via ReleaseDMAMemoryForBoard.
+ * base->dmaPool is backed by Emu68 (Pi-DRAM) RAM only, so every allocation is
+ * reachable by the PCIe DMA engine regardless of which device will use it.
+ * The caller is responsible for freeing buffers via ReleaseDMAMemoryForBoard.
  * ----------------------------------------------------------------------- */
 
 APTR LibAllocDMAMem(ULONG size asm("d0"), ULONG flags asm("d1"), struct PCIELibBase *base asm("a6"))
@@ -119,9 +119,10 @@ APTR LibPhysicToLogic(APTR addr asm("a0"), struct pci_dev *dev asm("a1"), struct
 
 /* -----------------------------------------------------------------------
  * Memory-change notification hooks — no-op stubs.
- * BCM2711 has no Zorro bus and all system RAM is DMA-reachable from PCIe;
- * bounce-buffer notification is not required. Return TRUE (success) so
- * callers (e.g. P96) do not treat the registration as failed.
+ * The bounce-notification protocol is not implemented: clients that need
+ * DMA-safe memory should obtain it from AllocDMAMemoryForBoard/AllocDMAMem,
+ * which return Emu68 (PCIe-reachable) RAM.  Return TRUE (success) so callers
+ * (e.g. P96) do not treat the registration as failed.
  * ----------------------------------------------------------------------- */
 
 BOOL LibAddMemHandler(struct pci_dev *dev asm("a0"), struct Hook *hk asm("a1"), BYTE pri asm("d0"), struct PCIELibBase *base asm("a6"))
@@ -130,7 +131,7 @@ BOOL LibAddMemHandler(struct pci_dev *dev asm("a0"), struct Hook *hk asm("a1"), 
     (void)hk;
     (void)pri;
     (void)base;
-    return TRUE; /* no-op: all Fast RAM is DMA-reachable on BCM2711 */
+    return TRUE; /* no-op: clients should use AllocDMAMem for reachable memory */
 }
 
 BOOL LibRemMemHandler(struct pci_dev *dev asm("a0"), struct Hook *hk asm("a1"), struct PCIELibBase *base asm("a6"))

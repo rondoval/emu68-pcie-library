@@ -531,20 +531,20 @@ static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 	cells_per_record = pci_addr_cells + addr_cells + size_cells;
 	KprintfH("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
 
-	while (len)
+	while (len >= cells_per_record)
 	{
-		memp->bus_start = (pci_addr_t)DT_GetNumber(dma_ranges + 1, 2);
-		dma_ranges += pci_addr_cells;
-		memp->phys_start = DT_GetNumber(dma_ranges, addr_cells);
-		dma_ranges += addr_cells;
-		memp->size = (pci_size_t)DT_GetNumber(dma_ranges, size_cells);
-		dma_ranges += size_cells;
-		KprintfH("[pcie] %s: region %ld, bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n",
-				 __func__, i, (ULONG)((u64)(memp->bus_start) >> 32), (ULONG)(memp->bus_start & 0xffffffff), (ULONG)(memp->phys_start >> 32), (ULONG)(memp->phys_start & 0xffffffff), (ULONG)((u64)(memp->size) >> 32), (ULONG)(memp->size & 0xffffffff));
 		if (i == index)
+		{
+			memp->bus_start = (pci_addr_t)DT_GetNumber(dma_ranges + 1, 2);
+			memp->phys_start = DT_GetNumber(dma_ranges + pci_addr_cells, addr_cells);
+			memp->size = (pci_size_t)DT_GetNumber(dma_ranges + pci_addr_cells + addr_cells, size_cells);
+			KprintfH("[pcie] %s: dma-range %ld, bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n",
+					 __func__, i, (ULONG)((u64)(memp->bus_start) >> 32), (ULONG)(memp->bus_start & 0xffffffff), (ULONG)(memp->phys_start >> 32), (ULONG)(memp->phys_start & 0xffffffff), (ULONG)((u64)(memp->size) >> 32), (ULONG)(memp->size & 0xffffffff));
 			return 0;
-		i++;
+		}
+		dma_ranges += cells_per_record;
 		len -= cells_per_record;
+		i++;
 	}
 
 	return -EINVAL;
@@ -648,30 +648,55 @@ static s32 pci_get_devtree_regions(struct pci_controller *hose)
 		pci_set_region(hose->regions + pos, (pci_addr_t)pci_addr, (phys_addr_t)addr, (pci_size_t)size, type);
 	}
 
-	/* Add a region for our local memory */
+	/* Add a region for our local memory — but only the Emu68 (Pi-DRAM) RAM that the
+	 * PCIe inbound window (dma-ranges) actually decodes.  Registering Zorro/accelerator
+	 * Fast RAM here would let pci_phys_to_bus translate addresses the engine cannot
+	 * reach.  If dma-ranges is unavailable, fall back to registering all Fast RAM. */
 	KprintfH("[pcie] %s: Adding system memory regions\n", __func__);
-	struct ExecBase *sysBase = *(struct ExecBase **)4UL;
-	struct MemHeader *mh = (struct MemHeader *)sysBase->MemList.lh_Head;
-	for (u32 i = 0; i < CONFIG_NR_DRAM_BANKS && mh != NULL; i++)
-	{
-		if (mh->mh_Attributes & MEMF_FAST)
-		{
-			u32 start = (u32)mh->mh_Lower;
-			u32 end = (u32)mh->mh_Upper;
-			u32 size = end - start + 1;
+	struct pci_region dma_win;
+	BOOL have_dma_win = (pci_get_devtree_dma_regions(hose, &dma_win, 0) == 0);
+	/* The inbound window translates PCI bus <-> CPU phys by this offset (the value
+	 * programmed into RC_BAR2, below).  The SYS_MEMORY region must encode the same
+	 * offset so pci_phys_to_bus() yields a bus address the window maps back to the
+	 * buffer; normally offset is 0. */
+	pci_addr_t dma_offset = have_dma_win
+								? (pci_addr_t)(dma_win.bus_start - dma_win.phys_start)
+								: 0;
 
-			if (size == 0)
-				continue;
-			u32 pos = hose->region_count++;
-			KprintfH("[pcie] %s: - DRAM region %ld: start=0x%lx, size=0x%lx\n", __func__, pos, start, size);
-#ifdef CONFIG_PCI_MAP_SYSTEM_MEMORY
-			start = virt_to_phys((void *)(uintptr_t)bd->bi_dram[i].start);
-#endif
-			pci_set_region(hose->regions + pos, start, start, size,
-						   PCI_REGION_MEM | PCI_REGION_SYS_MEMORY);
+	struct ExecBase *sysBase = EXEC_BASE_NAME;
+	Forbid();
+	struct MemHeader *mh = (struct MemHeader *)sysBase->MemList.lh_Head;
+	for (u32 added = 0;
+		 mh->mh_Node.ln_Succ != NULL && added < CONFIG_NR_DRAM_BANKS;
+		 mh = (struct MemHeader *)mh->mh_Node.ln_Succ)
+	{
+		if ((mh->mh_Attributes & MEMF_FAST) == 0)
+			continue;
+
+		u32 start = (u32)mh->mh_Lower;
+		u32 end = (u32)mh->mh_Upper; /* exclusive */
+		if (end <= start)
+			continue;
+		u32 size = end - start;
+
+		if (have_dma_win &&
+			((phys_addr_t)start < dma_win.phys_start ||
+			 (phys_addr_t)end > dma_win.phys_start + dma_win.size))
+		{
+			KprintfH("[pcie] %s: - skipping non-DMA Fast RAM 0x%lx..0x%lx\n", __func__, start, end);
+			continue;
 		}
-		mh = (struct MemHeader *)mh->mh_Node.ln_Succ;
+
+		u32 pos = hose->region_count++;
+		KprintfH("[pcie] %s: - DRAM region %ld: start=0x%lx, size=0x%lx\n", __func__, pos, start, size);
+#ifdef CONFIG_PCI_MAP_SYSTEM_MEMORY
+		start = virt_to_phys((void *)(uintptr_t)bd->bi_dram[added].start);
+#endif
+		pci_set_region(hose->regions + pos, (pci_addr_t)start + dma_offset, start, size,
+					   PCI_REGION_MEM | PCI_REGION_SYS_MEMORY);
+		added++;
 	}
+	Permit();
 
 	return 0;
 }
