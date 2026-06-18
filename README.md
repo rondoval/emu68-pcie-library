@@ -201,6 +201,8 @@ cmake --build build
 cmake --install build
 ```
 
+Debug backend: append `-DEMU68_DEBUG_BACKEND=serial` (default `pistorm` | `serial` | `off`) — selected stack-wide via `emu68-common`. `serial` routes debug to the AmigaOS serial console (`debug.lib`) and is not ROM-able; `off` compiles debug out.
+
 Recommended workflow: install `devicetree.resource`, `mailbox.resource`, `emu68-common`, `emu68-gic400-library`, and this package into the same prefix.
 
 If you keep dependencies in separate install trees instead, set `CMAKE_PREFIX_PATH` to the `mailbox.resource`, `emu68-common`, and `emu68-gic400-library` install prefixes.

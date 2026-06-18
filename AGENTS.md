@@ -13,6 +13,7 @@
   - `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake -DCMAKE_PREFIX_PATH=/path/to/emu68-driver-stack -DCMAKE_INSTALL_PREFIX=/path/to/emu68-driver-stack`
   - `cmake --build build`
   - `cmake --install build`
+- Debug backend: pass `-DEMU68_DEBUG_BACKEND=serial` (default `pistorm` | `serial` | `off`); selected stack-wide via `emu68-common`, `serial` links `debug.lib` and is not ROM-able.
 
 ## Code Handling
 

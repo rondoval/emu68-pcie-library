@@ -12,11 +12,13 @@ add_compile_options(
     -Wstrict-prototypes
     -Wno-unused-function
     -Wno-shift-count-overflow
-    -DDEBUG
 )
 add_link_options(
     -s
 )
+
+# Debug-output backend defines (EMU68_DEBUG_BACKEND, see emu68-common).
+emu68_debug_backend_definitions()
 
 # Executable
 add_executable(lspci
@@ -24,8 +26,13 @@ add_executable(lspci
 )
 
 target_link_libraries(lspci
-    Emu68Common::common
+    PRIVATE
+        Emu68Common::common
 )
+
+# Hosted CLI program: for the serial backend, link debug.lib (KPrintF). libc
+# supplies __divsi3, so no glue and no ROM check.
+emu68_debug_backend_finalize(lspci)
 
 # pcie_library_sfd_headers generates proto/bcmpcie.h (and clib/, inline/, pragmas/) into
 # the build tree. Reference it directly so lspci can build before the install step

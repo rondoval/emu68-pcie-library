@@ -64,8 +64,10 @@ add_compile_options(
     -Wshadow
     -Wmissing-prototypes
     -Wstrict-prototypes
-    -DDEBUG
 )
+
+# Debug-output backend defines (EMU68_DEBUG_BACKEND, see emu68-common).
+emu68_debug_backend_definitions()
 
 add_link_options(
     -ffreestanding
@@ -126,8 +128,9 @@ target_link_libraries(pcie_library
         gcc
 )
 
-# ROM-able: no writable .data/.bss may sneak in (see driver-stack TODO.md)
-emu68_rom_check(pcie_library)
+# ROM-able: no writable .data/.bss may sneak in. For the serial backend this instead
+# links debug.lib (+ __divsi3 glue) and skips the check.
+emu68_debug_backend_finalize(pcie_library ROMABLE)
 
 set_target_properties(pcie_library PROPERTIES
     OUTPUT_NAME bcmpcie

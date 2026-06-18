@@ -357,7 +357,9 @@ static BOOL pciauto_exp_link_stable(struct pci_device *dev, u32 pcie_off)
 		plnktr = lnktr;
 	} while (!dllla && get_time() < end);
 
+#ifdef DEBUG
 	pci_dev_t bdf = pci_get_bdf(dev);
+#endif
 	Kprintf("[pcie] %s: %02x.%02x.%02x: Fixup link: DL active: %lu; "
 			"%3lu flips, %6lu loops of which %6lu while training, "
 			"final %6lu stable\n",
@@ -417,7 +419,9 @@ static void pciauto_exp_fixup_link(struct pci_device *dev, u32 pcie_off)
 	u16 exp_lnksta, exp_lnkctl, exp_lnkctl2;
 	u16 exp_flags, exp_type, exp_version;
 	u32 exp_lnkcap;
+#ifdef DEBUG
 	pci_dev_t bdf;
+#endif
 
 	pci_read_config16(dev, pcie_off + PCI_EXP_FLAGS, &exp_flags);
 	exp_version = exp_flags & PCI_EXP_FLAGS_VERS;
@@ -446,7 +450,9 @@ static void pciauto_exp_fixup_link(struct pci_device *dev, u32 pcie_off)
 	if (pciauto_exp_link_stable(dev, pcie_off))
 		return;
 
+#ifdef DEBUG
 	bdf = pci_get_bdf(dev);
+#endif
 	Kprintf("[pcie] %s: %02lx.%02lx.%02lx: Downstream link non-functional\n", __func__, PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 	Kprintf("[pcie] %s: %02lx.%02lx.%02lx: Retrying with speed restricted to 2.5GT/s...\n", __func__, PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf));
 
