@@ -9,9 +9,10 @@ Raspberry Pi 4 and Compute Module 4 (CM4), both using the BCM2711 SoC.
 
 
 `bcmpcie.library` initialises the Broadcom STB PCIe controller, brings the link
-up, enumerates the bus hierarchy, allocates BARs and supports both traditional PCI INTx
-interrupt lines and MSI.  It is actively used by `emu68-xhci-driver` to reach the VIA VL805
-USB 3.0 host controller soldered onto every Raspberry Pi 4.
+up, enumerates the bus hierarchy, allocates BARs and supports INTx, MSI and MSI-X
+interrupts through a typed, multi-vector allocation API (`AllocIntVectors`).  It is actively
+used by `emu68-xhci-driver` to reach the VIA VL805 USB 3.0 host controller soldered onto
+every Raspberry Pi 4, and by `emu68-nvme-driver`.
 
 `bcmpcie.library` is an AmigaOS dynamic library opened by name — multiple drivers can open
 it concurrently.  It is built ROM-able (it contains no writable `.data`/`.bss`), so it can
@@ -159,9 +160,11 @@ openpci.library/    Compatibility shim: forwards openpci API to bcmpcie.library
 pcie/               Shared internal PCIe engine (not a public API)
   src/
     pcie_brcmstb.c          Broadcom STB PCIe controller driver (ported from Linux)
-    pcie_brcmstb_msi.c      MSI interrupt controller support
+    pcie_brcmstb_msi.c      BCM2711 MSI demux controller (vector pool + dispatch ISR)
     vl805_reset.c           BCM2711 mailbox helper for reloading VL805 firmware
-    pcie_msi.c              MSI vector management
+    pci_irq.c               Typed/multi-vector interrupt-allocation core (MSI/MSI-X)
+    pcie_msi.c              MSI capability programming (multi-message)
+    pcie_msix.c             MSI-X capability + table programming
     pci_probe.c             Bus and device enumeration
     pci_auto.c              BAR / resource auto-configuration
     pci_bar.c               BAR management helpers

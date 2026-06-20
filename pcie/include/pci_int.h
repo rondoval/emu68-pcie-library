@@ -27,13 +27,28 @@
 void pci_intx(struct pci_device *pdev, int enable);
 
 /**
+ * pci_intx_alloc() - Claim INTx as the active interrupt for a device
+ *
+ * The INTx analog of pci_msi_alloc()/pci_msix_alloc(): records INTx in
+ * dev->active (single vector, no demux slot) once it is deliverable.  No
+ * hardware is touched here — the ISR is wired up later by pci_irq_install().
+ *
+ * @dev: Device to claim INTx for
+ * @min: Minimum acceptable vector count (INTx supports exactly 1)
+ * @max: Maximum desired vector count (unused beyond the >= min check)
+ * Return: 1 on success, or negative errno: -ERANGE if @min > 1, -ENODEV if the
+ *         device has no INTx pin, -ENOTSUPP if gic400 is unavailable.
+ */
+s32 pci_intx_alloc(struct pci_device *dev, u32 min, u32 max);
+
+/**
  * pci_assign_irq() - Resolve a device's interrupt pin to a GIC IRQ number
  *
  * Reads the device's PCI_INTERRUPT_PIN register, then walks the bridge
  * chain to the root bus performing the standard PCI slot-based swizzle at
  * each hop.  The final pin index is looked up in the root controller's
  * INT_x_mapping[] array to obtain the GIC IRQ number, which is stored in
- * dev->irq_line and dev->irq_line_gic.
+ * dev->intx.pin_routed and dev->intx.gic_line.
  *
  * Does nothing if PCI_INTERRUPT_PIN is 0 (device uses no interrupt pin).
  *

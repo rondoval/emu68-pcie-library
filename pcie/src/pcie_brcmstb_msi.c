@@ -20,8 +20,6 @@
 #include <iomem.h>
 #include <pci.h>
 #include <bcm2711.h>
-#include <pci_msi.h>
-#include <pci_util.h>
 #include <pcie_brcmstb.h>
 
 /* call_interrupt: Invoke interrupt server with Exec ABI.
@@ -46,6 +44,52 @@ static inline void call_interrupt(struct Interrupt *interrupt, ULONG irq)
 		  [irq] "r"(irq),
 		  [sysbase] "r"(sysBase)
 		: "d0", "d1", "a0", "a1", "a6");
+}
+
+void brcm_pcie_compose_msi_msg(struct pci_controller *pcie, s32 slot,
+							   u32 *addr_lo, u32 *addr_hi, u16 *data)
+{
+	*addr_lo = u64_lo32(pcie->msi.target_addr);
+	*addr_hi = u64_hi32(pcie->msi.target_addr);
+	/* The low 16 bits of the doorbell value carry the demux slot the device
+	 * must select; the BCM2711 MSI demux uses it as the INTR2 status bit. */
+	*data = (u16)((PCIE_MISC_MSI_DATA_CONFIG_VAL_32 & 0xffffu) | (u32)slot);
+}
+
+void brcm_msi_bind(struct pci_controller *pcie, s32 slot, struct Interrupt *isr)
+{
+	if (slot >= 0 && slot < MSI_MAX_VECTORS)
+		pcie->msi.vectors[slot] = isr;
+}
+
+void brcm_msi_unbind(struct pci_controller *pcie, s32 slot)
+{
+	if (slot >= 0 && slot < MSI_MAX_VECTORS)
+		pcie->msi.vectors[slot] = NULL;
+}
+
+/* GIC SPI base: added to a device's INT_x_mapping line to form the absolute
+ * GIC-400 interrupt number for INTx delivery. */
+#define GIC_SPI_BASE 32
+
+s32 brcm_intx_bind(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr)
+{
+	if (!pcie->gic400Base)
+		return -ENODEV;
+	if (AddIntServerEx((ULONG)dev->intx.gic_line + GIC_SPI_BASE, 0, FALSE, isr) != 0)
+	{
+		Kprintf("[pcie] %s: AddIntServerEx(irq=%ld) failed\n", __func__,
+				(LONG)dev->intx.gic_line + GIC_SPI_BASE);
+		return -EIO;
+	}
+	return 0;
+}
+
+void brcm_intx_unbind(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr)
+{
+	if (!pcie->gic400Base)
+		return;
+	RemIntServerEx((ULONG)dev->intx.gic_line + GIC_SPI_BASE, isr);
 }
 
 static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG irq asm("d0"))
@@ -74,7 +118,7 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 	return 1;
 }
 
-static s32 brcm_pcie_open_gic400(struct pci_controller *pcie)
+s32 brcm_pcie_open_gic400(struct pci_controller *pcie)
 {
 	if (pcie->gic400Base != NULL)
 		return 0;
@@ -89,63 +133,13 @@ static s32 brcm_pcie_open_gic400(struct pci_controller *pcie)
 	return 0;
 }
 
-static void brcm_pcie_close_gic400(struct pci_controller *pcie)
+void brcm_pcie_close_gic400(struct pci_controller *pcie)
 {
 	if (pcie->gic400Base == NULL)
 		return;
 
 	CloseLibrary(pcie->gic400Base);
 	pcie->gic400Base = NULL;
-}
-
-// TODO assign multiple MSI vectors per device
-//      see __pci_enable_msi_range()
-s32 add_int_server(struct pci_device *dev, struct Interrupt *isr)
-{
-	KprintfH("[pcie] %s: adding MSI interrupt server for device %04lx:%04lx\n", __func__, dev->vendor, dev->device);
-	struct pci_controller *pcie = pci_get_controller(dev->bus);
-	if (pcie->msi.num_vectors >= MSI_MAX_VECTORS)
-		return -1;
-
-	s32 vector = 0;
-	while (vector < MSI_MAX_VECTORS && pcie->msi.vectors[vector])
-		vector++;
-
-	if (vector == MSI_MAX_VECTORS)
-		return -1;
-
-	pcie->msi.vectors[vector] = isr;
-	dev->msi.vector = vector;
-	pcie->msi.num_vectors++;
-	Kprintf("[pcie] %s: assigned MSI vector %ld to device %04lx:%04lx\n", __func__, vector, dev->vendor, dev->device);
-
-	// TODO set msi_flags.log2_num_vecs to actual number of vectors assigned
-	//  dev->msi_flags.log2_num_vecs = ilog2(__roundup_pow_of_two(nvec));
-	msi_capability_init(dev, 1);
-	pci_write_msg_msi(dev);
-
-	return vector;
-}
-
-s32 rem_int_server(struct pci_device *dev)
-{
-	KprintfH("[pcie] %s: removing MSI interrupt server for device %04x:%04x\n", __func__, dev->vendor, dev->device);
-	struct pci_controller *pcie = pci_get_controller(dev->bus);
-	if (!pcie)
-		return -1;
-
-	pci_msi_shutdown(dev);
-
-	s32 vector = dev->msi.vector;
-	if (vector < 0 || vector >= MSI_MAX_VECTORS)
-		return -1;
-
-	pcie->msi.vectors[vector] = NULL;
-
-	if (pcie->msi.num_vectors > 0)
-		pcie->msi.num_vectors--;
-
-	return 0;
 }
 
 void brcm_pcie_disable_msi(struct pci_controller *pcie)
@@ -156,7 +150,6 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 		RemIntServerEx((ULONG)pcie->msi.gic_irq, &pcie->msi.isr);
 		pcie->msi.enabled = FALSE;
 	}
-	brcm_pcie_close_gic400(pcie);
 }
 
 static void brcm_msi_set_regs(struct pci_controller *pcie)
@@ -185,7 +178,7 @@ s32 brcm_pcie_enable_msi(struct pci_controller *pcie)
 	Kprintf("[pcie] %s: enabling MSI\n", __func__);
 	if (pcie->msi.enabled)
 		return 0;
-	if (brcm_pcie_open_gic400(pcie) < 0)
+	if (!pcie->gic400Base) /* opened by brcm_pcie_probe before we are called */
 		return -ENODEV;
 	pcie->msi.isr.is_Node.ln_Type = NT_INTERRUPT;
 	pcie->msi.isr.is_Node.ln_Name = "xhci_msi_isr";

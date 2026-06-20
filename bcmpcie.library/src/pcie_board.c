@@ -103,8 +103,8 @@ ULONG LibGetBoardAttrsA(struct pci_dev *dev asm("a0"), struct TagItem *tags asm(
         case PRM_BusNumber:       *dest = (ULONG)idev->bus->bus_number;               ++count; break;
         case PRM_SlotNumber:      *dest = (ULONG)(dev->devfn >> 3);                   ++count; break;
         case PRM_FunctionNumber:  *dest = (ULONG)(dev->devfn & 7u);                   ++count; break;
-        case PRM_InterruptLine:   *dest = (ULONG)idev->irq_line;                      ++count; break;
-        case PRM_InterruptPin:    *dest = (ULONG)idev->irq_pin;                       ++count; break;
+        case PRM_InterruptLine:   *dest = (ULONG)idev->intx.pin_routed;               ++count; break;
+        case PRM_InterruptPin:    *dest = (ULONG)idev->intx.pin;                      ++count; break;
         case PRM_LegacyIOSpace:   *dest = (ULONG)dev->legacy_io;                      ++count; break;
         case PRM_PCIToHostOffset: *dest = 0;                                          ++count; break;
         case PRM_ROM_Address:     *dest = (ULONG)dev->rom_address;                    ++count; break;
@@ -236,14 +236,16 @@ BOOL LibSetBoardAttrsA(struct pci_dev *dev asm("a0"), struct TagItem *tags asm("
 
 /*
  * LibFLR — trigger a Function Level Reset if the device supports it.
- * Returns 0 on success, -1 if FLR is not supported or dev is NULL.
+ * Returns PCIE_OK on success, PCIE_ERR_INVAL for a NULL/invalid device, or
+ * PCIE_ERR_NOTSUPP if the device does not support FLR.
  */
 LONG LibFLR(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
     (void)base;
     if (!dev)
-        return -1;
-    return (LONG)pci_flr(pcie_dev_from_openpci(dev));
+        return PCIE_ERR_INVAL;
+    /* pci_flr() returns 0 on success or -ENOENT when FLR is unsupported. */
+    return (pci_flr(pcie_dev_from_openpci(dev)) == 0) ? PCIE_OK : PCIE_ERR_NOTSUPP;
 }
 
 /*

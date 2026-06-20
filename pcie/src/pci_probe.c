@@ -176,7 +176,7 @@ s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device
 	pci_read_config16(dev, PCI_SUBSYSTEM_VENDOR_ID, &dev->subsys_vendor);
 	pci_read_config16(dev, PCI_SUBSYSTEM_ID, &dev->subsys_id);
 
-	dev->prefer_msi = FALSE; /* default to not preferring MSI for compatibility */
+	dev->intx.prefer_msi = FALSE; /* default to not preferring MSI for compatibility */
 
 	AddTailMinList(&bus->devices, (struct MinNode *)dev);
 	*devp = dev;

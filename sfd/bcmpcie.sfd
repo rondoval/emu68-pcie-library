@@ -1,4 +1,4 @@
-==id $Id: bcmpcie.sfd 1.0.0 $
+==id $Id: bcmpcie.sfd 2.0.0 $
 * "bcmpcie.library"
 ==base _BCMPCIEBase
 ==basetype struct Library *
@@ -10,6 +10,7 @@
 ==include <utility/tagitem.h>
 ==include <utility/hooks.h>
 ==include <libraries/openpci.h>
+==include <libraries/bcmpcie_errors.h>
 * -30: Return the bus type found
 UWORD pci_bus() ()
 * -36..-66: Legacy PCI I/O port access (stubs; future work)
@@ -38,6 +39,8 @@ void pci_write_config_long(UBYTE reg, ULONG val, struct pci_dev *dev) (D0,D1,A0)
 * -144: Bus master
 BOOL pci_set_master(struct pci_dev *dev) (A0)
 * -150: Interrupts
+* OBSOLETE: use AllocIntVectors() + AddIntVectorServer().  Retained for openpci
+* compatibility; single-vector MSI or INTx only (never MSI-X).
 BOOL pci_add_intserver(struct Interrupt *isr, struct pci_dev *dev) (A0,A1)
 void pci_rem_intserver(struct Interrupt *isr, struct pci_dev *dev) (A0,A1)
 * -162: DMA memory
@@ -73,8 +76,13 @@ void ReleasePCIRegion(struct pci_dev *dev, APTR addr) (A0,A1)
 * -258: PCIe-specific extensions
 ULONG FindCapability(struct pci_dev *dev, UBYTE cap) (A0,D0)
 ULONG FindExtCapability(struct pci_dev *dev, UWORD cap) (A0,D0)
+* OBSOLETE: use AllocIntVectors() with PCI_IRQ_MSI.  Retained for compatibility;
+* selects single-vector MSI or INTx only and never MSI-X.
+* Returns PCIE_OK, or PCIE_ERR_INVAL (bad dev) / PCIE_ERR_NODEV (no MSI cap) /
+* PCIE_ERR_NOTSUPP (controller MSI demux disabled).  See <libraries/bcmpcie_errors.h>.
 LONG EnableMSI(struct pci_dev *dev) (A0)
 void DisableMSI(struct pci_dev *dev) (A0)
+* Returns PCIE_OK, or PCIE_ERR_INVAL (bad dev) / PCIE_ERR_NOTSUPP (FLR not supported).
 LONG FLR(struct pci_dev *dev) (A0)
 * -288: Extended config space access (ULONG register argument; supports offsets >= 0x100)
 UBYTE ReadExtConfigByte(ULONG reg, struct pci_dev *dev) (D0,A0)
@@ -86,7 +94,35 @@ void WriteExtConfigLong(ULONG reg, ULONG val, struct pci_dev *dev) (D0,D1,A0)
 * -324: ISR-safe interrupt control
 * These functions do NOT acquire the library semaphore and are safe to call
 * from interrupt context (e.g. from within an installed interrupt server).
+* OBSOLETE: MaskMSI/UnmaskMSI -> use MaskIntVector/UnmaskIntVector.
+* OBSOLETE: CheckSetINTxMask -> use MaskIntVector/UnmaskIntVector, which now
+* return the same INTx pending-guard status (see the typed-API note below).
 void MaskMSI(struct pci_dev *dev) (A0)
 void UnmaskMSI(struct pci_dev *dev) (A0)
 BOOL CheckSetINTxMask(struct pci_dev *dev, BOOL mask) (A0,D0)
+* -342: Typed, multi-vector interrupt API (preferred over EnableMSI/pci_add_intserver).
+* flags is a mask of PCI_IRQ_INTX | PCI_IRQ_MSI | PCI_IRQ_MSIX (see pci_constants.h);
+* AllocIntVectors picks the best allowed type MSI-X -> MSI -> INTx and returns the
+* number of vectors reserved.  AddIntVectorServer/RemIntVectorServer install per-vector
+* ISRs; MaskIntVector/UnmaskIntVector are ISR-safe; GetIntVectorType returns the active
+* PCI_IRQ_* type (0 if none).
+* MaskIntVector/UnmaskIntVector return TRUE if the (un)mask took effect.  For INTx
+* (level-triggered, possibly shared) FALSE means it was deferred because the
+* interrupt-pending state did not match the request - on mask, nothing was pending
+* (not our line); on unmask, an interrupt is still pending (drain and retry).
+* MSI-X per-vector masking is mandatory and always returns TRUE.  MSI per-vector
+* masking is optional: FALSE means the device lacks the Per-Vector Masking
+* Capability, so the vector cannot be masked at the device.
+* AllocIntVectors returns the vector count (>= min) on success, or a negative
+* PCIE_ERR_* code: PCIE_ERR_INVAL (bad dev), PCIE_ERR_BUSY (vectors already
+* allocated), PCIE_ERR_NODEV (no usable type), PCIE_ERR_NOMEM (out of vectors).
+* AddIntVectorServer returns PCIE_OK or PCIE_ERR_INVAL / PCIE_ERR_NOTSUPP /
+* PCIE_ERR_IO.  Codes are defined in <libraries/bcmpcie_errors.h>.
+LONG AllocIntVectors(struct pci_dev *dev, ULONG min, ULONG max, ULONG flags) (A0,D0,D1,D2)
+void FreeIntVectors(struct pci_dev *dev) (A0)
+LONG AddIntVectorServer(struct pci_dev *dev, ULONG vec, struct Interrupt *isr) (A0,D0,A1)
+void RemIntVectorServer(struct pci_dev *dev, ULONG vec, struct Interrupt *isr) (A0,D0,A1)
+BOOL MaskIntVector(struct pci_dev *dev, ULONG vec) (A0,D0)
+BOOL UnmaskIntVector(struct pci_dev *dev, ULONG vec) (A0,D0)
+ULONG GetIntVectorType(struct pci_dev *dev) (A0)
 ==end

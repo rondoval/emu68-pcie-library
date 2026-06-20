@@ -115,4 +115,65 @@ s32 brcm_pcie_enable_msi(struct pci_controller *pcie);
  */
 void brcm_pcie_disable_msi(struct pci_controller *pcie);
 
+/**
+ * brcm_pcie_open_gic400() / brcm_pcie_close_gic400() - gic400.library lifetime
+ *
+ * Open/close the gic400.library handle the controller uses for both the MSI
+ * aggregation ISR and per-device INTx registration.  Owned by
+ * brcm_pcie_probe()/brcm_pcie_remove(); open is idempotent (NULL-guarded).
+ *
+ * @pcie: Controller whose gic400 handle to manage
+ * Return (open): 0 on success, -ENODEV if the library could not be opened.
+ */
+s32 brcm_pcie_open_gic400(struct pci_controller *pcie);
+void brcm_pcie_close_gic400(struct pci_controller *pcie);
+
+/**
+ * brcm_pcie_compose_msi_msg() - Build the MSI/MSI-X message for a demux slot
+ *
+ * Produces the memory-write address and data that steer a device's MSI/MSI-X
+ * message onto controller demux @slot.  This is the only place that knows the
+ * BCM2711 doorbell encoding; the generic MSI/MSI-X cap programmers call it
+ * instead of touching controller registers.
+ *
+ * @pcie:     Controller whose doorbell to target
+ * @slot:     Demux slot reserved for this vector (0..MSI_MAX_VECTORS-1)
+ * @addr_lo:  Set to the low 32 bits of the message address
+ * @addr_hi:  Set to the high 32 bits of the message address
+ * @data:     Set to the 16-bit message data word
+ */
+void brcm_pcie_compose_msi_msg(struct pci_controller *pcie, s32 slot,
+							   u32 *addr_lo, u32 *addr_hi, u16 *data);
+
+/**
+ * brcm_msi_bind() / brcm_msi_unbind() - Attach/detach an ISR to a demux slot
+ *
+ * Records (or clears) the Exec interrupt server the controller's MSI demux ISR
+ * dispatches to when slot @slot fires.  The generic vector layer calls these;
+ * the per-slot dispatch table is owned here.
+ *
+ * @pcie: Controller owning the demux
+ * @slot: Demux slot (0..MSI_MAX_VECTORS-1)
+ * @isr:  Interrupt server to dispatch to (bind only)
+ */
+void brcm_msi_bind(struct pci_controller *pcie, s32 slot, struct Interrupt *isr);
+void brcm_msi_unbind(struct pci_controller *pcie, s32 slot);
+
+/**
+ * brcm_intx_bind() / brcm_intx_unbind() - Attach/detach a device's INTx ISR
+ *
+ * Registers (or removes) @isr with gic400 on the device's INTx line
+ * (dev->intx.gic_line + the controller's GIC SPI base).  The INTx analog of
+ * brcm_msi_bind(); the generic PCI INTx config (command-register enable, mask)
+ * is handled separately by the pci_irq dispatch via pci_int.c.
+ *
+ * @pcie: Controller owning the gic400 handle
+ * @dev:  Device whose INTx line to (un)register
+ * @isr:  Interrupt server to dispatch to
+ * Return (bind): 0 on success, -ENODEV if gic400 is unavailable, -EIO if
+ *         registration failed.
+ */
+s32 brcm_intx_bind(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
+void brcm_intx_unbind(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
+
 #endif /* _PCI_BRCMSTB_H */

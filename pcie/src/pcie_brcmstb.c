@@ -915,12 +915,18 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 		return -ENODEV;
 	}
 
+	/* Open gic400 (used by the MSI demux ISR and per-device INTx) before any
+	 * interrupt registration; the controller owns this handle until remove. */
+	if (brcm_pcie_open_gic400(ctlr) < 0)
+		return -ENODEV;
+
 	// Configure MSI
 	ret = brcm_pcie_enable_msi(ctlr);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: failed to enable MSI\n", __func__);
 		brcm_pcie_disable_msi(ctlr);
+		brcm_pcie_close_gic400(ctlr);
 		return ret;
 	}
 
@@ -930,6 +936,7 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 s32 brcm_pcie_remove(struct pci_controller *pcie)
 {
 	brcm_pcie_disable_msi(pcie);
+	brcm_pcie_close_gic400(pcie);
 
 	void *base = pcie->base;
 

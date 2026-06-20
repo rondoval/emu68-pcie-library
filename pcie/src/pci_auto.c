@@ -22,6 +22,7 @@
 #include <pci_capability.h>
 #include <pci_int.h>
 #include <pci_msi.h>
+#include <pci_msix.h>
 #include <pci_util.h>
 
 /* the user can define CFG_SYS_PCI_CACHE_LINE_SIZE to avoid problems */
@@ -308,8 +309,10 @@ static void pciauto_setup_device(struct pci_device *dev,
 
 	pci_assign_irq(dev);
 
-	/* Enusre MSI is disabled and preconfigure MSI message */
+	/* Ensure MSI and MSI-X are disabled and cache their capability layout.
+	 * MSI-X is preferred at interrupt-enable time when both are present. */
 	pci_msi_init(dev);
+	pci_msix_init(dev);
 }
 
 /*
