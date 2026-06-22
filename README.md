@@ -1,5 +1,10 @@
 # emu68-pcie-library
 
+> **Releases:** this component ships as part of the
+> [emu68-driver-stack](https://github.com/rondoval/emu68-driver-stack) — the downloadable
+> `.lha` and bundled documentation are published there. This repository is source-only
+> and versioned via git tags.
+
 PCIe bus support for AmigaOS running under [Emu68](https://github.com/michalsc/Emu68) on
 Raspberry Pi 4 and Compute Module 4 (CM4), both using the BCM2711 SoC.
 
