@@ -371,7 +371,8 @@ reserves vectors of the **best allowed type in priority order MSI-X → MSI → 
 `PCI_IRQ_ALL_TYPES`) from `<libraries/pci_constants.h>`.  A type is attempted only when its
 bit is set, so omitting a bit disables it — e.g. drop `PCI_IRQ_MSIX` to forbid MSI-X, or
 pass `PCI_IRQ_INTX` alone to force the legacy line.  It returns the number of vectors
-actually reserved (≥ `min`), or a negative value on failure.
+actually reserved (≥ `min`), or a negative `PCIE_ERR_*` code on failure (see *Error codes*
+below).
 
 ```c
 struct Interrupt isr0;
@@ -387,7 +388,10 @@ if (n < 1)
 ULONG itype = GetIntVectorType(pd);   /* LVO -378: PCI_IRQ_MSIX/_MSI/_INTX */
 
 /* Install a server per vector; this also unmasks that vector. */
-AddIntVectorServer(pd, 0, &isr0);     /* LVO -354 (vector index, isr) */
+if (AddIntVectorServer(pd, 0, &isr0) != PCIE_OK) {  /* LVO -354 (vector index, isr) */
+    FreeIntVectors(pd);
+    return ERROR_INTERRUPT;
+}
 ```
 
 For multiple MSI-X vectors (e.g. one per queue), request a range and install a server for
@@ -453,6 +457,18 @@ or INTx only — never MSI-X**.  New code should use `AllocIntVectors()`.  Equiv
 `EnableMSI()`+`pci_add_intserver()` → `AllocIntVectors(pd,1,1,PCI_IRQ_MSI|PCI_IRQ_INTX)`+
 `AddIntVectorServer(pd,0,isr)`; `MaskMSI`/`UnmaskMSI` → `MaskIntVector`/`UnmaskIntVector`;
 `pci_rem_intserver`+`DisableMSI` → `RemIntVectorServer`+`FreeIntVectors`.
+
+### Error codes
+
+The `LONG`-returning interrupt and reset calls — `AllocIntVectors`,
+`AddIntVectorServer`, the obsolete `EnableMSI`, and `FLR` (§12) — report a typed
+code from `<libraries/bcmpcie_errors.h>`: `PCIE_OK` (0) on success, or a negative
+`PCIE_ERR_*` (`_INVAL`, `_BUSY`, `_NODEV`, `_NOTSUPP`, `_NOMEM`, `_IO`).
+`AllocIntVectors` instead returns the positive vector count on success.  Failures
+are always negative, so a `< 0` test (or `< 1` for `AllocIntVectors`) is
+sufficient — the specific code is only for diagnostics.  `pcie_strerror(code)`
+returns a static string for debug logging (header-only; not a library entry
+point).
 
 ---
 
@@ -554,11 +570,12 @@ Returns the byte offset within config space, or 0 if not found.
 ### Function Level Reset
 
 ```c
-LONG result = FLR(pd);   /* LVO -282; 0 = success */
+LONG result = FLR(pd);   /* LVO -282; PCIE_OK on success, else PCIE_ERR_* */
 ```
 
-`FLR()` only succeeds if the device advertises FLR support in its capabilities.  It
-waits for the device to recover before returning.
+`FLR()` returns `PCIE_OK` only if the device advertises FLR support in its capabilities,
+otherwise `PCIE_ERR_NOTSUPP` (or `PCIE_ERR_INVAL` for a NULL device — see *Error codes* in
+§9).  It waits for the device to recover before returning.
 
 ---
 
@@ -654,15 +671,22 @@ struct xhci_hcor *hcor = (struct xhci_hcor *)
 pci_set_master(pd);   /* [openpci] LVO -144 */
 ```
 
-### Step 7 — Enable interrupts with MSI fallback to INTx (irq.c)
+### Step 7 — Enable interrupts (MSI-X / MSI / INTx) (irq.c)
 
 ```c
-BOOL msiEnabled = FALSE;
-if (DEVICE_USE_MSI && EnableMSI(pd) == 0)   /* [bcmpcie extension] LVO -270 */
-    msiEnabled = TRUE;
+ULONG flags = PCI_IRQ_INTX;
+if (DEVICE_USE_MSI)  flags |= PCI_IRQ_MSI;
+if (DEVICE_USE_MSIX) flags |= PCI_IRQ_MSIX;
 
-if (!pci_add_intserver(&unit->irq_isr, pd)) /* [openpci] LVO -150 */
+/* Best available of MSI-X -> MSI -> INTx; one vector. */
+LONG nvec = AllocIntVectors(pd, 1, 1, flags);  /* [bcmpcie extension] LVO -342 */
+if (nvec < 1)
+    return -1;                                  /* pcie_strerror(nvec) gives the reason */
+
+if (AddIntVectorServer(pd, 0, &unit->irq_isr) != PCIE_OK) {  /* LVO -354 */
+    FreeIntVectors(pd);                         /* LVO -348 */
     return -1;
+}
 ```
 
 ### Step 8 — ISR masking pattern (irq.c)
@@ -689,9 +713,8 @@ device_irq_unmask(unit);                /* re-raises if events arrived while mas
 
 ```c
 /* In UnitClose(), last-opener path: */
-pci_rem_intserver(&unit->irq_isr, pd);  /* [openpci] LVO -156 */
-if (msiEnabled)
-    DisableMSI(pd);                     /* [bcmpcie extension] LVO -276 */
+RemIntVectorServer(pd, 0, &unit->irq_isr);  /* [bcmpcie extension] LVO -360 */
+FreeIntVectors(pd);                          /* LVO -348 */
 
 SetBoardAttrs(pd, PRM_BoardOwner, 0UL, TAG_DONE);  /* [openpci v3] LVO -216 */
 /* CloseLibrary() happens at device expunge */

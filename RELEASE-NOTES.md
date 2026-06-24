@@ -30,18 +30,38 @@ pick MSI-X) has been removed: the obsolete calls are now strictly single-vector
 
 | LVO | Function | Purpose |
 |-----|----------|---------|
-| -342 | `LONG AllocIntVectors(dev, min, max, flags)` | Reserve `[min,max]` vectors of the best allowed type (MSI-X → MSI → INTx); returns the count |
+| -342 | `LONG AllocIntVectors(dev, min, max, flags)` | Reserve `[min,max]` vectors of the best allowed type (MSI-X → MSI → INTx); returns the count (≥ `min`), or a negative `PCIE_ERR_*` |
 | -348 | `void FreeIntVectors(dev)` | Release the allocation |
-| -354 | `LONG AddIntVectorServer(dev, vec, isr)` | Install a server on vector `vec` (and unmask it) |
+| -354 | `LONG AddIntVectorServer(dev, vec, isr)` | Install a server on vector `vec` (and unmask it); `PCIE_OK` or a negative `PCIE_ERR_*` |
 | -360 | `void RemIntVectorServer(dev, vec, isr)` | Remove a vector's server |
-| -366 | `void MaskIntVector(dev, vec)` | ISR-safe per-vector mask |
-| -372 | `void UnmaskIntVector(dev, vec)` | ISR-safe per-vector unmask |
+| -366 | `BOOL MaskIntVector(dev, vec)` | ISR-safe per-vector mask; returns whether the mask took effect |
+| -372 | `BOOL UnmaskIntVector(dev, vec)` | ISR-safe per-vector unmask; returns whether the unmask took effect |
 | -378 | `ULONG GetIntVectorType(dev)` | Active type: `PCI_IRQ_MSIX/_MSI/_INTX` (0 if none) |
 
 `flags` is a mask of `PCI_IRQ_INTX | PCI_IRQ_MSI | PCI_IRQ_MSIX`
 (`PCI_IRQ_ALL_TYPES`) from `<libraries/pci_constants.h>`.  A type is attempted
 only when its bit is set, so omitting a bit disables it — drop `PCI_IRQ_MSIX` to
 forbid MSI-X, or pass `PCI_IRQ_INTX` alone to force the legacy line.
+
+`MaskIntVector` / `UnmaskIntVector` return `BOOL`: `TRUE` when the change took
+effect.  For level-triggered — and possibly shared — INTx, `FALSE` means the
+change was deferred because the pending state did not match the request (on
+mask, nothing was pending, so it is not our line; on unmask, an interrupt is
+still pending — drain and retry).  This is the same INTx pending-guard the
+obsolete `CheckSetINTxMask` provided.  MSI-X per-vector masking is mandatory and
+always returns `TRUE`; for MSI, `FALSE` means the device has no Per-Vector
+Masking Capability and so cannot be masked at the device.
+
+### Typed error codes
+
+The `LONG`-returning calls — `AllocIntVectors`, `AddIntVectorServer`,
+`EnableMSI` and `FLR` — now report a typed code from the new public header
+`<libraries/bcmpcie_errors.h>`: `PCIE_OK` (0) on success, or a negative
+`enum pcie_error` (`PCIE_ERR_INVAL`, `_BUSY`, `_NODEV`, `_NOTSUPP`, `_NOMEM`,
+`_IO`).  `AllocIntVectors` returns the positive vector count instead of
+`PCIE_OK`.  Every failure is negative, so existing `< 0` / `< 1` / `!= 0` caller
+checks keep working unchanged.  A header-only `pcie_strerror()` is provided for
+debug logging — no extra library entry point.
 
 ### MSI-X
 
@@ -62,10 +82,13 @@ log2(n).
 ## Obsoletions
 
 `EnableMSI` / `DisableMSI` / `pci_add_intserver` / `pci_rem_intserver` /
-`MaskMSI` / `UnmaskMSI` are obsolete (still functional, single-vector MSI/INTx).
-Use `AllocIntVectors` + `AddIntVectorServer` / `RemIntVectorServer` and
-`MaskIntVector` / `UnmaskIntVector` instead.  See *Interrupts* in the developer
-guide for equivalences.
+`MaskMSI` / `UnmaskMSI` / `CheckSetINTxMask` are obsolete (still functional,
+single-vector MSI/INTx, never MSI-X).  Use `AllocIntVectors` +
+`AddIntVectorServer` / `RemIntVectorServer` and `MaskIntVector` /
+`UnmaskIntVector` instead — the latter pair carries the same INTx pending-guard
+status that `CheckSetINTxMask` returned.  `EnableMSI` and `FLR` now also report
+the typed `PCIE_ERR_*` codes described above (their negative-on-failure contract
+is unchanged).  See *Interrupts* in the developer guide for equivalences.
 
 `emu68-nvme-driver` and `emu68-xhci-driver` have been migrated to the new API
 and now use MSI-X when the device and controller support it.
@@ -78,6 +101,26 @@ The interrupt code was refactored around a shared `pci_irq` core that owns the
 controller demux-slot pool and the per-device active allocation; the obsolete
 calls are thin wrappers over it (locked to MSI/INTx).  No public `struct pci_dev`
 change.
+
+`gic400.library` ownership moved out of the library shim and into the controller
+layer: it is now opened by `brcm_pcie_probe` (`brcm_pcie_open_gic400`) and the
+`pcie.library` base no longer holds a `gic400Base`.  It is still required either
+way — the BCM2711 MSI/MSI-X demux is delivered on a GIC aggregation interrupt
+(a GIC SPI), and per-device INTx lines are GIC SPIs too — so this is a structural
+change, not a dependency change.
+
+---
+
+## Build & tooling
+
+* The embedded `$VER:` strings of `bcmpcie.library` and `openpci.library` are now
+  stamped `MAJOR.MINOR` (the patch component is dropped), and `lspci` now carries
+  a `$VER:` version stamp of its own.
+* Stack-wide debug-backend selection: `-DEMU68_DEBUG_BACKEND=pistorm|serial|off`
+  (via `emu68-common`).  `serial` routes debug to the AmigaOS serial console and
+  is not ROM-able; `off` compiles debug out.
+* Build adjustments for NDK 3.9 and `-O3`.
+* A CI versioning / release-check workflow was added.
 
 
 # Release notes — bcmpcie.library 1.1
