@@ -3,7 +3,7 @@ project(openpci.library VERSION 45.12 LANGUAGES C ASM)
 
 # Version string
 string(TIMESTAMP CURRENT_DATE "(%d.%m.%Y)")
-set(VERSTRING "$VER: ${PROJECT_NAME} ${PROJECT_VERSION} ${CURRENT_DATE}")
+set(VERSTRING "$VER: ${PROJECT_NAME} ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR} ${CURRENT_DATE}")
 
 # Compile and link options
 add_compile_options(

@@ -20,6 +20,8 @@
 #include <proto/exec.h>
 #endif
 
+#include <exec/execbase.h> /* full struct ExecBase for the MemList walk below; older NDKs don't pull it in transitively */
+
 #include <pcie_brcmstb.h>
 #include <bcm2711.h>
 #include <pci.h>
@@ -211,6 +213,7 @@ s32 brcm_pcie_write_config(struct pci_controller *ctrl, pci_dev_t bdf, u32 offse
 	}
 }
 
+#ifdef DEBUG
 static const char *link_speed_to_str(u32 cls)
 {
 	switch (cls)
@@ -227,6 +230,7 @@ static const char *link_speed_to_str(u32 cls)
 
 	return "??";
 }
+#endif /* DEBUG (link_speed_to_str) */
 
 static u32 brcm_pcie_mdio_form_pkt(u32 port, u32 regad, u32 cmd)
 {
@@ -855,20 +859,26 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 	mmio_update32(base + PCIE_RC_CFG_PRIV1_ID_VAL3,
 				  PCIE_RC_CFG_PRIV1_ID_VAL3_CLASS_CODE_MASK, 0x060400);
 
+#ifdef DEBUG
 	BOOL ssc_good = FALSE;
+#endif
 	if (ctlr->ssc)
 	{
 		ret = brcm_pcie_set_ssc(ctlr->base);
-		if (!ret)
-			ssc_good = TRUE;
-		else
+		if (ret)
 			Kprintf("[pcie] %s: failed attempt to enter SSC mode\n", __func__);
+#ifdef DEBUG
+		else
+			ssc_good = TRUE;
+#endif
 	}
 
+#ifdef DEBUG
 	u16 lnksta = mmio_read16(base + BRCM_PCIE_CAP_REGS + PCI_EXP_LNKSTA);
 	u16 cls = lnksta & PCI_EXP_LNKSTA_CLS, nlw = (lnksta & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
 
 	Kprintf("[pcie] %s: link up, %s Gbps x%lu %s\n", __func__, link_speed_to_str(cls), nlw, ssc_good ? "(SSC)" : "(!SSC)");
+#endif
 
 	/* PCIe->SCB endian mode for BAR */
 	mmio_update32(base + PCIE_RC_CFG_VENDOR_VENDOR_SPECIFIC_REG1,
@@ -907,12 +917,18 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 		return -ENODEV;
 	}
 
+	/* Open gic400 (used by the MSI demux ISR and per-device INTx) before any
+	 * interrupt registration; the controller owns this handle until remove. */
+	if (brcm_pcie_open_gic400(ctlr) < 0)
+		return -ENODEV;
+
 	// Configure MSI
 	ret = brcm_pcie_enable_msi(ctlr);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: failed to enable MSI\n", __func__);
 		brcm_pcie_disable_msi(ctlr);
+		brcm_pcie_close_gic400(ctlr);
 		return ret;
 	}
 
@@ -922,6 +938,7 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 s32 brcm_pcie_remove(struct pci_controller *pcie)
 {
 	brcm_pcie_disable_msi(pcie);
+	brcm_pcie_close_gic400(pcie);
 
 	void *base = pcie->base;
 

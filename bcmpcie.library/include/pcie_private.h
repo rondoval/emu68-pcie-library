@@ -25,6 +25,7 @@
 #include <dma_mem.h>
 #include <libraries/openpci.h>
 #include <libraries/pcitags.h>
+#include <libraries/bcmpcie_errors.h>
 #include <pci_types.h>
 
 #if defined(__INTELLISENSE__)
@@ -56,8 +57,8 @@
 /*
  * The pcie.library base structure.
  *
- * gic400Base and the PCIe controller are initialised on first LibOpen
- * and torn down when lib_OpenCnt drops back to zero.
+ * The PCIe controller is initialised on first LibOpen and torn down when
+ * lib_OpenCnt drops back to zero.
  */
 struct PCIELibBase {
     struct Library          libNode;
@@ -65,7 +66,6 @@ struct PCIELibBase {
 
     struct SignalSemaphore  semaphore;      /* protects all mutable state */
 
-    struct Library         *gic400Base;    /* opened on first LibOpen, closed when OpenCnt reaches 0 */
     struct pci_controller  *ctrl;          /* the one BCM2711 controller */
     struct pci_bus         *rootBus;       /* root bus after probe */
 
@@ -93,6 +93,16 @@ struct Hook;
 /* -----------------------------------------------------------------------
  * pcie_irq.c — interrupt registration, MSI setup/teardown, ISR-safe ctrl
  * ----------------------------------------------------------------------- */
+/* New typed / multi-vector interrupt API */
+LONG LibAllocIntVectors(struct pci_dev *dev asm("a0"), ULONG min asm("d0"), ULONG max asm("d1"), ULONG flags asm("d2"), struct PCIELibBase *base asm("a6"));
+void LibFreeIntVectors(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));
+LONG LibAddIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"), struct Interrupt *isr asm("a1"), struct PCIELibBase *base asm("a6"));
+void LibRemIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"), struct Interrupt *isr asm("a1"), struct PCIELibBase *base asm("a6"));
+BOOL LibMaskIntVector(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"), struct PCIELibBase *base asm("a6"));
+BOOL LibUnmaskIntVector(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"), struct PCIELibBase *base asm("a6"));
+ULONG LibGetIntVectorType(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));
+
+/* Obsolete compat API (single-vector MSI/INTx; never MSI-X) */
 BOOL LibAddIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"));
 void LibRemIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"));
 LONG LibEnableMSI(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"));

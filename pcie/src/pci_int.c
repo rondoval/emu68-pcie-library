@@ -7,6 +7,7 @@
  */
 
 #include <debug.h>
+#include <errors.h>
 
 #include <pcie_brcmstb.h>
 #include <pci.h>
@@ -38,6 +39,25 @@ void pci_intx(struct pci_device *pdev, int enable)
 		return;
 
 	pci_write_config16(pdev, PCI_COMMAND, new_command);
+}
+
+s32 pci_intx_alloc(struct pci_device *dev, u32 min, u32 max)
+{
+	(void)max; /* INTx is always a single vector */
+
+	if (min > 1)
+		return -ERANGE;
+	if (!dev->intx.pin)
+		return -ENODEV;
+
+	struct pci_controller *pcie = pci_get_controller(dev->bus);
+	if (!pcie || !pcie->gic400Base)
+		return -ENOTSUPP;
+
+	dev->active.mode = PCI_IRQT_INTX;
+	dev->active.nvec = 1;
+	dev->active.slots[0] = -1; /* INTx uses no controller demux slot */
+	return 1;
 }
 
 /**
@@ -79,7 +99,7 @@ void pci_assign_irq(struct pci_device *dev)
 	 * apply the swizzle function.
 	 */
 	pci_read_config8(dev, PCI_INTERRUPT_PIN, &pin_byte);
-	target->irq_pin = pin_byte;
+	target->intx.pin = pin_byte;
 	pin = pin_byte;
 	/* Cope with illegal. */
 	if (pin > 4)
@@ -100,8 +120,8 @@ void pci_assign_irq(struct pci_device *dev)
 	/* Map the pin to INT line */
 	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
 	KprintfH("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
-	target->irq_line = (u8)pin;
-	target->irq_line_gic = (u8)irq;
+	target->intx.pin_routed = (u8)pin;
+	target->intx.gic_line = (u8)irq;
 
 	/*
 	 * Always tell the device, so the driver knows what is the real IRQ

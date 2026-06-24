@@ -68,7 +68,7 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
     pdev->vendor = idev->vendor;
     pdev->device = idev->device;
     pdev->devclass = idev->class;
-    pdev->irq = (ULONG)idev->irq_line;
+    pdev->irq = (ULONG)idev->intx.pin_routed;
 
     for (u32 i = 0; i < idev->bars_num; ++i)
     {
@@ -158,22 +158,13 @@ static void pcie_free_dev_list(struct PCIELibBase *base)
  */
 static s32 pcie_hw_init(struct PCIELibBase *base)
 {
-    base->gic400Base = OpenLibrary((CONST_STRPTR) "gic400.library", 1);
-    if (!base->gic400Base)
-    {
-        Kprintf("[pcie] %s: failed to open gic400.library\n", __func__);
-        return -1;
-    }
-    KprintfH("[pcie] %s: gic400.library opened successfully\n", __func__);
-
     base->ctrl = AllocMem(sizeof(*base->ctrl), MEMF_CLEAR | MEMF_PUBLIC);
     if (!base->ctrl)
     {
         Kprintf("[pcie] %s: out of memory for pci_controller\n", __func__);
-        goto err_ctrl_alloc;
+        return -1;
     }
     _NewMinList(&base->ctrl->buses);
-    base->ctrl->gic400Base = base->gic400Base;
 
     s32 res = brcm_pcie_probe(base->ctrl, 0);
     if (res < 0)
@@ -249,9 +240,6 @@ err_root_bus:
 err_probe:
     FreeMem(base->ctrl, sizeof(*base->ctrl));
     base->ctrl = NULL;
-err_ctrl_alloc:
-    CloseLibrary(base->gic400Base);
-    base->gic400Base = NULL;
     return -1;
 }
 
@@ -268,8 +256,6 @@ static void pcie_hw_shutdown(struct PCIELibBase *base)
     base->rootBus = NULL;
     FreeMem(base->ctrl, sizeof(*base->ctrl));
     base->ctrl = NULL;
-    CloseLibrary(base->gic400Base);
-    base->gic400Base = NULL;
     if (base->dmaPool)
     {
         dma_pool_delete(base->dmaPool);
@@ -315,7 +301,6 @@ static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist 
     base->devListHead = NULL;
     base->ctrl = NULL;
     base->rootBus = NULL;
-    base->gic400Base = NULL;
     base->ctrlReady = FALSE;
 
     return libBase;
@@ -445,6 +430,14 @@ static const APTR funcTable[] = {
     (APTR)LibMaskMSI,          /* -324 */
     (APTR)LibUnmaskMSI,        /* -330 */
     (APTR)LibCheckSetINTxMask, /* -336 */
+    /* Typed / multi-vector interrupt API */
+    (APTR)LibAllocIntVectors,    /* -342 */
+    (APTR)LibFreeIntVectors,     /* -348 */
+    (APTR)LibAddIntVectorServer, /* -354 */
+    (APTR)LibRemIntVectorServer, /* -360 */
+    (APTR)LibMaskIntVector,      /* -366 */
+    (APTR)LibUnmaskIntVector,    /* -372 */
+    (APTR)LibGetIntVectorType,   /* -378 */
     (APTR)-1,
 };
 

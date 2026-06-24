@@ -356,84 +356,119 @@ All six variants follow the same register ordering as the standard functions.
 ### Bus mastering
 
 `pci_set_master()` **[openpci]** enables the `PCI_COMMAND_MASTER` bit.  It is required
-when using MSI (MSI delivery depends on the device being a bus master) and for DMA.
-Call it before `EnableMSI()`:
+when using MSI/MSI-X (message delivery depends on the device being a bus master) and for
+DMA.  Call it before allocating interrupt vectors:
 
 ```c
 pci_set_master(pd);   /* LVO -144 */
 ```
 
-### [openpci] — Interrupt server registration
+### [bcmpcie extension] — Interrupt vectors (preferred API)
 
-`pci_add_intserver()` / `pci_rem_intserver()` work for both MSI and INTx:
+The driver chooses the interrupt type and how many vectors it wants.  `AllocIntVectors()`
+reserves vectors of the **best allowed type in priority order MSI-X → MSI → INTx**, where
+`flags` is any combination of `PCI_IRQ_MSIX`, `PCI_IRQ_MSI`, `PCI_IRQ_INTX` (or
+`PCI_IRQ_ALL_TYPES`) from `<libraries/pci_constants.h>`.  A type is attempted only when its
+bit is set, so omitting a bit disables it — e.g. drop `PCI_IRQ_MSIX` to forbid MSI-X, or
+pass `PCI_IRQ_INTX` alone to force the legacy line.  It returns the number of vectors
+actually reserved (≥ `min`), or a negative `PCIE_ERR_*` code on failure (see *Error codes*
+below).
 
 ```c
-unit->isr.is_Node.ln_Type = NT_INTERRUPT;
-unit->isr.is_Node.ln_Name = "mydriver_isr";
-unit->isr.is_Data = unit;
-unit->isr.is_Code = (APTR)my_isr;
+struct Interrupt isr0;
+isr0.is_Node.ln_Type = NT_INTERRUPT;
+isr0.is_Node.ln_Name = "mydriver_isr";
+isr0.is_Data         = unit;
+isr0.is_Code         = (APTR)my_isr;
 
-if (!pci_add_intserver(&unit->isr, pd))   /* LVO -150 */
+LONG n = AllocIntVectors(pd, 1, 1, PCI_IRQ_ALL_TYPES);   /* LVO -342 */
+if (n < 1)
     return ERROR_INTERRUPT;
-/* … */
-pci_rem_intserver(&unit->isr, pd);        /* LVO -156 */
+
+ULONG itype = GetIntVectorType(pd);   /* LVO -378: PCI_IRQ_MSIX/_MSI/_INTX */
+
+/* Install a server per vector; this also unmasks that vector. */
+if (AddIntVectorServer(pd, 0, &isr0) != PCIE_OK) {  /* LVO -354 (vector index, isr) */
+    FreeIntVectors(pd);
+    return ERROR_INTERRUPT;
+}
 ```
 
-### [bcmpcie extension] — MSI
-
-`pci_add_intserver()` selects the interrupt delivery path automatically: if `EnableMSI()`
-was called and succeeded, the interrupt server receives MSI vectors; otherwise it falls
-back to the shared INTx line.  Call `EnableMSI()` before `pci_add_intserver()`:
+For multiple MSI-X vectors (e.g. one per queue), request a range and install a server for
+each.  `AllocIntVectors` returns how many it actually got:
 
 ```c
-BOOL msiEnabled = FALSE;
-if (EnableMSI(pd) == 0)        /* LVO -270; 0 = success */
-    msiEnabled = TRUE;
-else
-    Kprintf("[mydrv] MSI failed, using INTx\n");
-
-pci_add_intserver(&unit->isr, pd);
+LONG nvec = AllocIntVectors(pd, 1, NUM_QUEUES, PCI_IRQ_MSIX);
+for (ULONG v = 0; v < (ULONG)nvec; v++)
+    AddIntVectorServer(pd, v, &unit->qisr[v]);
 ```
 
-Tear down in reverse order:
+Tear down in reverse: remove each server, then free the allocation:
 
 ```c
-pci_rem_intserver(&unit->isr, pd);
-if (msiEnabled)
-    DisableMSI(pd);            /* LVO -276 */
+RemIntVectorServer(pd, 0, &isr0);     /* LVO -360 */
+FreeIntVectors(pd);                   /* LVO -348 */
 ```
 
-### [bcmpcie extension] — ISR-safe interrupt masking
+### ISR-safe masking — prefer the device's own registers
 
-These functions do **not** acquire the library semaphore and are safe to call from
-interrupt context:
+For a well-behaved driver the recommended pattern, in the ISR, is to (a) probe one of
+*your device's* status registers to answer "is this interrupt mine?" — returning 0 so the
+next server runs when it isn't, which is what makes a shared INTx line work — and (b) quiet
+the interrupt at *your device's* mask/ack register.  That device-level mask deasserts the
+INTx pin (and gates MSI/MSI-X) on its own, so no PCIe-config masking is required.  This is
+how `nvme.device`/`xhci.device` work.
 
 ```c
-/* Inside ISR — mask before signalling the task */
-if (msiEnabled)
-    MaskMSI(pd);               /* LVO -324 */
-else
-    CheckSetINTxMask(pd, TRUE); /* LVO -336; TRUE = mask */
-
+/* Inside ISR — is it ours?  then mask at the device and signal the task */
+if (!device_irq_is_ours(unit)) return 0;   /* let the next shared-line server run */
+device_irq_mask(unit);                      /* device register: deasserts the line */
 Signal(unit->task, 1UL << unit->irq_signal);
-
-/* Inside task — unmask after processing */
-if (msiEnabled)
-    UnmaskMSI(pd);             /* LVO -330 */
-else
-    CheckSetINTxMask(pd, FALSE);
+return 1;
+/* Inside task — rearm at the device after processing */
+device_irq_unmask(unit);
 ```
 
-`CheckSetINTxMask(pd, FALSE)` unmasks the INTx line and returns TRUE on success.  It
-returns FALSE when the interrupt line was already asserted before unmasking — the device
-fired another interrupt while the task was processing the previous one.  Because the line
-was never de-asserted, the interrupt server will not fire again and you must signal the
-task yourself to drain the extra event:
+### [bcmpcie extension] — ISR-safe PCIe-level masking (fallback)
+
+`MaskIntVector()` / `UnmaskIntVector()` do **not** acquire the library semaphore and are
+safe to call from interrupt context.  They dispatch on the active type automatically
+(per-vector mask for MSI/MSI-X, `PCI_COMMAND.INTX_DISABLE` pin mask for INTx).  Use them
+only when you cannot quiet the device at its own registers (e.g. a generic/pass-through
+handler).  They return whether the (un)mask took effect.  MSI-X per-vector masking is
+mandatory, so it always returns TRUE.  MSI per-vector masking is **optional**: both calls
+return FALSE when the device lacks the Per-Vector Masking Capability — there is no mask bit,
+so the vector cannot be quieted at the device and you must mask it at the device's own
+registers instead.  For INTx, `UnmaskIntVector()` returns FALSE when the line never
+de-asserted (an interrupt is still pending) — the server will not fire again, so you must
+re-signal the task yourself to drain it:
 
 ```c
-if (!msiEnabled && !CheckSetINTxMask(pd, FALSE))
+MaskIntVector(pd, 0);                 /* LVO -366 */
+/* ... */
+if (!UnmaskIntVector(pd, 0))          /* LVO -372 — INTx pending-guard */
     Signal(unit->task, 1UL << unit->irq_signal);
 ```
+
+### [obsolete] — `EnableMSI` / `pci_add_intserver`
+
+The older calls remain for backward compatibility but are **single-vector and select MSI
+or INTx only — never MSI-X**.  New code should use `AllocIntVectors()`.  Equivalences:
+`EnableMSI()`+`pci_add_intserver()` → `AllocIntVectors(pd,1,1,PCI_IRQ_MSI|PCI_IRQ_INTX)`+
+`AddIntVectorServer(pd,0,isr)`; `MaskMSI`/`UnmaskMSI` → `MaskIntVector`/`UnmaskIntVector`;
+`pci_rem_intserver`+`DisableMSI` → `RemIntVectorServer`+`FreeIntVectors`.
+
+### Error codes
+
+The `LONG`-returning interrupt and reset calls — `AllocIntVectors`,
+`AddIntVectorServer`, the obsolete `EnableMSI`, and `FLR` (§12) — report a typed
+code from `<libraries/bcmpcie_errors.h>`: `PCIE_OK` (0) on success, or a negative
+`PCIE_ERR_*` (`_INVAL`, `_BUSY`, `_NODEV`, `_NOTSUPP`, `_NOMEM`, `_IO`).
+`AllocIntVectors` instead returns the positive vector count on success.  Failures
+are always negative, so a `< 0` test (or `< 1` for `AllocIntVectors`) is
+sufficient — the specific code is only for diagnostics.  `pcie_strerror(code)`
+returns a static string for debug logging (header-only; not a library entry
+point).
 
 ---
 
@@ -535,11 +570,12 @@ Returns the byte offset within config space, or 0 if not found.
 ### Function Level Reset
 
 ```c
-LONG result = FLR(pd);   /* LVO -282; 0 = success */
+LONG result = FLR(pd);   /* LVO -282; PCIE_OK on success, else PCIE_ERR_* */
 ```
 
-`FLR()` only succeeds if the device advertises FLR support in its capabilities.  It
-waits for the device to recover before returning.
+`FLR()` returns `PCIE_OK` only if the device advertises FLR support in its capabilities,
+otherwise `PCIE_ERR_NOTSUPP` (or `PCIE_ERR_INVAL` for a NULL device — see *Error codes* in
+§9).  It waits for the device to recover before returning.
 
 ---
 
@@ -635,42 +671,50 @@ struct xhci_hcor *hcor = (struct xhci_hcor *)
 pci_set_master(pd);   /* [openpci] LVO -144 */
 ```
 
-### Step 7 — Enable interrupts with MSI fallback to INTx (irq.c)
+### Step 7 — Enable interrupts (MSI-X / MSI / INTx) (irq.c)
 
 ```c
-BOOL msiEnabled = FALSE;
-if (DEVICE_USE_MSI && EnableMSI(pd) == 0)   /* [bcmpcie extension] LVO -270 */
-    msiEnabled = TRUE;
+ULONG flags = PCI_IRQ_INTX;
+if (DEVICE_USE_MSI)  flags |= PCI_IRQ_MSI;
+if (DEVICE_USE_MSIX) flags |= PCI_IRQ_MSIX;
 
-if (!pci_add_intserver(&unit->irq_isr, pd)) /* [openpci] LVO -150 */
+/* Best available of MSI-X -> MSI -> INTx; one vector. */
+LONG nvec = AllocIntVectors(pd, 1, 1, flags);  /* [bcmpcie extension] LVO -342 */
+if (nvec < 1)
+    return -1;                                  /* pcie_strerror(nvec) gives the reason */
+
+if (AddIntVectorServer(pd, 0, &unit->irq_isr) != PCIE_OK) {  /* LVO -354 */
+    FreeIntVectors(pd);                         /* LVO -348 */
     return -1;
+}
 ```
 
 ### Step 8 — ISR masking pattern (irq.c)
 
+Mask at *your device's* own registers, not at the PCIe level.  A device-level mask
+deasserts the INTx pin (and gates MSI/MSI-X) for both interrupt types, so a single write
+quiets the source until the UnitTask rearms — no `MaskMSI`/`CheckSetINTxMask` needed.  See
+§9 ("ISR-safe masking") for why this also handles shared INTx lines correctly.
+
 ```c
-/* Inside ISR: mask, then signal UnitTask */
-if (msiEnabled)
-    MaskMSI(pd);                        /* [bcmpcie extension] LVO -324 */
-else
-    CheckSetINTxMask(pd, TRUE);         /* [bcmpcie extension] LVO -336 */
-
+/* Inside ISR: confirm it's ours (also the shared-INTx check), mask at the
+ * device, then signal UnitTask */
+if (!device_irq_is_ours(unit))
+    return 0;                           /* let the next shared-line server run */
+device_irq_mask(unit);                  /* your device's mask register */
 Signal(unit->task, 1UL << unit->irq_signal);
+return 1;
 
-/* Inside UnitTask after processing: unmask */
-if (msiEnabled)
-    UnmaskMSI(pd);                      /* [bcmpcie extension] LVO -330 */
-else if (!CheckSetINTxMask(pd, FALSE))  /* [bcmpcie extension] LVO -336 */
-    Signal(unit->task, 1UL << unit->irq_signal);
+/* Inside UnitTask after processing: rearm at the device */
+device_irq_unmask(unit);                /* re-raises if events arrived while masked */
 ```
 
 ### Step 9 — Teardown (unit.c)
 
 ```c
 /* In UnitClose(), last-opener path: */
-pci_rem_intserver(&unit->irq_isr, pd);  /* [openpci] LVO -156 */
-if (msiEnabled)
-    DisableMSI(pd);                     /* [bcmpcie extension] LVO -276 */
+RemIntVectorServer(pd, 0, &unit->irq_isr);  /* [bcmpcie extension] LVO -360 */
+FreeIntVectors(pd);                          /* LVO -348 */
 
 SetBoardAttrs(pd, PRM_BoardOwner, 0UL, TAG_DONE);  /* [openpci v3] LVO -216 */
 /* CloseLibrary() happens at device expunge */

@@ -1,5 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#include <proto/exec.h>      /* OpenResource */
+
 #include <debug.h>
 #include <pcie_brcmstb.h>
 

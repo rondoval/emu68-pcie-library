@@ -30,6 +30,8 @@ struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
 struct Library *BCMPCIEBase;
 
+static const char verstag[] __attribute__((used)) = VERSTAG;
+
 static BOOL quiet_mode = FALSE;
 
 static void dump_vl805_registers(struct pci_dev *dev);

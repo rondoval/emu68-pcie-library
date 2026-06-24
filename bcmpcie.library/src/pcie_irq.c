@@ -1,211 +1,318 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 /*
- * pcie_irq.c — interrupt registration for pcie.library
+ * pcie_irq.c — interrupt API for bcmpcie.library
  *
- * pci_add_intserver / pci_rem_intserver handle both MSI and traditional INTx:
+ * The policy / public-ABI layer, and nothing more: it interprets the public
+ * PCI_IRQ_* flags, applies the MSI-X -> MSI -> INTx preference order, takes the
+ * library semaphore, and maps the core's errno results to PCIE_ERR_* codes.
+ * All interrupt *mechanism* — for every type, INTx included — lives in the
+ * controller-agnostic core (pci_irq.c + pcie_msi.c / pcie_msix.c / pci_int.c)
+ * and the controller back-end (pcie_brcmstb_msi.c).  This file is the only place
+ * that interprets the public flags or maps the internal pci_irq_type.
  *
- *   MSI path (pci_device.msi.enabled == TRUE):
- *     Delegates to add_int_server() from the static pcie library, which assigns
- *     a free slot in pci_controller.msi.vectors[], programs the device MSI
- *     capability (msi_capability_init + pci_write_msg_msi), and inserts the ISR
- *     into the BCM2711 PCIe MSI dispatch table (registered at LibOpen via
- *     brcm_pcie_enable_msi at GIC IRQ 180).
+ *   New typed/multi-vector API (preferred):
+ *     AllocIntVectors / FreeIntVectors / AddIntVectorServer / RemIntVectorServer
+ *     MaskIntVector / UnmaskIntVector / GetIntVectorType
  *
- *   INTx path (msi.enabled == FALSE):
- *     Traditional PCI interrupt line; delegates to AddIntServerEx via gic400.library
- *     using dev->irq + 32 (BCM2711 GIC SPI base offset).
+ *   Obsolete compat API (single-vector MSI or INTx only — never MSI-X):
+ *     EnableMSI / DisableMSI / pci_add_intserver / pci_rem_intserver
+ *     MaskMSI / UnmaskMSI / CheckSetINTxMask
  *
- * This file is separate from pcie_main.c to isolate the gic400 proto include:
- * gic400's generated headers define LibOpen/LibClose/LibExpunge/LibNull stubs
- * which would collide with the identically-named static functions in pcie_main.c.
+ * Alloc/free/add/rem take the library semaphore; Mask/Unmask are register-only
+ * and ISR-safe.  Kept separate from pcie_main.c (library lifecycle) purely as
+ * the interrupt-API translation unit.
  */
 
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
-#include <clib/gic400_protos.h>
 #else
 #define __NOLIBBASE__
 #define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
 #include <proto/exec.h>
-
-#define GIC400_BASE_NAME (base->gic400Base)
-#include <proto/gic400.h>
 #endif
 
 #include <exec/interrupts.h>
 #include <exec/types.h>
 #include <pcie_private.h>
 #include <debug.h>
+#include <libraries/pci_constants.h>
 #include <pci_util.h>
 #include <pci_int.h>
+#include <pci_irq.h>
 #include <pci_msi.h>
+#include <pci_msix.h>
+#include <errors.h>
 
 #if defined(__INTELLISENSE__)
 #define asm(x)
 #define __attribute__(x)
 #endif
 
+/* ---------------------------------------------------------------------------
+ * Policy helpers.  irq_alloc assumes the caller holds base->semaphore.
+ * ------------------------------------------------------------------------- */
+
+/* Map a core -errno result onto the public PCIE_ERR_* code. */
+static LONG pcie_err(s32 e)
+{
+	switch (e)
+	{
+	case -EINVAL:
+	case -ERANGE:
+		return PCIE_ERR_INVAL;
+	case -EBUSY:
+		return PCIE_ERR_BUSY;
+	case -ENOTSUPP:
+		return PCIE_ERR_NOTSUPP;
+	case -ENOMEM:
+	case -ENOSPC:
+		return PCIE_ERR_NOMEM;
+	case -EIO:
+		return PCIE_ERR_IO;
+	case -ENODEV:
+	default:
+		return PCIE_ERR_NODEV;
+	}
+}
+
+/* Reserve [min,max] vectors of the best allowed type into idev->active by
+ * trying the per-type core allocators in MSI-X -> MSI -> INTx preference order,
+ * each gated by its public flag bit.  Returns the count, or a negative
+ * PCIE_ERR_* code (the reason the last attempted type failed). */
+static s32 irq_alloc(struct pci_device *idev, u32 min, u32 max, u32 flags)
+{
+	s32 err = PCIE_ERR_NODEV; /* reason no requested type could be satisfied */
+
+	if (min < 1)
+		min = 1;
+
+	if (flags & PCI_IRQ_MSIX)
+	{
+		s32 n = pci_msix_alloc(idev, min, max);
+		if (n >= (s32)min)
+			return n;
+		err = pcie_err(n);
+	}
+	if (flags & PCI_IRQ_MSI)
+	{
+		s32 n = pci_msi_alloc(idev, min, max);
+		if (n >= (s32)min)
+			return n;
+		err = pcie_err(n);
+	}
+	if (flags & PCI_IRQ_INTX)
+	{
+		s32 n = pci_intx_alloc(idev, min, max);
+		if (n >= (s32)min)
+			return n;
+		err = pcie_err(n);
+	}
+
+	return err;
+}
+
+/* ===========================================================================
+ * New typed / multi-vector API
+ * ========================================================================= */
+
+LONG LibAllocIntVectors(struct pci_dev *dev asm("a0"), ULONG min asm("d0"),
+						ULONG max asm("d1"), ULONG flags asm("d2"),
+						struct PCIELibBase *base asm("a6"))
+{
+	if (!dev)
+		return PCIE_ERR_INVAL;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+	if (idev->active.mode != PCI_IRQT_NONE)
+	{
+		Kprintf("[pcie] %s: device %04lx:%04lx already has vectors\n", __func__,
+				(ULONG)idev->vendor, (ULONG)idev->device);
+		return PCIE_ERR_BUSY;
+	}
+
+	ObtainSemaphore(&base->semaphore);
+	s32 n = irq_alloc(idev, (u32)min, (u32)max, (u32)flags);
+	ReleaseSemaphore(&base->semaphore);
+	return (LONG)n;
+}
+
+void LibFreeIntVectors(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
+{
+	if (!dev)
+		return;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+
+	ObtainSemaphore(&base->semaphore);
+	pci_irq_free(idev);
+	ReleaseSemaphore(&base->semaphore);
+}
+
+LONG LibAddIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
+						   struct Interrupt *isr asm("a1"), struct PCIELibBase *base asm("a6"))
+{
+	if (!dev || !isr)
+		return PCIE_ERR_INVAL;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+
+	ObtainSemaphore(&base->semaphore);
+	s32 r = pci_irq_install(idev, (u32)vec, isr);
+	ReleaseSemaphore(&base->semaphore);
+	return r < 0 ? pcie_err(r) : PCIE_OK;
+}
+
+void LibRemIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
+						   struct Interrupt *isr asm("a1"), struct PCIELibBase *base asm("a6"))
+{
+	if (!dev || !isr)
+		return;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+
+	ObtainSemaphore(&base->semaphore);
+	pci_irq_uninstall(idev, (u32)vec, isr);
+	ReleaseSemaphore(&base->semaphore);
+}
+
+BOOL LibMaskIntVector(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
+					  struct PCIELibBase *base asm("a6"))
+{
+	(void)base;
+	if (!dev)
+		return FALSE;
+	return pci_irq_mask(pcie_dev_from_openpci(dev), (u32)vec);
+}
+
+BOOL LibUnmaskIntVector(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
+						struct PCIELibBase *base asm("a6"))
+{
+	(void)base;
+	if (!dev)
+		return FALSE;
+	return pci_irq_unmask(pcie_dev_from_openpci(dev), (u32)vec);
+}
+
+ULONG LibGetIntVectorType(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
+{
+	(void)base;
+	if (!dev)
+		return 0;
+	/* Map the internal tag back to the public PCI_IRQ_* value callers expect. */
+	switch (pcie_dev_from_openpci(dev)->active.mode)
+	{
+	case PCI_IRQT_INTX:
+		return PCI_IRQ_INTX;
+	case PCI_IRQT_MSI:
+		return PCI_IRQ_MSI;
+	case PCI_IRQT_MSIX:
+		return PCI_IRQ_MSIX;
+	default:
+		return 0;
+	}
+}
+
+/* ===========================================================================
+ * Obsolete compat API — single-vector MSI or INTx only, never MSI-X.
+ * Reimplemented on the shared core; behaviour preserved.
+ * ========================================================================= */
+
 /*
- * Install an interrupt server for a PCI device.
- *
- * MSI: if the device has MSI enabled (PCIe_EnableMSI was called), delegates to
- * add_int_server() which registers the ISR in pci_controller.msi.vectors[]
- * and programs the device MSI capability so the BCM2711 PCIe MSI dispatcher
- * routes the interrupt correctly.
- *
- * INTx: if MSI is not enabled, registers the ISR via AddIntServerEx using the
- * device's GIC interrupt number (dev->irq + 32).
- *
- * Returns TRUE on success, FALSE on failure.
+ * OBSOLETE: use AllocIntVectors + AddIntVectorServer.
+ * Install an interrupt server: MSI if EnableMSI() was called and succeeded,
+ * otherwise INTx.  MSI-X is never selected by this path.
  */
 BOOL LibAddIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"))
 {
-    if (!isr || !dev || dev->irq == 0)
-        return FALSE;
+	if (!isr || !dev || dev->irq == 0)
+		return FALSE;
 
-    struct pci_device *idev = pcie_dev_from_openpci(dev);
-    if (!idev)
-        return FALSE;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+	u32 flags = idev->intx.prefer_msi ? (PCI_IRQ_MSI | PCI_IRQ_INTX) : PCI_IRQ_INTX;
+	BOOL ok = FALSE;
 
-    if (idev->prefer_msi)
-    {
-        if (idev->msi.cap_offset == 0) // device doesn't have MSI capability
-        {
-            Kprintf("[pcie] %s: device does not have MSI capability\n", __func__);
-            return FALSE;
-        }
-        if (pci_get_controller(idev->bus)->msi.enabled == FALSE) // controller doesn't have MSI enabled
-        {
-            Kprintf("[pcie] %s: controller does not have MSI enabled\n", __func__);
-            return FALSE;
-        }
+	ObtainSemaphore(&base->semaphore);
+	if (irq_alloc(idev, 1, 1, flags) >= 1)
+	{
+		if (pci_irq_install(idev, 0, isr) == 0)
+			ok = TRUE;
+		else
+			pci_irq_free(idev); /* roll back the allocation */
+	}
+	ReleaseSemaphore(&base->semaphore);
 
-        /* MSI path: register in the PCIe MSI dispatch table.
-         * Serialise with other Add/Rem calls: add_int_server does a
-         * scan-then-write on pcie->msi.vectors[], which is not atomic. */
-        ObtainSemaphore(&base->semaphore);
-        s32 ret = add_int_server(idev, isr);
-        ReleaseSemaphore(&base->semaphore);
-        if (ret < 0)
-            Kprintf("[pcie] %s: add_int_server failed (%ld)\n", __func__, ret);
-        return (BOOL)(ret >= 0);
-    }
-    else
-    {
-        /* INTx path: traditional PCI interrupt line via GIC */
-        if (!base->gic400Base)
-            return FALSE;
-        LONG ret = AddIntServerEx((ULONG)idev->irq_line_gic + 32, 0, FALSE, isr);
-        if (ret != 0)
-        {
-            Kprintf("[pcie] %s: AddIntServerEx(irq=%ld) failed (%ld)\n",
-                    __func__, (LONG)idev->irq_line_gic + 32, ret);
-        }
-        else
-        {
-            pci_intx(idev, TRUE);                     /* unmask the device's INTx line so interrupts can flow */
-            pci_check_and_set_intx_mask(idev, FALSE); /* clear any stale INTx mask so interrupts can flow */
-        }
-        return (BOOL)(ret == 0);
-    }
+	if (!ok)
+		Kprintf("[pcie] %s: failed for device %04lx:%04lx\n", __func__,
+				(ULONG)idev->vendor, (ULONG)idev->device);
+	return ok;
 }
 
 /*
- * Remove an interrupt server previously installed with pci_add_intserver.
- *
- * Dispatches to rem_int_server() for MSI, or RemIntServerEx() for INTx,
- * matching the path taken by LibAddIntServer.
+ * OBSOLETE: use RemIntVectorServer + FreeIntVectors.
  */
 void LibRemIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"))
 {
-    if (!isr || !dev)
-        return;
+	if (!isr || !dev)
+		return;
 
-    struct pci_device *idev = pcie_dev_from_openpci(dev);
-    if (!idev)
-        return;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+	if (idev->active.mode == PCI_IRQT_NONE)
+		return;
 
-    if (idev->msi.enabled)
-    {
-        /* Serialise with LibAddIntServer: protects vectors[] and num_vectors */
-        ObtainSemaphore(&base->semaphore);
-        rem_int_server(idev);
-        ReleaseSemaphore(&base->semaphore);
-    }
-    else
-    {
-        if (!base->gic400Base)
-            return;
-        if (!pci_check_and_set_intx_mask(idev, TRUE)) // mask the device's INTx line to prevent interrupts while we're removing the handler
-        {
-            Kprintf("[pcie] %s: failed to mask INTx line for device %04x:%04x\n", __func__, idev->vendor, idev->device);
-        }
-        RemIntServerEx((ULONG)idev->irq_line_gic + 32, isr);
-    }
+	ObtainSemaphore(&base->semaphore);
+	pci_irq_uninstall(idev, 0, isr);
+	pci_irq_free(idev);
+	ReleaseSemaphore(&base->semaphore);
 }
 
-/* -----------------------------------------------------------------------
- * PCIe MSI setup / teardown and FLR (no gic400 dependency)
- * ----------------------------------------------------------------------- */
-
 /*
- * LibEnableMSI — initialise MSI for up to nvec vectors.
- * Returns 0 on success, negative on failure.
+ * OBSOLETE: pass PCI_IRQ_MSI to AllocIntVectors instead.
+ * Hint that the obsolete pci_add_intserver() path should prefer MSI (never
+ * MSI-X) over INTx.  Returns PCIE_OK on success.
  */
 LONG LibEnableMSI(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
-    (void)base;
-    if (!dev)
-        return -1;
-    struct pci_device *idev = pcie_dev_from_openpci(dev);
-    if (idev->msi.cap_offset == 0)
-        return -2; // device doesn't have MSI capability
-    if (pci_get_controller(idev->bus)->msi.enabled == FALSE)
-        return -3; // controller doesn't have MSI enabled
+	(void)base;
+	if (!dev)
+		return PCIE_ERR_INVAL;
+	struct pci_device *idev = pcie_dev_from_openpci(dev);
+	if (idev->msi.cap_offset == 0)
+		return PCIE_ERR_NODEV; /* no MSI capability */
+	if (pci_get_controller(idev->bus)->msi.enabled == FALSE)
+		return PCIE_ERR_NOTSUPP; /* controller MSI demux not enabled */
 
-    idev->prefer_msi = TRUE; /* hint to prefer MSI if available */
-    return 0;
+	idev->intx.prefer_msi = TRUE;
+	return PCIE_OK;
 }
 
-/*
- * LibDisableMSI — disable MSI for the device, reverting to INTx if available.
- * Safe to call even if MSI was never enabled or the device doesn't support MSI.
- */
+/* OBSOLETE: pass PCI_IRQ_INTX-only to AllocIntVectors instead. */
 void LibDisableMSI(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
-    (void)base;
-    if (!dev)
-        return;
-    pcie_dev_from_openpci(dev)->prefer_msi = FALSE; /* hint to prefer INTx if available */
+	(void)base;
+	if (!dev)
+		return;
+	pcie_dev_from_openpci(dev)->intx.prefer_msi = FALSE;
 }
 
-/* -----------------------------------------------------------------------
- * ISR-safe interrupt control — no semaphore, safe from interrupt context.
- * ----------------------------------------------------------------------- */
-
+/* OBSOLETE: use MaskIntVector(dev, 0). */
 void LibMaskMSI(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
-    (void)base;
-    if (!dev)
-        return;
-    struct pci_device *idev = pcie_dev_from_openpci(dev);
-    pci_msi_mask_irq(idev, idev->msi.vector);
+	(void)base;
+	if (!dev)
+		return;
+	pci_irq_mask(pcie_dev_from_openpci(dev), 0);
 }
 
+/* OBSOLETE: use UnmaskIntVector(dev, 0). */
 void LibUnmaskMSI(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
-    (void)base;
-    if (!dev)
-        return;
-    struct pci_device *idev = pcie_dev_from_openpci(dev);
-    pci_msi_unmask_irq(idev, idev->msi.vector);
+	(void)base;
+	if (!dev)
+		return;
+	pci_irq_unmask(pcie_dev_from_openpci(dev), 0);
 }
 
 BOOL LibCheckSetINTxMask(struct pci_dev *dev asm("a0"), BOOL mask asm("d0"), struct PCIELibBase *base asm("a6"))
 {
-    (void)base;
-    if (!dev)
-        return FALSE;
-    return pci_check_and_set_intx_mask(pcie_dev_from_openpci(dev), mask);
+	(void)base;
+	if (!dev)
+		return FALSE;
+	return pci_check_and_set_intx_mask(pcie_dev_from_openpci(dev), mask);
 }
