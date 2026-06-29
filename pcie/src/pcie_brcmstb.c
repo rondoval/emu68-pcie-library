@@ -20,8 +20,6 @@
 #include <proto/exec.h>
 #endif
 
-#include <exec/execbase.h> /* full struct ExecBase for the MemList walk below; older NDKs don't pull it in transitively */
-
 #include <pcie_brcmstb.h>
 #include <bcm2711.h>
 #include <pci.h>
