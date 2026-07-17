@@ -1,3 +1,24 @@
+# Release notes — bcmpcie.library 2.1
+
+Changes since v2.0.
+
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## Bug fixes
+
+### No longer crashes on non-Emu68 systems
+
+Opening the library on an Amiga without PiStorm/Emu68 used to crash the machine.
+It now fails cleanly instead: `OpenLibrary` returns `NULL`, so software that needs
+PCIe can handle its absence gracefully.
+
+
 # Release notes — bcmpcie.library 2.0
 
 Changes since v1.1.

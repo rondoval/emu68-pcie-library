@@ -20,8 +20,6 @@
 #include <proto/exec.h>
 #endif
 
-#include <exec/execbase.h> /* full struct ExecBase for the MemList walk below; older NDKs don't pull it in transitively */
-
 #include <pcie_brcmstb.h>
 #include <bcm2711.h>
 #include <pci.h>
@@ -412,6 +410,11 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, u32 win, u64
 static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
+	if (DeviceTreeBase == NULL)
+	{
+		Kprintf("[pcie] %s: devicetree.resource unavailable (not running on Emu68)\n", __func__);
+		return -ENODEV;
+	}
 
 	ctrl->dt_node_name = DT_GetAlias((CONST_STRPTR) "pcie0");
 	if (ctrl->dt_node_name == NULL)
@@ -512,6 +515,11 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
+	if (DeviceTreeBase == NULL)
+	{
+		Kprintf("[pcie] %s: devicetree.resource unavailable (not running on Emu68)\n", __func__);
+		return -ENODEV;
+	}
 	u32 cells_per_record, i = 0;
 
 	APTR key = DT_OpenKey(ctlr->dt_node_name);
@@ -557,6 +565,11 @@ static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 static s32 pci_get_devtree_regions(struct pci_controller *hose)
 {
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
+	if (DeviceTreeBase == NULL)
+	{
+		Kprintf("[pcie] %s: devicetree.resource unavailable (not running on Emu68)\n", __func__);
+		return -ENODEV;
+	}
 
 	APTR key = DT_OpenKey(hose->dt_node_name);
 	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "ranges");
