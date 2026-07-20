@@ -94,13 +94,13 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
  */
 static s32 pcie_build_dev_list(struct PCIELibBase *base)
 {
-    KprintfH("[pcie] Building device list...\n");
+    KprintfT("[pcie] Building device list...\n");
     struct pci_dev *prev = NULL;
     s32 bus_max = pci_get_bus_max(base->ctrl);
 
     for (u32 bus_index = 0; bus_max >= 0 && bus_index <= (u32)bus_max; ++bus_index)
     {
-        KprintfH("[pcie] Scanning bus %ld...\n", (ULONG)bus_index);
+        KprintfT("[pcie] Scanning bus %ld...\n", (ULONG)bus_index);
         struct pci_bus *bus;
         if (pci_get_bus(base->ctrl, bus_index, &bus) != 0)
             continue;
@@ -187,7 +187,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     CopyMem((APTR) "pcie0", base->rootBus->name, 6);
     base->rootBus->bus_number = 0;
     AddTailMinList(&base->ctrl->buses, (struct MinNode *)base->rootBus);
-    KprintfH("[pcie] %s: root bus initialized\n", __func__);
+    KprintfT("[pcie] %s: root bus initialized\n", __func__);
 
     res = pci_bind_bus_devices(base->rootBus);
     if (res != 0)
@@ -195,7 +195,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
         Kprintf("[pcie] %s: pci_bind_bus_devices failed (%ld)\n", __func__, (LONG)res);
         goto err_dev_list;
     }
-    KprintfH("[pcie] %s: bus devices bound successfully\n", __func__);
+    KprintfT("[pcie] %s: bus devices bound successfully\n", __func__);
 
     res = pci_auto_config_devices(base->rootBus);
     if (res < 0)
@@ -207,14 +207,14 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
 
     (void)bcm2711_reload_vl805_firmware();
     delay_ms(1);
-    KprintfH("[pcie] %s: VL805 firmware reloaded\n", __func__);
+    KprintfT("[pcie] %s: VL805 firmware reloaded\n", __func__);
 
     res = pcie_build_dev_list(base);
     if (res != 0)
         goto err_dev_list;
 
     base->ctrlReady = TRUE;
-    KprintfH("[pcie] %s: controller ready\n", __func__);
+    KprintfT("[pcie] %s: controller ready\n", __func__);
 
     /* DMA buffers handed to clients must live in Emu68 (Pi-DRAM) RAM the PCIe engine
      * can reach, so the pool is region-restricted; with no device tree there is no

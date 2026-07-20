@@ -43,7 +43,7 @@ void pci_msix_mask_irq(struct pci_device *dev, int idx)
 {
 	if (!dev || !dev->msix.table_virt)
 		return;
-	KprintfH("[pcie] %s: device %04lx:%04lx mask MSI-X entry %ld\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx mask MSI-X entry %ld\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, (LONG)idx);
 	mmio_write32(PCI_MSIX_ENTRY_CTRL_MASKBIT,
 				 msix_entry(dev, (u32)idx) + PCI_MSIX_ENTRY_VECTOR_CTRL);
@@ -53,7 +53,7 @@ void pci_msix_unmask_irq(struct pci_device *dev, int idx)
 {
 	if (!dev || !dev->msix.table_virt)
 		return;
-	KprintfH("[pcie] %s: device %04lx:%04lx unmask MSI-X entry %ld\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx unmask MSI-X entry %ld\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, (LONG)idx);
 	mmio_write32(0u, msix_entry(dev, (u32)idx) + PCI_MSIX_ENTRY_VECTOR_CTRL);
 }
@@ -115,7 +115,7 @@ static s32 pci_msix_capability_init(struct pci_device *dev, u32 nvec)
 		mmio_write32(PCI_MSIX_ENTRY_CTRL_MASKBIT,
 					 e + PCI_MSIX_ENTRY_VECTOR_CTRL); /* start masked */
 
-		KprintfH("[pcie] %s: device %04lx:%04lx MSI-X entry %ld data 0x%04lx (slot %ld)\n",
+		KprintfT("[pcie] %s: device %04lx:%04lx MSI-X entry %ld data 0x%04lx (slot %ld)\n",
 				 __func__, (ULONG)dev->vendor, (ULONG)dev->device,
 				 (LONG)i, (ULONG)data, (LONG)dev->active.slots[i]);
 	}

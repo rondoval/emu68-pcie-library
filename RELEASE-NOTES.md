@@ -1,3 +1,34 @@
+# Release notes — bcmpcie.library 2.2
+
+Changes since v2.1.
+
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## Improvements / Maintenance
+
+### Debug output follows emu68-common's tier ladder
+
+Verbose logging now gates on `TRACE` instead of the old `DEBUG_HIGH`, and logs
+through `KprintfT` instead of `KprintfH`, matching emu68-common's cumulative
+`PROFILE`/`DEBUG`/`TRACE` tier system. The build calls `emu68_debug_definitions()`
+(renamed from `emu68_debug_backend_definitions()`) in `bcmpcie.library` and
+`lspci`. No behavior change for consumers — the `EMU68_DEBUG_BACKEND` selection
+(`pistorm` | `serial` | `off`) still works the same way.
+
+### Fixed a garbled address in a trace log
+
+`pci_bus_to_virt()`'s trace print shifted the 32-bit `pci_addr_t bus_addr` right
+by 32 before widening it, always printing zero for the high half. It now widens
+to `u64` before the shift. `TRACE`-only, no functional effect.
+
+---
+
 # Release notes — bcmpcie.library 2.1
 
 Changes since v2.0.

@@ -107,19 +107,19 @@ void pci_assign_irq(struct pci_device *dev)
 
 	if (pin == 0)
 		return;
-	KprintfH("[pcie] %s: initial pin %ld\n", __func__, pin);
+	KprintfT("[pcie] %s: initial pin %ld\n", __func__, pin);
 
 	/* Follow the chain of bridges, swizzling as we go. */
 	while (!pci_is_root_bus(walker->bus))
 	{
 		pin = pci_swizzle_interrupt_pin(walker, pin);
-		KprintfH("[pcie] %s: swizzle to pin %ld\n", __func__, pin);
+		KprintfT("[pcie] %s: swizzle to pin %ld\n", __func__, pin);
 		walker = walker->bus->pci_bridge;
 	}
 
 	/* Map the pin to INT line */
 	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
-	KprintfH("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
+	KprintfT("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
 	target->intx.pin_routed = (u8)pin;
 	target->intx.gic_line = (u8)irq;
 

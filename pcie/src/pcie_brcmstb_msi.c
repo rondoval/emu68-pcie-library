@@ -154,7 +154,7 @@ void brcm_pcie_disable_msi(struct pci_controller *pcie)
 
 static void brcm_msi_set_regs(struct pci_controller *pcie)
 {
-	KprintfH("[pcie] %s: setting MSI registers\n", __func__);
+	KprintfT("[pcie] %s: setting MSI registers\n", __func__);
 	u32 val = (u32)((1ULL << MSI_MAX_VECTORS) - 1ULL);
 
 	mmio_write32(val, pcie->base + PCIE_MSI_INTR2_MASK_CLR);

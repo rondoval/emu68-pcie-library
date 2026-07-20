@@ -79,7 +79,9 @@ void *pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr, size_t len, u
 	if (!phys_addr)
 		return NULL;
 
-	KprintfH("[pcie] %s: bus_addr 0x%lx%08lx -> phys_addr 0x%lx%08lx\n", __func__, (ULONG)(bus_addr >> 32), (ULONG)(bus_addr & 0xffffffff), (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff));
+	/* pci_addr_t is 32-bit unless CONFIG_SYS_PCI_64BIT, so widen before the
+	 * shift: the hi/lo pair then prints correctly under either config. */
+	KprintfT("[pcie] %s: bus_addr 0x%lx%08lx -> phys_addr 0x%lx%08lx\n", __func__, (ULONG)((u64)bus_addr >> 32), (ULONG)(bus_addr & 0xffffffff), (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff));
 	struct pci_controller *ctlr = pci_get_controller(dev->bus);
 
 	if (phys_addr < ctlr->mmio_window_phys || phys_addr >= ctlr->mmio_window_phys + ctlr->mmio_window_size)
@@ -96,7 +98,7 @@ void *pci_bus_to_virt(struct pci_device *dev, pci_addr_t bus_addr, size_t len, u
 		return NULL;
 	}
 
-	KprintfH("[pcie] %s: phys_addr 0x%lx%08lx -> virt_addr 0x%lx\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff),
+	KprintfT("[pcie] %s: phys_addr 0x%lx%08lx -> virt_addr 0x%lx\n", __func__, (ULONG)(phys_addr >> 32), (ULONG)(phys_addr & 0xffffffff),
 			(ULONG)(ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys)));
 
 	return ctlr->mmio_window_virtual + (phys_addr - ctlr->mmio_window_phys);

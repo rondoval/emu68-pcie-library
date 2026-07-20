@@ -29,7 +29,7 @@
 
 s32 pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr)
 {
-	KprintfH("[pcie] %s: creating bus for bridge %lx, function %ld\n", __func__, PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
+	KprintfT("[pcie] %s: creating bus for bridge %lx, function %ld\n", __func__, PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	struct pci_bus *bus = AllocMem(sizeof(*bus), MEMF_CLEAR);
 	if (!bus)
 		return -ENOMEM;
@@ -92,7 +92,7 @@ s32 pci_probe_bus(struct pci_bus *bus)
 	bus->bus_number = ++bus->controller->bus_number_last;
 	bus->bus_number_last_sub = bus->bus_number;
 
-	KprintfH("[pcie] %s: probing bus %ld/%s\n", __func__, bus->bus_number, bus->name);
+	KprintfT("[pcie] %s: probing bus %ld/%s\n", __func__, bus->bus_number, bus->name);
 	pciauto_prescan_setup_bridge(bus);
 
 	ret = pci_bind_bus_devices(bus);
@@ -125,7 +125,7 @@ s32 pci_auto_config_devices(struct pci_bus *bus)
 	{
 		struct pci_device *device = (struct pci_device *)node;
 
-		KprintfH("[pcie] %s: device %s\n", __func__, device->name);
+		KprintfT("[pcie] %s: device %s\n", __func__, device->name);
 		s32 ret = pciauto_config_device(device);
 		if (ret < 0)
 		{
@@ -135,13 +135,13 @@ s32 pci_auto_config_devices(struct pci_bus *bus)
 		bus->bus_number_last_sub = bus->bus_number_last_sub < (u32)ret ? (u32)ret : bus->bus_number_last_sub;
 	}
 
-	KprintfH("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
+	KprintfT("[pcie] %s: done, last_sub = %ld\n", __func__, bus->bus_number_last_sub);
 	return 0;
 }
 
 s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device, u32 class, u8 header_type, struct pci_device **devp)
 {
-	KprintfH("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
+	KprintfT("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
 	*devp = NULL;
 	struct pci_device *dev = AllocMem(sizeof(struct pci_device), MEMF_CLEAR);
 	if (!dev)
@@ -197,7 +197,7 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		if (PCI_FUNC(bdf) && !found_multi)
 			continue;
 
-		KprintfH("[pcie] %s: checking device 0x%lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
+		KprintfT("[pcie] %s: checking device 0x%lx, function %ld\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf));
 
 		/* Check only the first access, we don't expect problems */
 		u32 config_value;
@@ -214,7 +214,7 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		if (!PCI_FUNC(bdf))
 			found_multi = header_type & 0x80;
 
-		KprintfH("[pcie] %s: bus %ld/%s: found device %lx, function %ld\n", __func__, bus->bus_number, bus->name, PCI_DEV(bdf), PCI_FUNC(bdf));
+		KprintfT("[pcie] %s: bus %ld/%s: found device %lx, function %ld\n", __func__, bus->bus_number, bus->name, PCI_DEV(bdf), PCI_FUNC(bdf));
 		u16 device;
 		u32 class;
 		brcm_pcie_read_config(bus->controller, bdf, PCI_DEVICE_ID, &config_value, PCI_SIZE_16);
@@ -225,7 +225,7 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		struct pci_device *dev;
 		/* Find this device in the device tree */
 		ret = pci_bus_find_devfn(bus, PCI_MASK_BUS(bdf), &dev);
-		KprintfH("[pcie] %s: find ret=%ld\n", __func__, ret);
+		KprintfT("[pcie] %s: find ret=%ld\n", __func__, ret);
 
 		/* If nothing in the device tree, bind a device */
 		if (ret == -ENODEV)
@@ -235,7 +235,7 @@ s32 pci_bind_bus_devices(struct pci_bus *bus)
 		}
 		else
 		{
-			KprintfH("[pcie] device: %s\n", dev->name);
+			KprintfT("[pcie] device: %s\n", dev->name);
 		}
 		if (ret == -EPERM)
 			continue;

@@ -9,11 +9,10 @@
 ## Build
 
 - Required installed dependencies: `emu68-common`, `emu68-gic400-library`, and `mailbox` (mailbox.resource, used for VL805 firmware reload).
-- Preferred commands:
-  - `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake -DCMAKE_PREFIX_PATH=/path/to/emu68-driver-stack -DCMAKE_INSTALL_PREFIX=/path/to/emu68-driver-stack`
-  - `cmake --build build`
-  - `cmake --install build`
-- Debug backend: pass `-DEMU68_DEBUG_BACKEND=serial` (default `pistorm` | `serial` | `off`); selected stack-wide via `emu68-common`, `serial` links `debug.lib` and is not ROM-able.
+- Build through the superbuild's container wrapper — never host `cmake` (build trees
+  are configured at `/work` inside the toolchain container):
+  - from the `emu68-driver-stack` superbuild root: `./scripts/docker-build.sh --target emu68-pcie-library`
+- Debug backend: `EMU68_CONFIGURE_ARGS="-DEMU68_DEBUG_BACKEND=serial" ./scripts/docker-build.sh` (default `pistorm` | `serial` | `off`); selected stack-wide via `emu68-common`, `serial` links `debug.lib` and is not ROM-able.
 
 ## Code Handling
 
