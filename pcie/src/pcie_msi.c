@@ -86,14 +86,14 @@ static void pci_msi_update_mask(struct pci_device *dev, u32 clear, u32 set)
 /* Mask/unmask helpers */
 static inline void pci_msi_mask(struct pci_device *dev, u32 mask)
 {
-	KprintfH("[pcie] %s: device %04lx:%04lx mask 0x%08lx\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx mask 0x%08lx\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, mask);
 	pci_msi_update_mask(dev, 0, mask);
 }
 
 static inline void pci_msi_unmask(struct pci_device *dev, u32 mask)
 {
-	KprintfH("[pcie] %s: device %04lx:%04lx unmask 0x%08lx\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx unmask 0x%08lx\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, mask);
 	pci_msi_update_mask(dev, mask, 0);
 }
@@ -105,7 +105,7 @@ static inline void pci_msi_unmask(struct pci_device *dev, u32 mask)
  */
 void pci_msi_mask_irq(struct pci_device *dev, int irq)
 {
-	KprintfH("[pcie] %s: device %04lx:%04lx mask IRQ %ld\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx mask IRQ %ld\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, irq);
 	pci_msi_mask(dev, BIT(irq));
 }
@@ -115,7 +115,7 @@ void pci_msi_mask_irq(struct pci_device *dev, int irq)
  */
 void pci_msi_unmask_irq(struct pci_device *dev, int irq)
 {
-	KprintfH("[pcie] %s: device %04lx:%04lx unmask IRQ %ld\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx unmask IRQ %ld\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device, irq);
 	pci_msi_unmask(dev, BIT(irq));
 }
@@ -152,7 +152,7 @@ static void pci_write_msg_msi(struct pci_device *dev)
 	}
 	/* Ensure that the writes are visible in the device */
 	pci_read_config16(dev, pos + PCI_MSI_FLAGS, &msgctl);
-	KprintfH("[pcie] %s: device %04lx:%04lx MSI base addr 0x%08lx%08lx data 0x%04lx mme %ld\n",
+	KprintfT("[pcie] %s: device %04lx:%04lx MSI base addr 0x%08lx%08lx data 0x%04lx mme %ld\n",
 			 __func__, (ULONG)dev->vendor, (ULONG)dev->device,
 			 (ULONG)address_hi, (ULONG)address_lo, (ULONG)data,
 			 (LONG)dev->msi.log2_num_vecs);
@@ -305,7 +305,7 @@ void pci_msi_init(struct pci_device *dev)
 	if (!dev->msi.cap_offset)
 		return;
 
-	KprintfH("[pcie] %s: device %04lx:%04lx is MSI capable\n", __func__,
+	KprintfT("[pcie] %s: device %04lx:%04lx is MSI capable\n", __func__,
 			 (ULONG)dev->vendor, (ULONG)dev->device);
 
 	u16 ctrl;

@@ -43,7 +43,7 @@ BOOL LibObtainCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("
     ObtainSemaphore(&base->semaphore);
     if (dev->owner)
     {
-        KprintfH("[pcie] %s: device %04x:%04x already reserved by %s\n",
+        KprintfT("[pcie] %s: device %04x:%04x already reserved by %s\n",
                  __func__,
                  (ULONG)dev->vendor, (ULONG)dev->device,
                  dev->owner->ln_Name ? dev->owner->ln_Name : "<unnamed>");
