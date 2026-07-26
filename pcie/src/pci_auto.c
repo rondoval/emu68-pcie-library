@@ -149,6 +149,9 @@ static void pciauto_setup_device(struct pci_device *dev,
 	u32 cmdstat = 0;
 	u32 bar;
 	u32 bar_nr = 0;
+#ifndef DEBUG
+	(void)bar_nr; /* only referenced by debug/trace logging below */
+#endif
 	const u32 bars_num = dev->bars_num;
 	const u8 header_type = dev->header_type;
 	u16 rom_addr;
@@ -330,6 +333,10 @@ static void pciauto_setup_device(struct pci_device *dev,
 static BOOL pciauto_exp_link_stable(struct pci_device *dev, u32 pcie_off)
 {
 	u32 loops = 0, trcount = 0, ntrcount = 0, flips = 0;
+#ifndef DEBUG
+	(void)trcount; /* only referenced by debug logging below */
+	(void)flips;
+#endif
 	BOOL dllla, lnktr;
 	u16 exp_lnksta;
 	u32 end;

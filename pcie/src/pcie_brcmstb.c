@@ -243,16 +243,7 @@ static u32 brcm_pcie_mdio_form_pkt(u32 port, u32 regad, u32 cmd)
 
 static s32 brcm_pcie_wait_mdio_value(void *addr, u32 mask, u32 expected, u32 timeout_us, u32 *value)
 {
-	u32 current = 0, deadline = get_time() + timeout_us;
-
-	for (;;)
-	{
-		current = mmio_read32(addr);
-		if ((current & mask) == expected)
-			break;
-		if (timeout_us && time_deadline_passed(get_time(), deadline))
-			break;
-	}
+	u32 current = mmio_poll_timeout(addr, mask, expected, timeout_us);
 
 	*value = current;
 	return ((current & mask) == expected) ? 0 : -ETIMEDOUT;

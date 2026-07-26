@@ -57,6 +57,7 @@ add_compile_options(
     -O3
     -m68040
     -fomit-frame-pointer
+    -ffreestanding
     -Wall
     -Wextra
     -Wconversion
@@ -70,7 +71,6 @@ add_compile_options(
 emu68_debug_definitions()
 
 add_link_options(
-    -ffreestanding
     -nostdlib
     -nostartfiles
     -Wall
