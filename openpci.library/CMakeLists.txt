@@ -10,6 +10,7 @@ add_compile_options(
     -Os
     -m68040
     -fomit-frame-pointer
+    -ffreestanding
     -Wall
     -Wextra
     -Wconversion
@@ -19,7 +20,6 @@ add_compile_options(
     -Wstrict-prototypes
 )
 add_link_options(
-    -ffreestanding
     -nostdlib
     -nostartfiles
     -Wall

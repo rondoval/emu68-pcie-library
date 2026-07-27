@@ -1,3 +1,52 @@
+# Release notes — bcmpcie.library 2.3
+
+Changes since v2.2.
+
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## Improvements / Maintenance
+
+### New shared PCIe interrupt-vector helper
+
+A new public header, `include/libraries/pci_irq.h`, wraps the typed
+multi-vector interrupt API introduced in 2.0 into two inline calls:
+`pci_irq_attach()` (`AllocIntVectors` → `GetIntVectorType` →
+`AddIntVectorServer`, unwinding cleanly if the server add fails) and
+`pci_irq_detach()` (`RemIntVectorServer` + `FreeIntVectors`). It's unrelated
+to the existing internal `pcie/src/pci_irq.c` (the MSI/MSI-X allocation core
+this API is built on) — this is a small caller-side convenience header, not
+a change to that engine. No change to the underlying API or its
+MSI-X → MSI → INTx behavior — existing callers using the raw LVOs directly
+are unaffected.
+
+### `brcm_pcie_wait_mdio_value` uses the shared `mmio_poll_timeout` helper
+
+The BCM2711 MDIO register wait loop now calls `emu68-common`'s shared
+`mmio_poll_timeout()` instead of a hand-rolled poll loop. Same timeout
+semantics. No functional change.
+
+### GCC 16.1 build portability
+
+`bcmpcie.library` and `openpci.library` now build cleanly under GCC 16.1. No
+behavior change:
+
+- `-ffreestanding` moved from link options to compile options, where it
+  actually affects code generation — as a link-only flag it was silently
+  inert.
+
+### Dependencies
+
+Building `bcmpcie.library` now requires **`emu68-common` 1.9.0** or later
+(`mmio_poll_timeout()`, `include/iomem.h`).
+
+---
+
 # Release notes — bcmpcie.library 2.2
 
 Changes since v2.1.
