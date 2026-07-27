@@ -26,8 +26,6 @@
 #define PCI_HEADER_TYPE_MULTI 0x80
 #endif
 
-struct ExecBase *SysBase;
-struct DosLibrary *DOSBase;
 struct Library *BCMPCIEBase;
 
 static const char verstag[] __attribute__((used)) = VERSTAG;
@@ -647,12 +645,6 @@ static void print_device_machine(struct pci_dev *dev)
 
 int main(void)
 {
-    SysBase = *(struct ExecBase **)4;
-
-    DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR) "dos.library", 0);
-    if (!DOSBase)
-        return 50;
-
     LONG rda_args[1] = {0};
     struct RDArgs *rda = ReadArgs((CONST_STRPTR) "QUIET/S", rda_args, NULL);
     if (rda) {
@@ -664,7 +656,6 @@ int main(void)
     if (!BCMPCIEBase)
     {
         Printf((CONST_STRPTR) "Failed to open bcmpcie.library\n");
-        CloseLibrary((struct Library *)DOSBase);
         return 10;
     }
 
@@ -682,7 +673,6 @@ int main(void)
     }
 
     CloseLibrary(BCMPCIEBase);
-    CloseLibrary((struct Library *)DOSBase);
 
     return 0;
 }
