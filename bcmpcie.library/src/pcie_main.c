@@ -30,7 +30,7 @@ const struct Resident pcieResident __attribute__((used)) = {
     RTC_MATCHWORD,
     (struct Resident *)&pcieResident,
     (APTR)&endOfCode,
-    RTF_AUTOINIT,
+    RTF_AUTOINIT | RTF_COLDSTART,
     LIBRARY_VERSION,
     NT_LIBRARY,
     LIBRARY_PRIORITY,
