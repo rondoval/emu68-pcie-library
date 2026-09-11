@@ -20,6 +20,7 @@
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <exec/tasks.h>
+#include <utility/tagitem.h>
 #include <types.h>
 #include <debug.h>
 #include <dma_mem.h>
