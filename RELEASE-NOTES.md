@@ -1,3 +1,34 @@
+# Release notes — bcmpcie.library 2.4
+
+Changes since v2.3.
+
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## New features
+
+### Can be built into a custom Kickstart ROM
+
+`bcmpcie.library` now initialises early enough in the Kickstart boot sequence to
+serve `xhci.device` and `nvme.device` before DOS exists. That is what makes a
+ROM image that boots from a USB or NVMe drive possible.
+
+Nothing changes for the normal `LIBS:bcmpcie.library` installation.
+
+---
+
+## Build & tooling
+
+- Hardcoded `-m68040` removed — it overrode the toolchain's `M68K_CPU`, so
+  non-68040 builds produced 68040 code.
+
+---
+
 # Release notes — bcmpcie.library 2.3
 
 Changes since v2.2.

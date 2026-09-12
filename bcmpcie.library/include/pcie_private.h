@@ -20,6 +20,7 @@
 #include <exec/types.h>
 #include <exec/lists.h>
 #include <exec/tasks.h>
+#include <utility/tagitem.h>
 #include <types.h>
 #include <debug.h>
 #include <dma_mem.h>
@@ -50,8 +51,24 @@
 #define LIBRARY_REVISION 0
 #endif
 
+/* Above xhci.device (-42) and nvme.device (-43), which OpenLibrary() us from their
+ * own resident init - residents are initialised in descending priority order, so at
+ * the old value of 0 this library came up *after* its callers.  Harmless while it was
+ * only ever LoadSeg'd from disk on demand, fatal in a ROM where nvme.device probes and
+ * mounts the boot disk from InitResident.
+ *
+ * The negative value is the other half.  Everything we need - devicetree.resource,
+ * gic400.library (MSI), mailbox.resource (VL805 reset), and 68040.library's
+ * CachePreDMA patch - lives in Emu68's own Z3 board ROM, and those romtags are not in
+ * the Kickstart's resident list at all: `romboot` (-40) walks the ConfigDev chain,
+ * finds the romtag in the board's diag area, and SetCurrentBinding + InitResident's it.
+ * "diag init" (105) only relocates diag areas; it initialises nothing.  So the Emu68
+ * module window opens at -40 and no ROM module that depends on it can sit above that.
+ * The whole ROM set is banded -41..-49, between romboot and the boot menu (-50).
+ * Loading from disk is unaffected: RamLib calls InitResident directly and ignores
+ * this field. */
 #ifndef LIBRARY_PRIORITY
-#define LIBRARY_PRIORITY 0
+#define LIBRARY_PRIORITY (-41)
 #endif
 
 /*
