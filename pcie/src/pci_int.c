@@ -22,9 +22,10 @@
  * @pdev: the PCI device to operate on
  * @enable: boolean: whether to enable or disable PCI INTx
  *
- * Enables/disables PCI INTx for device @pdev.  Also the INTx mask: INTx lines
- * are exclusive here (gic400 takes one server per IRQ), so there is no
- * shared-line pending state to check first.
+ * Enables/disables PCI INTx for device @pdev.  Also the INTx mask, and it acts
+ * on @pdev alone: a line shared with another function keeps being asserted by
+ * that other function, which is exactly what makes mask-in-the-server /
+ * unmask-after-the-drain safe to use on a shared line.
  */
 void pci_intx(struct pci_device *pdev, int enable)
 {

@@ -242,7 +242,8 @@ void LibUnmaskMSI(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a
 }
 
 /* OBSOLETE: use MaskIntVector/UnmaskIntVector(dev, 0).  Unconditional since
- * 2.5 (INTx lines are exclusive); task context only. */
+ * 2.5 - the write gates this device alone, so there is no shared-line pending
+ * state to check first; task context only. */
 BOOL LibCheckSetINTxMask(struct pci_dev *dev asm("a0"), BOOL mask asm("d0"), struct PCIELibBase *base asm("a6"))
 {
 	(void)base;

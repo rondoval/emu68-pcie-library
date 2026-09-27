@@ -98,7 +98,8 @@ void WriteExtConfigLong(ULONG reg, ULONG val, struct pci_dev *dev) (D0,D1,A0)
 * called from task context.
 * OBSOLETE: MaskMSI/UnmaskMSI -> use MaskIntVector/UnmaskIntVector.
 * OBSOLETE: CheckSetINTxMask -> use MaskIntVector/UnmaskIntVector.  Since 2.5 the
-* INTx mask is unconditional (lines are exclusive) and the call returns TRUE.
+* INTx mask is unconditional and the call returns TRUE: it gates the one device,
+* so there is no shared-line pending state to check first.
 void MaskMSI(struct pci_dev *dev) (A0)
 void UnmaskMSI(struct pci_dev *dev) (A0)
 BOOL CheckSetINTxMask(struct pci_dev *dev, BOOL mask) (A0,D0)
@@ -113,14 +114,24 @@ BOOL CheckSetINTxMask(struct pci_dev *dev, BOOL mask) (A0,D0)
 * MSI and MSI-X are masked at the root complex (the vector's MSI demux slot, a
 * local register write, no PCIe transaction, ISR-safe); a message that arrives
 * while masked latches and fires on unmask.  INTx sets/clears the PCI command
-* register's INTX_DISABLE bit unconditionally - INTx lines are exclusive in this
-* stack (gic400 takes one server per line), so there is no pending state to
-* guard - and, being a config-space access, must be called from task context.
+* register's INTX_DISABLE bit unconditionally: it gates that one device, so there
+* is no pending state to guard even where a line is shared - and, being a
+* config-space access, it must be called from task context.
+* An INTx line can carry more than one function: the pin swizzle maps the whole
+* device tree onto four lines.  gic400.library currently takes one server per
+* interrupt, so the second device on a line gets PCIE_ERR_BUSY; when gic400
+* gains server chaining that call will succeed and every server on the line will
+* be called for every interrupt on it.  Write an INTx server for that now: test a
+* register of your OWN device (config space is not reachable from a server) and
+* return with the Z flag set - not handled - unless your device raised it, as
+* exec.library/AddIntServer describes.  MSI and MSI-X vectors are device-private
+* and are never shared.
 * AllocIntVectors returns the vector count (>= min) on success, or a negative
 * PCIE_ERR_* code: PCIE_ERR_INVAL (bad dev or range), PCIE_ERR_BUSY (vectors already
 * allocated), PCIE_ERR_NODEV (no usable type), PCIE_ERR_NOMEM (out of vectors).
 * AddIntVectorServer returns PCIE_OK or PCIE_ERR_INVAL (bad dev, isr or vector) /
-* PCIE_ERR_BUSY (the vector, or the INTx line, already has a server) / PCIE_ERR_IO.
+* PCIE_ERR_BUSY (the vector already has a server, or gic400 would not take a
+* second server on the INTx line) / PCIE_ERR_IO.
 * Codes are defined in <libraries/bcmpcie_errors.h>.
 LONG AllocIntVectors(struct pci_dev *dev, ULONG min, ULONG max, ULONG flags) (A0,D0,D1,D2)
 void FreeIntVectors(struct pci_dev *dev) (A0)

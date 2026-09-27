@@ -32,8 +32,15 @@
  *   free     pci_irq_vectors_free: remove what is still attached, switch the
  *            type off at the device, release the slots
  *
- * INTx lines are exclusive - gic400 takes one server per IRQ - so INTx has no
- * shared-line pending guard: its mask is a plain command-register write.
+ * One server per VECTOR, possibly several devices per LINE.  A vector is
+ * device-private - an MSI/MSI-X message or one device's INTx pin - so it takes
+ * exactly one server.  A GIC line is not: the pin swizzle maps the whole device
+ * tree onto four INTx lines, so two functions can land on one.  gic400 takes one
+ * server per IRQ today and refuses the second device (-EBUSY); when it chains
+ * servers that stops being true and every server on the line is called for every
+ * interrupt.  A server must then return "not handled" unless its own device
+ * raised the interrupt - see interrupt-chaining.md in the gic400 component.
+ * Neither way needs a pending guard in the INTx mask: it is per device.
  *
  * Callers serialise alloc, free, add and remove (the LVOs hold the library
  * semaphore).  Mask and unmask take no lock; see them for the context rules.
@@ -113,8 +120,9 @@ void pci_irq_vectors_free(struct pci_device *dev);
  * MSI and MSI-X bind @isr to the vector's demux slot and open the vector at
  * the device; INTx registers @isr with gic400 and lets the device assert the
  * line.  A vector takes one server.
- * @return 0, or negative errno: -EINVAL bad @vec, -EBUSY the vector (or the
- * INTx line) already has a server, -EIO gic400 refused.
+ * @return 0, or negative errno: -EINVAL bad @vec, -EBUSY the vector already has
+ * a server, or gic400 refused the INTx line to a second device (it takes one
+ * server per IRQ until it chains them), -EIO gic400 failed otherwise.
  */
 s32 pci_irq_add_server(struct pci_device *dev, u32 vec, struct Interrupt *isr);
 

@@ -24,6 +24,25 @@ MSI devices without per-vector mask bits, which used to return `FALSE`. The
 device-level mask is now only opened by `AddIntVectorServer` and closed by
 `RemIntVectorServer`.
 
+### INTx lines are not promised to be exclusive
+
+An INTx line can carry more than one function — the pin swizzle maps the whole
+device tree onto four lines. `gic400.library` takes one interrupt server per
+interrupt, so the second device on a line gets `PCIE_ERR_BUSY` today; that is
+gic400's limitation, not this library's, and it is expected to go. When gic400
+gains server chaining, the call starts succeeding and every server on the line
+is called for every interrupt on it — with no change to this library.
+
+Write INTx interrupt servers for that now. Test a register of your own device
+first and return "not handled" — with the Z flag set, per
+`exec.library/AddIntServer` — unless it raised the interrupt. Config space is
+not reachable from an interrupt server, so the test has to be a memory-mapped
+register. `MaskIntVector` needs no change of habit: on INTx it gates your device
+alone, which is what makes mask-in-the-server / unmask-after-the-drain safe on a
+shared line. MSI and MSI-X vectors are device-private and are never shared.
+The developer guide (§9) and `interrupt-chaining.md` in the gic400 component
+have the details.
+
 ### Interrupt vectors
 
 - `FreeIntVectors` first detaches any interrupt server that is still attached.
@@ -49,6 +68,10 @@ device-level mask is now only opened by `AddIntVectorServer` and closed by
 - The MSI dispatcher hands each interrupt server the Exec base it received
   instead of reading address 4 for every vector, and no longer waits for its
   controller register accesses to complete.
+- The MSI demux interrupt server reports "not handled" when the controller's
+  MSI status register was empty, instead of always claiming the interrupt. It
+  makes no difference while its interrupt is its own, and is what lets it share
+  one with something else later.
 - Interrupt servers may now use `A5` freely, as Exec allows. Before, a server
   that changed `A5` could corrupt the dispatcher.
 
@@ -62,10 +85,10 @@ device-level mask is now only opened by `AddIntVectorServer` and closed by
   server left the device free to keep asserting its line. `MaskIntVector` /
   `UnmaskIntVector` (and the obsolete `CheckSetINTxMask`) now write the PCI
   command register's INTx-disable bit unconditionally and return `TRUE`. The
-  old "deferred, interrupt pending" `FALSE` result is gone: it guarded shared
-  INTx lines, which this stack does not have (gic400 takes one server per
-  line). For INTx these calls touch config space, so call them from a task,
-  not from an interrupt server.
+  old "deferred, interrupt pending" `FALSE` result is gone: the write gates the
+  one device, so there is no shared-line pending state to check first. For INTx
+  these calls touch config space, so call them from a task, not from an
+  interrupt server.
 - A device whose INTx pin has no entry in the controller's interrupt map was
   registered on the wrong GIC interrupt. It now gets no INTx at all
   (`AllocIntVectors` with only `PCI_IRQ_INTX` returns `PCIE_ERR_NODEV`).

@@ -57,7 +57,8 @@ the entire bus is configured and every `pci_dev` is ready to use.
 ### Advantages over classic Amiga PCI boards
 
 - **MSI instead of shared IRQ lines.**  BCM2711 MSI delivers per-device vectored interrupts
-  — no sharing, no polling, lower latency.
+  — no sharing, no polling, lower latency.  INTx remains available and, unlike MSI, can be
+  shared between functions (see §9).
 - **PCIe bandwidth.**  The BCM2711 controller negotiates up to PCIe Gen 2 ×1 (~500 MB/s),
   versus the 133 MB/s ceiling of a 32-bit 33 MHz PCI bus.
 - ** DMA in both directions.**  The PCIe engine can read from and write to Fast
@@ -442,9 +443,32 @@ return 1;
 UnmaskIntVector(pd, 0);                        /* LVO -372 */
 ```
 
-INTx lines are exclusive in this stack (`gic400.library` takes one server per line), so a
-server is only ever called for its own device; there is no shared-line chain to pass an
-interrupt along.
+#### Writing an INTx server for a shared line
+
+An INTx line can carry more than one function: the pin swizzle maps the whole device tree onto
+four lines, so two devices can land on the same one.  `gic400.library` currently takes one
+server per interrupt, so today the second device on a line is refused with `PCIE_ERR_BUSY` and
+a server is only ever called for its own device.  That is gic400's limitation and it is
+expected to go: once gic400 chains servers, the call succeeds and **every server on the line is
+called for every interrupt on it**.
+
+Write an INTx server for that now — it costs nothing while lines stay exclusive:
+
+- Test a register of **your own device** first and return "not handled" unless it raised the
+  interrupt.  Config space is not reachable from an interrupt server (on bus ≥ 1 it is an
+  index/data pair), so the test has to be a memory-mapped device register — `xhci.device` reads
+  `USBSTS`, `nvme.device` looks for a fresh completion-queue entry.
+- "Not handled" means returning with the **Z flag set**, per `exec.library/AddIntServer`; Z
+  clear ends the walk.  Returning 0 from C normally produces that, but check the disassembly:
+  the autodoc warns that a compiler epilogue can leave the flag set from something else.
+- `MaskIntVector()` needs no change of habit: it gates your device only, so it quiets your
+  contribution and leaves the rest of the line asserted.
+- Chain order is the server's `ln_Pri`, highest first, and every member ahead of the one that
+  claims the interrupt pays its own device-register read — so give a busy device the higher
+  priority.
+
+`gic400.library`'s `interrupt-chaining.md` has the full contract.  MSI and MSI-X vectors are
+device-private and are never shared, so none of this applies to them.
 
 ### [obsolete] — `EnableMSI` / `pci_add_intserver`
 

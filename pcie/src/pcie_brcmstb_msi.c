@@ -88,12 +88,28 @@ void brcm_msi_slot_unmask(struct pci_controller *pcie, s32 slot)
 	mmio_write32_relaxed(1u << (u32)slot, pcie->base + PCIE_MSI_INTR2_MASK_CLR);
 }
 
-/* gic400 registration, shared by INTx and the MSI demux.  gic400 takes one
- * server per IRQ: a second one is refused with ALREADY_REGISTERED, which is
- * -EBUSY to our callers. */
+/*
+ * gic400 registration, shared by INTx and the MSI demux.
+ *
+ * Priority and trigger are properties of the LINE, not of the server: once
+ * gic400 chains servers they are set by whoever registers first.  Everything
+ * in this stack registers with the same pair, so a shared line cannot end up
+ * configured against anyone's wishes.
+ *
+ * gic400 takes one server per IRQ today, so the second device swizzled onto an
+ * INTx line is refused with ALREADY_REGISTERED, which is -EBUSY to our callers.
+ * That is gic400's limit, not ours: when it chains, this call starts succeeding
+ * and each server is called for every interrupt on the line.  See
+ * interrupt-chaining.md in the gic400 component for what that requires of a
+ * server.
+ */
+#define PCIE_GIC_PRIORITY 0	 /* GIC priority for every line bcmpcie registers */
+#define PCIE_GIC_EDGE FALSE	 /* level-triggered: PCI INTx is level by spec, and the
+							  * BCM2711 MSI aggregation interrupt is level too */
+
 static s32 brcm_gic_add_server(struct pci_controller *pcie, u32 gic_irq, struct Interrupt *isr)
 {
-	LONG r = AddIntServerEx(gic_irq, 0, FALSE, isr);
+	LONG r = AddIntServerEx(gic_irq, PCIE_GIC_PRIORITY, PCIE_GIC_EDGE, isr);
 	if (r == 0)
 		return 0;
 	Kprintf("[pcie] %s: AddIntServerEx(irq=%ld) failed: %ld\n", __func__, (LONG)gic_irq, r);
@@ -131,14 +147,22 @@ void brcm_intx_rem_server(struct pci_controller *pcie, struct pci_device *dev, s
  * pattern the server re-masks and re-signals a task that drains anyway - and
  * an unbound slot has no server to call.  It keeps the demux free of shared
  * mask state.
+ *
+ * Returns handled (non-zero, Z clear) only when STATUS had something in it,
+ * not-ours (0, Z set) otherwise: gic400 takes one server per IRQ today, but
+ * when it chains them a server that always claims the interrupt would cut the
+ * walk short and starve whatever else sits on the line.  See
+ * interrupt-chaining.md in the gic400 component.
  */
 static ULONG brcm_msi_demux_isr(struct ExecBase *SysBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG gic_irq asm("d0"))
 {
 	(void)gic_irq;
 
 	u32 status = mmio_read32_relaxed(pcie->base + PCIE_MSI_INTR2_STATUS);
+	if (!status)
+		return 0;
 
-	while (status)
+	do
 	{
 		u32 slot = (u32)__builtin_ctz(status);
 		status &= status - 1u;
@@ -150,7 +174,7 @@ static ULONG brcm_msi_demux_isr(struct ExecBase *SysBase asm("a6"), struct pci_c
 		const struct Interrupt *server = pcie->msi.servers[slot];
 		if (server != NULL)
 			msi_call_server(server, slot, SysBase);
-	}
+	} while (status);
 
 	return 1;
 }

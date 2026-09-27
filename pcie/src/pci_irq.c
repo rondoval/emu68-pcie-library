@@ -193,9 +193,10 @@ void pci_irq_vectors_free(struct pci_device *dev)
  * a local register write rather than a PCIe transaction, ISR-safe; a message
  * that arrives while masked latches and fires on unmask.  Also covers MSI
  * functions without per-vector mask bits.
- * INTx: the command-register INTX_DISABLE bit, unconditionally - the line is
- * exclusive, so there is no pending state to guard.  A config-space access,
- * hence task context only.
+ * INTx: the command-register INTX_DISABLE bit, unconditionally.  It gates this
+ * device only, so on a line shared with another function it quiets our own
+ * contribution and leaves the rest of the line alone - there is no pending
+ * state to guard.  A config-space access, hence task context only.
  */
 BOOL pci_irq_vec_mask(struct pci_device *dev, u32 vec)
 {

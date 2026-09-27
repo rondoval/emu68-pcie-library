@@ -133,6 +133,10 @@ target_link_libraries(pcie_library
 # links debug.lib (+ __divsi3 glue) and skips the check.
 emu68_debug_backend_finalize(pcie_library ROMABLE)
 
+# Exec interrupt servers answer with the Z flag, not D0 (exec.library/AddIntServer);
+# a compiler epilogue that ends in MOVE rather than MOVEM silently overwrites it.
+emu68_isr_z_check(pcie_library SERVERS brcm_msi_demux_isr)
+
 set_target_properties(pcie_library PROPERTIES
     OUTPUT_NAME bcmpcie
     SUFFIX ".library"

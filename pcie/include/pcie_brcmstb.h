@@ -188,8 +188,12 @@ void brcm_msi_slot_unmask(struct pci_controller *pcie, s32 slot);
  * @pcie: Controller owning the gic400 handle
  * @dev:  Device whose INTx line to (un)register
  * @isr:  Interrupt server to dispatch to
- * Return (add): 0 on success, -EBUSY if the line already has a server (INTx
- *         lines are exclusive: gic400 takes one server per IRQ), -EIO otherwise.
+ * A line can carry more than one device - the pin swizzle maps the whole tree
+ * onto four - but gic400 takes one server per IRQ until it chains them, so the
+ * second device on a line is refused for now.
+ *
+ * Return (add): 0 on success, -EBUSY if gic400 already has a server on the
+ *         line, -EIO otherwise.
  */
 s32 brcm_intx_add_server(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
 void brcm_intx_rem_server(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
