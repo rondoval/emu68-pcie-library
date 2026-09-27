@@ -94,34 +94,18 @@ s32 brcm_pcie_write_config(struct pci_controller *bus, pci_dev_t bdf,
 struct ExecBase;
 s32 bcm2711_reload_vl805_firmware(struct ExecBase *SysBase);
 
-/**
- * brcm_pcie_enable_msi() - Enable the BCM2711 MSI aggregation interrupt
- *
- * Configures the MSI target address and enables the root-complex MSI
- * aggregation interrupt via gic400.library.  Must be called before any
- * device driver calls add_int_server() to request MSI delivery.
- *
- * @pcie: Controller to configure
- * Return: 0 on success, negative on error
+/*
+ * Interrupt back-end (pcie_brcmstb_msi.c): everything that knows gic400 or the
+ * BCM2711 MSI demux.  Driven by the generic vector layer (pci_irq.h, which
+ * also defines the vocabulary: vec, slot, gic_irq, server).
  */
-s32 brcm_pcie_enable_msi(struct pci_controller *pcie);
-
-/**
- * brcm_pcie_disable_msi() - Disable the BCM2711 MSI aggregation interrupt
- *
- * Removes the MSI aggregation ISR from gic400.library and clears the
- * controller MSI enable register.  Safe to call if MSI was never enabled.
- *
- * @pcie: Controller whose MSI should be disabled
- */
-void brcm_pcie_disable_msi(struct pci_controller *pcie);
 
 /**
  * brcm_pcie_open_gic400() / brcm_pcie_close_gic400() - gic400.library lifetime
  *
- * Open/close the gic400.library handle the controller uses for both the MSI
- * aggregation ISR and per-device INTx registration.  Owned by
- * brcm_pcie_probe()/brcm_pcie_remove(); open is idempotent (NULL-guarded).
+ * The handle serves the MSI demux interrupt and per-device INTx.  Opened by
+ * brcm_pcie_probe() before any interrupt registration, closed by
+ * brcm_pcie_remove().
  *
  * @pcie: Controller whose gic400 handle to manage
  * Return (open): 0 on success, -ENODEV if the library could not be opened.
@@ -130,7 +114,20 @@ s32 brcm_pcie_open_gic400(struct pci_controller *pcie);
 void brcm_pcie_close_gic400(struct pci_controller *pcie);
 
 /**
- * brcm_pcie_compose_msi_msg() - Build the MSI/MSI-X message for a demux slot
+ * brcm_msi_demux_enable() / brcm_msi_demux_disable() - The MSI demux interrupt
+ *
+ * Enable registers the demux ISR with gic400 on pcie->msi.gic_irq and programs
+ * the MSI target address; every demux slot stays masked until a server is
+ * bound to it.  Disable removes the ISR.  Probe and remove only.
+ *
+ * @pcie: Controller to configure
+ * Return (enable): 0 on success, negative errno if gic400 refused the ISR.
+ */
+s32 brcm_msi_demux_enable(struct pci_controller *pcie);
+void brcm_msi_demux_disable(struct pci_controller *pcie);
+
+/**
+ * brcm_msi_compose_msg() - Build the MSI/MSI-X message for a demux slot
  *
  * Produces the memory-write address and data that steer a device's MSI/MSI-X
  * message onto controller demux @slot.  This is the only place that knows the
@@ -143,38 +140,58 @@ void brcm_pcie_close_gic400(struct pci_controller *pcie);
  * @addr_hi:  Set to the high 32 bits of the message address
  * @data:     Set to the 16-bit message data word
  */
-void brcm_pcie_compose_msi_msg(struct pci_controller *pcie, s32 slot,
-							   u32 *addr_lo, u32 *addr_hi, u16 *data);
+void brcm_msi_compose_msg(struct pci_controller *pcie, s32 slot,
+						  u32 *addr_lo, u32 *addr_hi, u16 *data);
 
 /**
- * brcm_msi_bind() / brcm_msi_unbind() - Attach/detach an ISR to a demux slot
+ * brcm_msi_slot_bind() / brcm_msi_slot_unbind() - Give a demux slot its server
  *
- * Records (or clears) the Exec interrupt server the controller's MSI demux ISR
- * dispatches to when slot @slot fires.  The generic vector layer calls these;
- * the per-slot dispatch table is owned here.
+ * Bind records the Exec interrupt server the demux ISR calls when @slot fires,
+ * drops anything the slot still has latched and unmasks it; unbind masks the
+ * slot and clears the server.  A slot is unmasked only while bound.
+ * brcm_msi_slot_server() returns the bound server, NULL if none.
  *
  * @pcie: Controller owning the demux
- * @slot: Demux slot (0..MSI_MAX_VECTORS-1)
- * @isr:  Interrupt server to dispatch to (bind only)
+ * @slot: Demux slot, from the pci_irq slot pool
+ * @isr:  Interrupt server to dispatch to
  */
-void brcm_msi_bind(struct pci_controller *pcie, s32 slot, struct Interrupt *isr);
-void brcm_msi_unbind(struct pci_controller *pcie, s32 slot);
+void brcm_msi_slot_bind(struct pci_controller *pcie, s32 slot, struct Interrupt *isr);
+void brcm_msi_slot_unbind(struct pci_controller *pcie, s32 slot);
+
+static inline struct Interrupt *brcm_msi_slot_server(const struct pci_controller *pcie, s32 slot)
+{
+	return pcie->msi.servers[slot];
+}
 
 /**
- * brcm_intx_bind() / brcm_intx_unbind() - Attach/detach a device's INTx ISR
+ * brcm_msi_slot_mask() / brcm_msi_slot_unmask() - Runtime mask of a bound slot
+ *
+ * PCIE_MSI_INTR2_MASK_SET/CLR: a masked slot still latches its status bit and
+ * raises the demux interrupt once unmasked, so nothing is lost.  A local
+ * register write, not a PCIe transaction, which makes it the cheap runtime
+ * mask for both MSI and MSI-X (ISR-safe).
+ *
+ * @pcie: Controller owning the demux
+ * @slot: Demux slot (dev->active.slots[vec])
+ */
+void brcm_msi_slot_mask(struct pci_controller *pcie, s32 slot);
+void brcm_msi_slot_unmask(struct pci_controller *pcie, s32 slot);
+
+/**
+ * brcm_intx_add_server() / brcm_intx_rem_server() - Attach/detach a device's INTx ISR
  *
  * Registers (or removes) @isr with gic400 on the device's INTx line
- * (dev->intx.gic_line + the controller's GIC SPI base).  The INTx analog of
- * brcm_msi_bind(); the generic PCI INTx config (command-register enable, mask)
- * is handled separately by the pci_irq dispatch via pci_int.c.
+ * (dev->intx.gic_irq, the absolute GIC IRQ).  The INTx analog of
+ * brcm_msi_slot_bind(); the device side (the command register's INTx disable
+ * bit) belongs to the pci_irq layer.
  *
  * @pcie: Controller owning the gic400 handle
  * @dev:  Device whose INTx line to (un)register
  * @isr:  Interrupt server to dispatch to
- * Return (bind): 0 on success, -ENODEV if gic400 is unavailable, -EIO if
- *         registration failed.
+ * Return (add): 0 on success, -EBUSY if the line already has a server (INTx
+ *         lines are exclusive: gic400 takes one server per IRQ), -EIO otherwise.
  */
-s32 brcm_intx_bind(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
-void brcm_intx_unbind(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
+s32 brcm_intx_add_server(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
+void brcm_intx_rem_server(struct pci_controller *pcie, struct pci_device *dev, struct Interrupt *isr);
 
 #endif /* _PCI_BRCMSTB_H */

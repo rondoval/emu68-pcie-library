@@ -1,20 +1,42 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Generic, controller-agnostic interrupt-vector management.
+ * PCI interrupts: INTx, MSI and MSI-X.
  *
- * Two responsibilities, both free of controller- and message-type specifics:
- *   - the demux-slot pool: a bitmap of MSI_MAX_VECTORS opaque "slots" (tokens)
- *     that the per-type allocators (pcie_msi.c / pcie_msix.c) reserve;
- *   - type-agnostic dispatch over dev->active.mode: install/uninstall an ISR on
- *     a vector, per-vector mask/unmask, and free the whole allocation.
+ * Layers, top down:
+ *   bcmpcie.library/src/pcie_irq.c   the LVOs: argument checks, semaphore, error codes
+ *   pci_irq.c                        choice of type, demux-slot pool, per-vector dispatch
+ *   pci_int.c, pcie_msi.c,           one interrupt type each: what the device
+ *   pcie_msix.c                      offers (probe) and how it is programmed
+ *   pcie_brcmstb_msi.c               the controller: gic400 and the MSI demux
+ *                                    (pcie_brcmstb.h)
  *
- * A slot is just an integer here; its hardware meaning (the MSI message and the
- * demux ISR) belongs to the controller back-end (pcie_brcmstb_msi.c), reached
- * via brcm_msi_bind()/brcm_msi_unbind().  INTx is a first-class type too: the
- * dispatch routes it to brcm_intx_bind()/brcm_intx_unbind() (gic400) plus the
- * generic config bits in pci_int.c.  Callers must serialise
- * alloc/free/install/uninstall (the shim holds its semaphore); mask/unmask are
- * register-only and ISR-safe.
+ * Vocabulary:
+ *   vec      a device's vector index, 0..dev->active.nvec-1
+ *   slot     a bit of the root complex's MSI demux (dev->active.slots[vec]);
+ *            MSI and MSI-X only, an opaque token outside the back-end
+ *   gic_irq  a gic400 interrupt number
+ *   server   the Exec struct Interrupt run for a vector
+ *   mask / unmask   the runtime gate (MaskIntVector/UnmaskIntVector)
+ *   open / close    the device-level gate (MSI-X table entry, MSI mask bit),
+ *                   moved only when a server is added or removed
+ *
+ * A device's interrupts, in order:
+ *   probe    pci_assign_irq, pci_msi_init, pci_msix_init: route the INTx pin,
+ *            locate and decode the MSI and MSI-X capabilities, leave both off
+ *   alloc    pci_irq_vectors_alloc: pick the type, reserve slots, program the
+ *            device; every vector closed
+ *   add      pci_irq_add_server: bind the server (its slot unmasked), open the
+ *            vector
+ *   run      pci_irq_vec_mask / pci_irq_vec_unmask
+ *   remove   pci_irq_rem_server: close the vector, unbind (slot masked)
+ *   free     pci_irq_vectors_free: remove what is still attached, switch the
+ *            type off at the device, release the slots
+ *
+ * INTx lines are exclusive - gic400 takes one server per IRQ - so INTx has no
+ * shared-line pending guard: its mask is a plain command-register write.
+ *
+ * Callers serialise alloc, free, add and remove (the LVOs hold the library
+ * semaphore).  Mask and unmask take no lock; see them for the context rules.
  */
 
 #ifndef _PCI_IRQ_H
@@ -23,16 +45,37 @@
 #include <pci_types.h>
 #include <exec/interrupts.h>
 
-/* ---- demux-slot pool: MSI_MAX_VECTORS opaque tokens ---- */
-
-/** pci_irq_slots_free_count() - number of currently free slots. */
-u32 pci_irq_slots_free_count(const struct pci_controller *pcie);
+/* ---- probe: what the device offers (pciauto_setup_device, BARs mapped) ---- */
 
 /**
- * pci_irq_slots_alloc_any() - reserve @n arbitrary free slots into @out.
- * @return 0 on success, -1 if fewer than @n are free (MSI-X: no alignment).
+ * pci_assign_irq() - route the device's INTx pin to its GIC IRQ.
+ * Swizzles PCI_INTERRUPT_PIN through every bridge up to the root bus and looks
+ * the result up in the controller's INT_x_mapping[].  Fills dev->intx;
+ * intx.gic_irq stays 0 (no INTx) without a pin or a mapping.
  */
-s32 pci_irq_slots_alloc_any(struct pci_controller *pcie, u32 n, s32 *out);
+void pci_assign_irq(struct pci_device *dev);
+
+/**
+ * pci_msi_init() - locate and decode the MSI capability, MSI off.
+ * Fills dev->msi (64-bit address, per-vector mask bits, vector count);
+ * msi.cap_offset stays 0 without the capability.
+ */
+void pci_msi_init(struct pci_device *dev);
+
+/**
+ * pci_msix_init() - locate the MSI-X capability and resolve its table, MSI-X off.
+ * Fills dev->msix; msix.table_virt stays NULL without the capability or when
+ * the table is not inside a mapped memory BAR - MSI-X is then unusable.
+ */
+void pci_msix_init(struct pci_device *dev);
+
+/* ---- demux-slot pool: MSI_MAX_VECTORS opaque tokens ---- */
+
+/**
+ * pci_irq_slots_alloc_any() - reserve up to @n arbitrary free slots into @out
+ * (MSI-X: no alignment).  @return the number reserved, 0..@n.
+ */
+u32 pci_irq_slots_alloc_any(struct pci_controller *pcie, u32 n, s32 *out);
 
 /**
  * pci_irq_slots_alloc_aligned() - reserve a 2^k-aligned contiguous block of @n
@@ -44,34 +87,105 @@ s32 pci_irq_slots_alloc_aligned(struct pci_controller *pcie, u32 n);
 /** pci_irq_slots_free() - release the @n slots listed in @slots. */
 void pci_irq_slots_free(struct pci_controller *pcie, const s32 *slots, u32 n);
 
-/* ---- type-agnostic dispatch over dev->active.mode ---- */
-
-/** pci_irq_free() - tear down the active allocation (INTx, MSI, or MSI-X). */
-void pci_irq_free(struct pci_device *dev);
+/* ---- allocation and teardown ---- */
 
 /**
- * pci_irq_install() - attach @isr for vector @vec and unmask it.
- * MSI/MSI-X bind into the demux slot; INTx registers with gic400 and enables
- * the device INTx line.  @return 0 on success, negative errno on failure.
+ * pci_irq_vectors_alloc() - reserve [@min,@max] vectors of the best allowed type.
+ * @flags is a mask of PCI_IRQ_INTX | PCI_IRQ_MSI | PCI_IRQ_MSIX; the types are
+ * tried MSI-X, MSI, INTx.  Records the result in dev->active.
+ * @return the vector count (>= @min), or negative errno: -EBUSY the device
+ * already has vectors, -ERANGE bad range, else why the last type tried failed
+ * (-ENODEV not available on this device, -ENOSPC out of demux slots).
  */
-s32 pci_irq_install(struct pci_device *dev, u32 vec, struct Interrupt *isr);
-
-/** pci_irq_uninstall() - mask vector @vec and detach @isr (INTx needs @isr). */
-void pci_irq_uninstall(struct pci_device *dev, u32 vec, struct Interrupt *isr);
+s32 pci_irq_vectors_alloc(struct pci_device *dev, u32 min, u32 max, u32 flags);
 
 /**
- * pci_irq_mask() / pci_irq_unmask() - per-vector mask (all types), ISR-safe.
+ * pci_irq_vectors_free() - tear down the device's allocation, whatever its type.
+ * Removes every server still attached first.  Does nothing without an
+ * allocation.
+ */
+void pci_irq_vectors_free(struct pci_device *dev);
+
+/* ---- servers ---- */
+
+/**
+ * pci_irq_add_server() - attach @isr to vector @vec and let it fire.
+ * MSI and MSI-X bind @isr to the vector's demux slot and open the vector at
+ * the device; INTx registers @isr with gic400 and lets the device assert the
+ * line.  A vector takes one server.
+ * @return 0, or negative errno: -EINVAL bad @vec, -EBUSY the vector (or the
+ * INTx line) already has a server, -EIO gic400 refused.
+ */
+s32 pci_irq_add_server(struct pci_device *dev, u32 vec, struct Interrupt *isr);
+
+/**
+ * pci_irq_rem_server() - detach @isr from vector @vec.
+ * Quiets the device first (closes the vector; INTx: disables the line), then
+ * takes the server away.  Does nothing unless @isr is the vector's server.
+ */
+void pci_irq_rem_server(struct pci_device *dev, u32 vec, struct Interrupt *isr);
+
+/* ---- runtime mask ---- */
+
+/**
+ * pci_irq_vec_mask() / pci_irq_vec_unmask() - hold back / let through a vector.
  *
- * Return: TRUE if the (un)mask took effect.  For INTx (level-triggered, may be
- * shared) FALSE means the change was deferred because the interrupt-pending
- * state did not match the request - on mask, nothing was pending (not our
- * line); on unmask, an interrupt is still pending (drain and retry).  MSI-X
- * per-vector masking is mandatory and always returns TRUE.  MSI per-vector
- * masking is optional: FALSE means the device lacks the Per-Vector Masking
- * Capability, so the vector cannot be masked at the device.  Invalid args (vec
- * out of range, no active mode) return FALSE.
+ * MSI and MSI-X mask the vector's demux slot at the root complex: a local
+ * register write, no PCIe transaction, safe from an interrupt server.  A
+ * message that arrives while masked latches and fires on unmask, so
+ * mask-in-the-server / unmask-after-the-task-drained coalesces a burst into
+ * one interrupt.
+ * INTx sets or clears PCI_COMMAND.INTX_DISABLE.  That is a config-space
+ * access: task context only.
+ * @return TRUE, or FALSE for a bad @vec (no allocation included).
  */
-BOOL pci_irq_mask(struct pci_device *dev, u32 vec);
-BOOL pci_irq_unmask(struct pci_device *dev, u32 vec);
+BOOL pci_irq_vec_mask(struct pci_device *dev, u32 vec);
+BOOL pci_irq_vec_unmask(struct pci_device *dev, u32 vec);
+
+/* ---- per type, for pci_irq.c ---- */
+
+/*
+ * The allocators are called with 1 <= @min <= @max <= MSI_MAX_VECTORS.  They
+ * reserve their slots into dev->active.slots[], program the device with every
+ * vector closed and return the vector count, or negative errno (-ENODEV the
+ * device cannot do this type, -ENOSPC out of demux slots, -ERANGE).
+ * pci_irq_vectors_alloc records mode and count.  The shutdowns switch the type
+ * off at the device; they are for a device with an allocation of that type.
+ */
+
+/** pci_intx() - let the device assert INTx (@enable) or not: PCI_COMMAND.INTX_DISABLE. */
+void pci_intx(struct pci_device *dev, int enable);
+
+/** pci_intx_alloc() - INTx is one vector on the device's routed pin, or -ENODEV / -ERANGE. */
+s32 pci_intx_alloc(struct pci_device *dev, u32 min, u32 max);
+
+/**
+ * pci_msi_alloc() - the largest 2^k-aligned slot block within the range and
+ * the device's Multiple-Message-Capable count; MSI enabled, INTx disabled.
+ */
+s32 pci_msi_alloc(struct pci_device *dev, u32 min, u32 max);
+
+/** pci_msi_shutdown() - disable MSI and restore the unmasked reset state. */
+void pci_msi_shutdown(struct pci_device *dev);
+
+/**
+ * pci_msi_update_mask() - clear and set bits of the per-vector mask register;
+ * bit i masks vector i.  Does nothing on a device without mask bits (they are
+ * optional for MSI).
+ */
+void pci_msi_update_mask(struct pci_device *dev, u32 clear, u32 set);
+
+/**
+ * pci_msix_alloc() - as many free slots as the range and the table size
+ * allow; one table entry per vector; MSI-X enabled, INTx disabled.
+ */
+s32 pci_msix_alloc(struct pci_device *dev, u32 min, u32 max);
+
+/** pci_msix_shutdown() - mask the function and disable MSI-X. */
+void pci_msix_shutdown(struct pci_device *dev);
+
+/** pci_msix_entry_mask() / pci_msix_entry_unmask() - the mask bit of table entry @vec. */
+void pci_msix_entry_mask(struct pci_device *dev, u32 vec);
+void pci_msix_entry_unmask(struct pci_device *dev, u32 vec);
 
 #endif /* _PCI_IRQ_H */

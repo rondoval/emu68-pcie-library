@@ -13,13 +13,14 @@
 | Module | Role |
 |---|---|
 | `pcie/src/pcie_brcmstb.c` | BCM STB controller bring-up, port training (ported from Linux) |
-| `pcie/src/pcie_brcmstb_msi.c` | BCM2711 PCIe MSI block setup / dispatch (GIC IRQ 180) |
+| `pcie/src/pcie_brcmstb_msi.c` | Interrupt back-end: gic400 registration, BCM2711 MSI demux (slot bind/mask, dispatch ISR) |
 | `pcie/src/pci_auto.c` | BAR sizing and resource auto-configuration |
-| `pcie/src/pcie_msi.c` | MSI vector allocation, routing to GIC-400 SPIs |
+| `pcie/src/pci_irq.c` | Interrupt core: choice of type, demux-slot pool, servers, runtime mask (`pci_irq.h` holds the vocabulary and every core prototype) |
+| `pcie/src/pcie_msi.c`, `pcie_msix.c`, `pci_int.c` | One interrupt type each: probe-time discovery and device programming |
 | `pcie/src/pci_probe.c` | Bus enumeration |
 | `pcie/src/vl805_reset.c` | VL805 firmware reload via `mailbox.resource` after PCIe reset |
 | `bcmpcie.library/src/pcie_main.c` | Library entry point, device list, jump table |
-| `bcmpcie.library/src/pcie_irq.c` | Interrupt registration (`LibAddIntServer`/`LibRemIntServer`/`LibEnableMSI`); MSI add/rem serialise on `base->semaphore` — open-time API, not an ISR-context helper |
+| `bcmpcie.library/src/pcie_irq.c` | Interrupt LVOs: argument checks, `base->semaphore` for alloc/free/add/rem, errno → `PCIE_ERR_*`; `MaskIntVector`/`UnmaskIntVector` take no lock |
 
 **`pci_dev.reserved`** is repurposed as a back-pointer to the internal `pci_device` struct. Do not overwrite it.
 

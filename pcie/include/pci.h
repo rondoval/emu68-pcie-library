@@ -134,8 +134,7 @@ static inline void pci_set_region(struct pci_region *reg,
  *   pci_lookup.h     — device lookup by BDF, vendor/device ID, class
  *   pci_probe.h      — bus/device creation and probe
  *   pci_util.h       — BDF accessor, region helpers, pci_flr, pci_conv_*
- *   pci_int.h        — INTx enable/disable, IRQ assignment
- *   pci_msi.h        — MSI setup, teardown, and interrupt registration
+ *   pci_irq.h        — interrupts: INTx, MSI and MSI-X
  * Include the relevant headers directly instead of relying on this file.
  */
 

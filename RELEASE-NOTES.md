@@ -1,3 +1,79 @@
+# Release notes — bcmpcie.library 2.5
+
+Changes since v2.4. Needs emu68-common 2.0.0.
+
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## Improvements
+
+### `MaskIntVector` masks MSI and MSI-X at the root complex
+
+For MSI and MSI-X, `MaskIntVector` / `UnmaskIntVector` now gate the vector in
+the Pi's PCIe controller (its MSI demux) instead of at the device. That is a
+register write inside the Pi rather than a transaction over the PCIe link, so
+it is cheap enough to call on every interrupt: mask in the interrupt server,
+unmask once the task has drained, and a message that arrives in between fires
+on unmask. Both calls now always return `TRUE` for MSI and MSI-X, including
+MSI devices without per-vector mask bits, which used to return `FALSE`. The
+device-level mask is now only opened by `AddIntVectorServer` and closed by
+`RemIntVectorServer`.
+
+### Interrupt vectors
+
+- `FreeIntVectors` first detaches any interrupt server that is still attached.
+  Before, freeing an INTx allocation with its server attached left the server
+  registered with gic400, and that line could not be used again.
+- A vector takes one interrupt server: `AddIntVectorServer` on a vector that
+  already has one returns `PCIE_ERR_BUSY` (it used to replace the server
+  silently), and `RemIntVectorServer` ignores a server that is not the
+  vector's.
+- A device's MSI-X table is located and checked when the device is probed. A
+  device whose table cannot be reached is treated as having no MSI-X and gets
+  MSI or INTx.
+- The obsolete `pci_add_intserver` works on a device that has MSI but no INTx
+  pin (after `EnableMSI`). It used to refuse.
+
+### MSI dispatch
+
+- The root complex delivers MSI and MSI-X only for vectors that have a server
+  attached. A message for any other vector is held and discarded when that
+  vector next gets a server; before, it raised an interrupt that nobody
+  handled.
+
+- The MSI dispatcher hands each interrupt server the Exec base it received
+  instead of reading address 4 for every vector, and no longer waits for its
+  controller register accesses to complete.
+- Interrupt servers may now use `A5` freely, as Exec allows. Before, a server
+  that changed `A5` could corrupt the dispatcher.
+
+---
+
+## Fixes
+
+### INTx
+
+- Masking an INTx interrupt never took effect, so removing an INTx interrupt
+  server left the device free to keep asserting its line. `MaskIntVector` /
+  `UnmaskIntVector` (and the obsolete `CheckSetINTxMask`) now write the PCI
+  command register's INTx-disable bit unconditionally and return `TRUE`. The
+  old "deferred, interrupt pending" `FALSE` result is gone: it guarded shared
+  INTx lines, which this stack does not have (gic400 takes one server per
+  line). For INTx these calls touch config space, so call them from a task,
+  not from an interrupt server.
+- A device whose INTx pin has no entry in the controller's interrupt map was
+  registered on the wrong GIC interrupt. It now gets no INTx at all
+  (`AllocIntVectors` with only `PCI_IRQ_INTX` returns `PCIE_ERR_NODEV`).
+- `AddIntVectorServer` on an INTx line that already has a server returns
+  `PCIE_ERR_BUSY` instead of `PCIE_ERR_IO`.
+
+---
+
 # Release notes — bcmpcie.library 2.4
 
 Changes since v2.3.

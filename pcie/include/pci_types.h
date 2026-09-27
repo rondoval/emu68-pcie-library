@@ -25,6 +25,7 @@
 #include <exec/interrupts.h>
 #include <types.h>
 #include <bits.h>
+#include <libraries/pci_constants.h> /* PCI_IRQ_*: the values of pci_device.active.mode */
 
 #if defined(__INTELLISENSE__)
 #define asm(x)
@@ -151,17 +152,16 @@ struct pci_controller
 	struct pcie_msi
 	{
 		pci_addr_t target_addr;						/* MSI doorbell PCI address programmed into device MSI capability registers */
-		struct Interrupt *vectors[MSI_MAX_VECTORS]; /* Exec Interrupt server for each demux slot (NULL until a server is installed) */
+		struct Interrupt *servers[MSI_MAX_VECTORS]; /* Exec Interrupt server bound to each demux slot, NULL if none; a slot is unmasked only while bound */
 		u32 used;									/* bitmap of reserved demux slots (bit i = slot i allocated) */
 		s32 gic_irq;								/* GIC-400 SPI interrupt line for the BCM2711 MSI aggregation interrupt */
 		struct Interrupt isr;						/* Exec Interrupt structure registered with gic400.library for MSI dispatch */
-		BOOL enabled;								/* TRUE once brcm_pcie_enable_msi() has succeeded */
 	} msi;
 
 	struct MinList buses;		/* doubly-linked list of all pci_bus structs reachable from this controller */
-	struct Library *gic400Base; /* open gic400.library base pointer used for MSI interrupt registration */
+	struct Library *gic400Base; /* gic400.library, open from probe to remove: the MSI demux interrupt and per-device INTx */
 
-	s32 INT_x_mapping[4]; /* GIC-400 IRQ line for INTx pins A–D (index 0–3); -1 if not connected */
+	s32 INT_x_mapping[4]; /* absolute GIC-400 IRQ (SPI + 32, as DT_GetInterrupt) for INTx pins A–D (index 0–3); 0 if not connected */
 };
 
 /**
@@ -213,21 +213,6 @@ struct pci_bar_info
 };
 
 /**
- * enum pci_irq_type - Active interrupt delivery mode for a device
- *
- * Internal tag for pci_device.active.mode.  Deliberately distinct from the
- * public PCI_IRQ_* flag bits (libraries/pci_constants.h): the core never sees
- * the public flags — the library shim maps between the two in GetIntVectorType.
- */
-enum pci_irq_type
-{
-	PCI_IRQT_NONE = 0, /* no interrupt allocated */
-	PCI_IRQT_INTX,	   /* legacy INTx line (set by the library shim) */
-	PCI_IRQT_MSI,	   /* message-signalled interrupts */
-	PCI_IRQT_MSIX,	   /* extended message-signalled interrupts */
-};
-
-/**
  * struct pci_device - One enumerated PCI function
  *
  * Created during bus scanning for every function that responds to a config
@@ -252,7 +237,7 @@ struct pci_device
 	u16 subsys_vendor; /* subsystem vendor ID (offset 0x2C); cached at probe time */
 	u16 subsys_id;	   /* subsystem device ID (offset 0x2E); cached at probe time */
 
-	/* MSI capability: discovery (pci_msi_init) + flags decoded at programming time */
+	/* MSI capability, located and decoded at probe (pci_msi_init) */
 	struct device_msi
 	{
 		u32 cap_offset;	  /* byte offset of the MSI capability in config space, or 0 if no MSI */
@@ -260,18 +245,15 @@ struct pci_device
 		BOOL addr64;	  /* device supports a 64-bit MSI address (PCI_MSI_FLAGS_64BIT) */
 		BOOL maskable;	  /* device has a per-vector mask register (PCI_MSI_FLAGS_MASKBIT) */
 		u8 log2_max_vecs; /* log2 of the max vectors the device can use (PCI_MSI_FLAGS_QMASK) */
-		u8 log2_num_vecs; /* log2 of the vectors actually allocated (PCI_MSI_FLAGS_QSIZE) */
-		u16 mask_offset;  /* config offset of PCI_MSI_MASK_32/64, or 0 if not maskable */
+		u16 mask_offset;  /* config offset of PCI_MSI_MASK_32/64 (meaningful only if maskable) */
 	} msi;
 
-	/* MSI-X capability discovery state (filled by pci_msix_init) */
+	/* MSI-X capability, located and its table resolved at probe (pci_msix_init) */
 	struct device_msix
 	{
 		u32 cap_offset;	  /* byte offset of the MSI-X capability in config space, or 0 if none */
 		u16 table_size;	  /* number of table entries (Table Size field + 1) */
-		u8 table_bir;	  /* BAR index holding the MSI-X table */
-		u32 table_offset; /* byte offset of the table within that BAR (qword-aligned) */
-		void *table_virt; /* CPU-virtual base of the table, resolved at enable time */
+		void *table_virt; /* CPU-virtual base of the table; NULL = table unreachable, MSI-X unusable */
 	} msix;
 
 	/* INTx routing, filled by pci_assign_irq() */
@@ -279,16 +261,17 @@ struct pci_device
 	{
 		u8 pin;			 /* raw PCI_INTERRUPT_PIN (1=INTA..4=INTD, 0 = no INTx) */
 		u8 pin_routed;	 /* pin after bridge swizzle; written back to PCI_INTERRUPT_LINE */
-		u8 gic_line;	 /* GIC-400 SPI line assigned via INT_x_mapping[] */
+		u32 gic_irq;	 /* absolute GIC-400 IRQ from INT_x_mapping[]; 0 = not routed (no INTx) */
 		BOOL prefer_msi; /* legacy EnableMSI() hint: prefer MSI over INTx (never MSI-X) */
 	} intx;
 
 	/* Active interrupt allocation — the single source of truth for what is live. */
 	struct irq_alloc
 	{
-		enum pci_irq_type mode;		/* PCI_IRQT_* (PCI_IRQT_NONE when idle) */
+		u32 mode;					/* PCI_IRQ_INTX, PCI_IRQ_MSI or PCI_IRQ_MSIX; 0 when idle */
 		u16 nvec;					/* number of vectors allocated */
-		s32 slots[MSI_MAX_VECTORS]; /* controller demux slot per vector (MSI/MSI-X); -1 for INTx */
+		s32 slots[MSI_MAX_VECTORS]; /* controller demux slot per vector (MSI and MSI-X only) */
+		struct Interrupt *intx_server; /* INTx: the server registered with gic400, NULL if none (MSI/MSI-X: pcie->msi.servers[slot]) */
 	} active;
 
 	u8 header_type;				 /* PCI header type [6:0] (multifunction bit cleared):

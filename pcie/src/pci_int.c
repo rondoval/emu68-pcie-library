@@ -13,7 +13,7 @@
 
 #include <pcie_brcmstb.h>
 #include <pci.h>
-#include <pci_int.h>
+#include <pci_irq.h>
 #include <pci_io.h>
 #include <pci_util.h>
 
@@ -22,7 +22,9 @@
  * @pdev: the PCI device to operate on
  * @enable: boolean: whether to enable or disable PCI INTx
  *
- * Enables/disables PCI INTx for device @pdev
+ * Enables/disables PCI INTx for device @pdev.  Also the INTx mask: INTx lines
+ * are exclusive here (gic400 takes one server per IRQ), so there is no
+ * shared-line pending state to check first.
  */
 void pci_intx(struct pci_device *pdev, int enable)
 {
@@ -49,16 +51,8 @@ s32 pci_intx_alloc(struct pci_device *dev, u32 min, u32 max)
 
 	if (min > 1)
 		return -ERANGE;
-	if (!dev->intx.pin)
+	if (!dev->intx.gic_irq) /* no pin, or the pin is not routed to the GIC */
 		return -ENODEV;
-
-	struct pci_controller *pcie = pci_get_controller(dev->bus);
-	if (!pcie || !pcie->gic400Base)
-		return -ENOTSUPP;
-
-	dev->active.mode = PCI_IRQT_INTX;
-	dev->active.nvec = 1;
-	dev->active.slots[0] = -1; /* INTx uses no controller demux slot */
 	return 1;
 }
 
@@ -119,55 +113,14 @@ void pci_assign_irq(struct pci_device *dev)
 		walker = walker->bus->pci_bridge;
 	}
 
-	/* Map the pin to INT line */
+	/* Map the pin to its GIC IRQ; 0 = the controller's interrupt-map has no
+	 * entry for it, and the device stays without INTx. */
 	irq = pci_get_controller(walker->bus)->INT_x_mapping[pin - 1];
-	KprintfT("[pcie] %s: assign IRQ: got %ld\n", __func__, irq);
+	KprintfT("[pcie] %s: pin %ld -> GIC IRQ %ld\n", __func__, pin, irq);
 	target->intx.pin_routed = (u8)pin;
-	target->intx.gic_line = (u8)irq;
+	target->intx.gic_irq = (u32)irq;
 
-	/*
-	 * Always tell the device, so the driver knows what is the real IRQ
-	 * to use; the device does not use it.
-	 */
+	/* The swizzled pin goes into PCI_INTERRUPT_LINE: it is what openpci
+	 * reports as the device's irq (pcie_main.c) and PRM_InterruptLine. */
 	pci_write_config8(target, PCI_INTERRUPT_LINE, (u32)pin);
-}
-
-BOOL pci_check_and_set_intx_mask(struct pci_device *dev, BOOL mask)
-{
-	BOOL mask_updated = TRUE;
-	u32 cmd_status_dword;
-	u32 origcmd, newcmd;
-	BOOL irq_pending;
-
-	/*
-	 * We do a single dword read to retrieve both command and status.
-	 * Document assumptions that make this possible.
-	 * BUILD_BUG_ON(PCI_COMMAND % 4);
-	 * BUILD_BUG_ON(PCI_COMMAND + 2 != PCI_STATUS);
-	 */
-
-	pci_read_config32(dev, PCI_COMMAND, &cmd_status_dword);
-
-	irq_pending = (cmd_status_dword >> 16) & PCI_STATUS_INTERRUPT;
-
-	/*
-	 * Check interrupt status register to see whether our device
-	 * triggered the interrupt (when masking) or the next IRQ is
-	 * already pending (when unmasking).
-	 */
-	if (mask != irq_pending)
-	{
-		mask_updated = FALSE;
-		goto done;
-	}
-
-	origcmd = cmd_status_dword;
-	newcmd = origcmd & ~PCI_COMMAND_INTX_DISABLE;
-	if (mask)
-		newcmd |= PCI_COMMAND_INTX_DISABLE;
-	if (newcmd != origcmd)
-		pci_write_config16(dev, PCI_COMMAND, newcmd);
-
-done:
-	return mask_updated;
 }

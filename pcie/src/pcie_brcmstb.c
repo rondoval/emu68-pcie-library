@@ -458,41 +458,37 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 	KprintfT("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)ctrl->mmio_window_virtual);
 	KprintfT("[pcie] %s: emu68,pci-mmio-size = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_size));
 
+	/* interrupt-map: one entry per INTx pin, <child-addr child-int phandle
+	 * parent-spec>, the parent being the GIC with its 3-cell specifier
+	 * <type number flags>.  Only GIC_SPI (type 0) entries are routable; the
+	 * stored value is the absolute GIC IRQ (SPI + 32), as DT_GetInterrupt
+	 * returns it for the MSI line below.  Unmapped pins stay 0. */
 	APTR int_map_prop = DT_FindProperty(key, (CONST_STRPTR) "interrupt-map");
 	if (int_map_prop)
 	{
-		// TODO cleanup
-		APTR root = DT_OpenKey((CONST_STRPTR) "/");
-		// ULONG interrupt_parent_phandle = DT_GetPropertyValueULONG(root, "interrupt-parent", 0, TRUE);
-		DT_CloseKey(root);
-
-		const u32 interrupt_cells = DT_GetPropertyValueULONG(SysBase, key, "#interrupt-cells", 1, FALSE);
 		const u32 addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
+		const u32 child_int_cells = DT_GetPropertyValueULONG(SysBase, key, "#interrupt-cells", 1, FALSE);
+		const u32 gic_spec_cells = 3;
+		const u32 entry_size = addr_cells + child_int_cells + 1 + gic_spec_cells;
 
 		const u32 *int_map = (const u32 *)DT_GetPropValue(int_map_prop);
-		u32 len = DT_GetPropLen(int_map_prop);
+		const u32 entries = DT_GetPropLen(int_map_prop) / (sizeof(u32) * entry_size);
 
-		// child_addr + child_interrupt + phandle + int_type + parent_interrupt + interrupt flags
-		u32 entry_size = addr_cells + 1 + 1 + 1 + interrupt_cells + 1;
-		u32 entries = len / (sizeof(u32) * entry_size);
-
-		KprintfT("[pcie] %s: Found interrupt-map with %ld entries\n", __func__, entries);
+		KprintfT("[pcie] %s: interrupt-map with %ld entries\n", __func__, entries);
 
 		for (u32 i = 0; i < entries; i++)
 		{
-			// child addr cells + child interrupt cells + parent phandle + parent interrupt cells + interrupt flags
-			u32 child_interrupt = (u32)DT_GetNumber(int_map + i * entry_size + addr_cells, 1);
-			u32 parent_interrupt = (u32)DT_GetNumber(int_map + i * entry_size + addr_cells + 3, interrupt_cells);
-			// TODO check phandle matches GIC-400 phandle
-#ifdef TRACE
-			u32 flags = (u32)DT_GetNumber(int_map + i * entry_size + addr_cells + 3 + interrupt_cells, 1);
-			KprintfT("[pcie] %s: interrupt-map entry %ld: child=%ld parent=%ld flags=0x%lx\n", __func__, i, child_interrupt, parent_interrupt, flags);
-#endif
+			const u32 *entry = int_map + i * entry_size;
+			const u32 child_interrupt = (u32)DT_GetNumber(entry + addr_cells, child_int_cells);
+			const u32 *spec = entry + addr_cells + child_int_cells + 1;
+			const u32 int_type = (u32)DT_GetNumber(spec, 1);
+			const u32 spi = (u32)DT_GetNumber(spec + 1, 1);
 
-			if (child_interrupt >= 1 && child_interrupt <= 4)
-			{
-				ctrl->INT_x_mapping[child_interrupt - 1] = (s32)parent_interrupt;
-			}
+			KprintfT("[pcie] %s: interrupt-map entry %ld: child=%ld type=%ld spi=%ld flags=0x%lx\n",
+					 __func__, i, child_interrupt, int_type, spi, (u32)DT_GetNumber(spec + 2, 1));
+
+			if (child_interrupt >= 1 && child_interrupt <= 4 && int_type == 0)
+				ctrl->INT_x_mapping[child_interrupt - 1] = (s32)(spi + 32);
 		}
 	}
 
@@ -929,11 +925,10 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 		return -ENODEV;
 
 	// Configure MSI
-	ret = brcm_pcie_enable_msi(ctlr);
+	ret = brcm_msi_demux_enable(ctlr);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: failed to enable MSI\n", __func__);
-		brcm_pcie_disable_msi(ctlr);
 		brcm_pcie_close_gic400(ctlr);
 		return ret;
 	}
@@ -944,7 +939,7 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 s32 brcm_pcie_remove(struct pci_controller *pcie)
 {
 	struct ExecBase *SysBase = pcie->sysBase;
-	brcm_pcie_disable_msi(pcie);
+	brcm_msi_demux_disable(pcie);
 	brcm_pcie_close_gic400(pcie);
 
 	void *base = pcie->base;

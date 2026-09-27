@@ -52,12 +52,6 @@ BOOL pci_is_root_bus(const struct pci_bus *bus)
 	return bus->parent == NULL;
 }
 
-struct pci_controller *pci_get_controller(const struct pci_bus *bus)
-{
-	/* we're copying the controller from the parent bus on bind */
-	return bus->controller;
-}
-
 u32 pci_get_ff(enum pci_size_t size)
 {
 	switch (size)
