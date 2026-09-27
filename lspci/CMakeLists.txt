@@ -38,8 +38,7 @@ target_link_libraries(lspci
         Emu68Common::common
 )
 
-# Hosted CLI program: for the serial backend, link debug.lib (KPrintF). libc
-# supplies __divsi3, so no glue and no ROM check.
+# Hosted CLI program: not ROMABLE, so no ROM check.
 emu68_debug_backend_finalize(lspci)
 
 # pcie_library_sfd_headers generates proto/bcmpcie.h (and clib/, inline/, pragmas/) into

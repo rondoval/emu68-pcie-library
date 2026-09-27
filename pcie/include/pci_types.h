@@ -125,6 +125,7 @@ struct pci_device_id
  */
 struct pci_controller
 {
+	struct ExecBase *sysBase; /* the library's, set before probe */
 	APTR base;				 /* virtual base address of the PCIe RC register block */
 	u32 gen;				 /* PCIe generation to negotiate (1–3 on BCM2711) */
 	BOOL ssc;				 /* TRUE to enable spread-spectrum clocking on the RC */
@@ -174,6 +175,7 @@ struct pci_bus
 {
 	struct MinNode node;			   /* linkage in pci_controller.buses */
 	struct pci_controller *controller; /* controller this bus belongs to */
+	struct ExecBase *sysBase;			   /* controller->sysBase, copied at creation */
 	struct pci_bus *parent;			   /* parent bus, or NULL for the root bus */
 	struct pci_device *pci_bridge;	   /* bridge device on the parent bus that created this bus, or NULL for root */
 

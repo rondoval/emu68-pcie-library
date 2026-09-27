@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
 #define __NOLIBBASE__
-#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <proto/exec.h>      /* OpenResource */
 
 #include <debug.h>
@@ -21,7 +21,7 @@
 #define MAILBOX_TAG_NOTIFY_XHCI_RESET 0x00030058UL
 
 /* Ask VideoCore to reload VL805 firmware after PCI reset. */
-s32 bcm2711_reload_vl805_firmware(void)
+s32 bcm2711_reload_vl805_firmware(struct ExecBase *SysBase)
 {
 	APTR MailboxBase = OpenResource((CONST_STRPTR) "mailbox.resource");
 	if (!MailboxBase)

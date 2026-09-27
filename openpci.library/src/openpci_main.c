@@ -13,7 +13,7 @@
 #include <exec/memory.h>
 
 #define __NOLIBBASE__
-#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define EXEC_BASE_NAME SysBase /* a local in every function, from base->sysBase */
 
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
@@ -52,11 +52,13 @@
  *                             IdString=4, Sum=4, OpenCnt=2)
  * segList         = 4 bytes at offset 34
  * bcmBase         = 4 bytes at offset 38  ← BCM_OFFSET used in trampolines
+ * sysBase         = after bcmBase, so offset 38 stays put
  * ----------------------------------------------------------------------- */
 struct OpenPCIBase {
     struct Library   libNode;
     ULONG            segList;
     struct Library  *bcmBase;
+    struct ExecBase *sysBase; /* from LibInit's a6; MUST stay after bcmBase */
 };
 
 /* -----------------------------------------------------------------------
@@ -98,6 +100,7 @@ LONG __attribute__((used, no_reorder)) doNotExecute(void)
  * ----------------------------------------------------------------------- */
 static ULONG LibExpunge(struct OpenPCIBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     ULONG segList = base->segList;
     if (base->libNode.lib_OpenCnt > 0)
     {
@@ -114,6 +117,7 @@ static ULONG LibExpunge(struct OpenPCIBase *base asm("a6"))
 
 static ULONG LibClose(struct OpenPCIBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     base->libNode.lib_OpenCnt--;
     if (base->libNode.lib_OpenCnt == 0)
     {
@@ -127,6 +131,7 @@ static ULONG LibClose(struct OpenPCIBase *base asm("a6"))
 
 static struct OpenPCIBase *LibOpen(ULONG version asm("d0"), struct OpenPCIBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     (void)version;
     if (!base->bcmBase)
     {
@@ -145,10 +150,10 @@ static ULONG LibNull(void)
 }
 
 static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist asm("a0"),
-                                struct ExecBase *execBase asm("a6"))
+                                struct ExecBase *SysBase asm("a6"))
 {
     struct OpenPCIBase *base = (struct OpenPCIBase *)libBase;
-    (void)execBase;
+    base->sysBase = SysBase;
 
     base->segList                = seglist;
     base->libNode.lib_Revision   = (UWORD)LIBRARY_REVISION;

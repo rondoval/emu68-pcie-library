@@ -16,7 +16,7 @@
 #include <clib/exec_protos.h>
 #else
 #define __NOLIBBASE__
-#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <proto/exec.h>
 #endif
 
@@ -400,6 +400,7 @@ static void brcm_pcie_set_outbound_win(struct pci_controller *pcie, u32 win, u64
 
 static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 {
+	struct ExecBase *SysBase = ctrl->sysBase;
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 	if (DeviceTreeBase == NULL)
 	{
@@ -407,7 +408,7 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		return -ENODEV;
 	}
 
-	ctrl->dt_node_name = DT_GetAlias((CONST_STRPTR) "pcie0");
+	ctrl->dt_node_name = DT_GetAlias(SysBase, (CONST_STRPTR) "pcie0");
 	if (ctrl->dt_node_name == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get aliases from device tree\n", __func__);
@@ -423,7 +424,7 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 
 	ctrl->compatible = DT_GetPropValue(DT_FindProperty(key, (CONST_STRPTR) "compatible"));
 
-	ctrl->base = DT_GetBaseAddressVirtual(ctrl->dt_node_name);
+	ctrl->base = DT_GetBaseAddressVirtual(SysBase, ctrl->dt_node_name);
 	if (ctrl->base == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get PCIe base address\n", __func__);
@@ -451,8 +452,8 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 	}
 	u32 mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(u32);
 	ctrl->mmio_window_phys = DT_GetNumber(DT_GetPropValue(mmio_window_phys_prop), mmio_window_phys_cells);
-	ctrl->mmio_window_virtual = (u8 *)DT_GetPropertyValueULONG(key, "emu68,pci-mmio-virt", 0, FALSE);
-	ctrl->mmio_window_size = DT_GetPropertyValueULONG(key, "emu68,pci-mmio-size", SZ_64M, FALSE);
+	ctrl->mmio_window_virtual = (u8 *)DT_GetPropertyValueULONG(SysBase, key, "emu68,pci-mmio-virt", 0, FALSE);
+	ctrl->mmio_window_size = DT_GetPropertyValueULONG(SysBase, key, "emu68,pci-mmio-size", SZ_64M, FALSE);
 	KprintfT("[pcie] %s: emu68,pci-mmio-phys = 0x%lx%08lx\n", __func__, (ULONG)(ctrl->mmio_window_phys >> 32), (ULONG)(ctrl->mmio_window_phys & 0xffffffff));
 	KprintfT("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)ctrl->mmio_window_virtual);
 	KprintfT("[pcie] %s: emu68,pci-mmio-size = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_size));
@@ -465,8 +466,8 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		// ULONG interrupt_parent_phandle = DT_GetPropertyValueULONG(root, "interrupt-parent", 0, TRUE);
 		DT_CloseKey(root);
 
-		const u32 interrupt_cells = DT_GetPropertyValueULONG(key, "#interrupt-cells", 1, FALSE);
-		const u32 addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
+		const u32 interrupt_cells = DT_GetPropertyValueULONG(SysBase, key, "#interrupt-cells", 1, FALSE);
+		const u32 addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
 
 		const u32 *int_map = (const u32 *)DT_GetPropValue(int_map_prop);
 		u32 len = DT_GetPropLen(int_map_prop);
@@ -495,7 +496,7 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		}
 	}
 
-	ctrl->msi.gic_irq = DT_GetInterrupt(key, 1); // first interrupt is for the host controller; second interrupt is MSI
+	ctrl->msi.gic_irq = DT_GetInterrupt(SysBase, key, 1); // first interrupt is for the host controller; second interrupt is MSI
 	KprintfT("[pcie] %s: MSI IRQ = %ld\n", __func__, ctrl->msi.gic_irq);
 
 	// We're done with the device tree
@@ -505,6 +506,7 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 
 static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index)
 {
+	struct ExecBase *SysBase = ctlr->sysBase;
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 	if (DeviceTreeBase == NULL)
 	{
@@ -525,9 +527,9 @@ static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 	const u32 *dma_ranges = (const u32 *)DT_GetPropValue(prop);
 	u32 len = DT_GetPropLen(prop);
 
-	u32 pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
-	u32 addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
-	u32 size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
+	u32 pci_addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
+	u32 addr_cells = DT_GetPropertyValueULONG(SysBase, DT_GetParent(key), "#address-cells", 2, FALSE);
+	u32 size_cells = DT_GetPropertyValueULONG(SysBase, key, "#size-cells", 1, FALSE);
 
 	/* PCI addresses are always 3-cells */
 	len /= sizeof(u32);
@@ -555,6 +557,7 @@ static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 
 static s32 pci_get_devtree_regions(struct pci_controller *hose)
 {
+	struct ExecBase *SysBase = hose->sysBase;
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
 	if (DeviceTreeBase == NULL)
 	{
@@ -574,9 +577,9 @@ static s32 pci_get_devtree_regions(struct pci_controller *hose)
 	u32 *ranges = (u32 *)DT_GetPropValue(prop);
 	u32 len = DT_GetPropLen(prop);
 
-	u32 pci_addr_cells = DT_GetPropertyValueULONG(key, "#address-cells", 2, FALSE);
-	u32 addr_cells = DT_GetPropertyValueULONG(DT_GetParent(key), "#address-cells", 2, FALSE);
-	u32 size_cells = DT_GetPropertyValueULONG(key, "#size-cells", 1, FALSE);
+	u32 pci_addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
+	u32 addr_cells = DT_GetPropertyValueULONG(SysBase, DT_GetParent(key), "#address-cells", 2, FALSE);
+	u32 size_cells = DT_GetPropertyValueULONG(SysBase, key, "#size-cells", 1, FALSE);
 
 	/* PCI addresses are always 3-cells */
 	len /= sizeof(u32);
@@ -671,9 +674,8 @@ static s32 pci_get_devtree_regions(struct pci_controller *hose)
 								? (pci_addr_t)(dma_win.bus_start - dma_win.phys_start)
 								: 0;
 
-	struct ExecBase *sysBase = EXEC_BASE_NAME;
 	Forbid();
-	struct MemHeader *mh = (struct MemHeader *)sysBase->MemList.lh_Head;
+	struct MemHeader *mh = (struct MemHeader *)SysBase->MemList.lh_Head;
 	for (u32 added = 0;
 		 mh->mh_Node.ln_Succ != NULL && added < CONFIG_NR_DRAM_BANKS;
 		 mh = (struct MemHeader *)mh->mh_Node.ln_Succ)
@@ -941,6 +943,7 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 
 s32 brcm_pcie_remove(struct pci_controller *pcie)
 {
+	struct ExecBase *SysBase = pcie->sysBase;
 	brcm_pcie_disable_msi(pcie);
 	brcm_pcie_close_gic400(pcie);
 

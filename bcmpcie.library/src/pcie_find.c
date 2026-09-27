@@ -83,6 +83,7 @@ struct pci_dev *LibFindSlot(UBYTE bus asm("d0"), ULONG devfn asm("d1"), struct P
 struct pci_dev *LibFindBoardA(struct pci_dev *prev asm("a0"), struct TagItem *tags asm("a1"), struct PCIELibBase *base asm("a6"))
 {
     if (!base->ctrlReady) return NULL;
+    struct ExecBase *SysBase = base->sysBase;
 
     ObtainSemaphore(&base->semaphore);
     struct pci_dev *cur = (prev != NULL) ? prev->next : base->devListHead;

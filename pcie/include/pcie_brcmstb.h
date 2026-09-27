@@ -91,7 +91,8 @@ s32 brcm_pcie_write_config(struct pci_controller *bus, pci_dev_t bdf,
  *
  * Return: 0 on success, negative if the mailbox call failed
  */
-s32 bcm2711_reload_vl805_firmware(void);
+struct ExecBase;
+s32 bcm2711_reload_vl805_firmware(struct ExecBase *SysBase);
 
 /**
  * brcm_pcie_enable_msi() - Enable the BCM2711 MSI aggregation interrupt

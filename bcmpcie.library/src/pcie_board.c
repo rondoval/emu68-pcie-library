@@ -37,13 +37,14 @@
  */
 BOOL LibObtainCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev)
         return FALSE;
 
     ObtainSemaphore(&base->semaphore);
     if (dev->owner)
     {
-        KprintfT("[pcie] %s: device %04x:%04x already reserved by %s\n",
+        KprintfT("[pcie] %s: device %04lx:%04lx already reserved by %s\n",
                  __func__,
                  (ULONG)dev->vendor, (ULONG)dev->device,
                  dev->owner->ln_Name ? dev->owner->ln_Name : "<unnamed>");
@@ -61,6 +62,7 @@ BOOL LibObtainCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("
  */
 void LibReleaseCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev)
         return;
 
@@ -76,6 +78,7 @@ void LibReleaseCard(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm(
 
 ULONG LibGetBoardAttrsA(struct pci_dev *dev asm("a0"), struct TagItem *tags asm("a1"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev || !tags) return 0;
 
     struct pci_device *idev = pcie_dev_from_openpci(dev);
@@ -193,6 +196,7 @@ ULONG LibGetBoardAttrsA(struct pci_dev *dev asm("a0"), struct TagItem *tags asm(
 
 BOOL LibSetBoardAttrsA(struct pci_dev *dev asm("a0"), struct TagItem *tags asm("a1"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev || !tags)
         return FALSE;
 
@@ -254,6 +258,7 @@ LONG LibFLR(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
  */
 BOOL LibSetMaster(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev)
         return FALSE;
     struct pci_device *idev = pcie_dev_from_openpci(dev);

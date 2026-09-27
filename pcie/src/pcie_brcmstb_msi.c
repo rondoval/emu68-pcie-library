@@ -92,9 +92,8 @@ void brcm_intx_unbind(struct pci_controller *pcie, struct pci_device *dev, struc
 	RemIntServerEx((ULONG)dev->intx.gic_line + GIC_SPI_BASE, isr);
 }
 
-static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG irq asm("d0"))
+static ULONG brcm_pcie_msi_isr(struct ExecBase *SysBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG irq asm("d0"))
 {
-	(void)execBase;
 	(void)irq;
 
 	if (!pcie)
@@ -120,6 +119,7 @@ static ULONG brcm_pcie_msi_isr(struct ExecBase *execBase asm("a6"), struct pci_c
 
 s32 brcm_pcie_open_gic400(struct pci_controller *pcie)
 {
+	struct ExecBase *SysBase = pcie->sysBase;
 	if (pcie->gic400Base != NULL)
 		return 0;
 
@@ -135,6 +135,7 @@ s32 brcm_pcie_open_gic400(struct pci_controller *pcie)
 
 void brcm_pcie_close_gic400(struct pci_controller *pcie)
 {
+	struct ExecBase *SysBase = pcie->sysBase;
 	if (pcie->gic400Base == NULL)
 		return;
 

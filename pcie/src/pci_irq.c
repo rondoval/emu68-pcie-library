@@ -8,6 +8,8 @@
  * per-slot ISR table live in the controller back-end (pcie_brcmstb_msi.c).
  */
 
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <errors.h>
 
 #include <pci.h>

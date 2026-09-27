@@ -10,6 +10,8 @@
  * lives here — this file holds no controller specifics.
  */
 
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <debug.h>
 #include <bits.h>
 #include <errors.h>

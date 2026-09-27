@@ -110,9 +110,9 @@ BOOL CheckSetINTxMask(struct pci_dev *dev, BOOL mask) (A0,D0)
 * (level-triggered, possibly shared) FALSE means it was deferred because the
 * interrupt-pending state did not match the request - on mask, nothing was pending
 * (not our line); on unmask, an interrupt is still pending (drain and retry).
-* MSI-X per-vector masking is mandatory and always returns TRUE.  MSI per-vector
-* masking is optional: FALSE means the device lacks the Per-Vector Masking
-* Capability, so the vector cannot be masked at the device.
+* MSI and MSI-X are masked at the root complex (the vector's MSI demux slot, a
+* local register write, no PCIe transaction) and always return TRUE; a message
+* that arrives while masked latches and fires on unmask.
 * AllocIntVectors returns the vector count (>= min) on success, or a negative
 * PCIE_ERR_* code: PCIE_ERR_INVAL (bad dev), PCIE_ERR_BUSY (vectors already
 * allocated), PCIE_ERR_NODEV (no usable type), PCIE_ERR_NOMEM (out of vectors).

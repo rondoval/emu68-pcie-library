@@ -12,6 +12,8 @@
  * Written by Simon Glass <sjg@chromium.org>
  */
 
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <pci.h>
 #include <pci_bar.h>
 #include <debug.h>
@@ -370,7 +372,7 @@ static BOOL pciauto_exp_link_stable(struct pci_device *dev, u32 pcie_off)
 #ifdef DEBUG
 	pci_dev_t bdf = pci_get_bdf(dev);
 #endif
-	Kprintf("[pcie] %s: %02x.%02x.%02x: Fixup link: DL active: %lu; "
+	Kprintf("[pcie] %s: %02lx.%02lx.%02lx: Fixup link: DL active: %lu; "
 			"%3lu flips, %6lu loops of which %6lu while training, "
 			"final %6lu stable\n",
 			__func__, PCI_BUS(bdf), PCI_DEV(bdf), PCI_FUNC(bdf),

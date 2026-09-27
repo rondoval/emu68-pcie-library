@@ -28,7 +28,7 @@
 #include <clib/exec_protos.h>
 #else
 #define __NOLIBBASE__
-#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <proto/exec.h>
 #endif
 
@@ -120,6 +120,7 @@ LONG LibAllocIntVectors(struct pci_dev *dev asm("a0"), ULONG min asm("d0"),
 						ULONG max asm("d1"), ULONG flags asm("d2"),
 						struct PCIELibBase *base asm("a6"))
 {
+	struct ExecBase *SysBase = base->sysBase;
 	if (!dev)
 		return PCIE_ERR_INVAL;
 	struct pci_device *idev = pcie_dev_from_openpci(dev);
@@ -138,6 +139,7 @@ LONG LibAllocIntVectors(struct pci_dev *dev asm("a0"), ULONG min asm("d0"),
 
 void LibFreeIntVectors(struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+	struct ExecBase *SysBase = base->sysBase;
 	if (!dev)
 		return;
 	struct pci_device *idev = pcie_dev_from_openpci(dev);
@@ -150,6 +152,7 @@ void LibFreeIntVectors(struct pci_dev *dev asm("a0"), struct PCIELibBase *base a
 LONG LibAddIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
 						   struct Interrupt *isr asm("a1"), struct PCIELibBase *base asm("a6"))
 {
+	struct ExecBase *SysBase = base->sysBase;
 	if (!dev || !isr)
 		return PCIE_ERR_INVAL;
 	struct pci_device *idev = pcie_dev_from_openpci(dev);
@@ -163,6 +166,7 @@ LONG LibAddIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
 void LibRemIntVectorServer(struct pci_dev *dev asm("a0"), ULONG vec asm("d0"),
 						   struct Interrupt *isr asm("a1"), struct PCIELibBase *base asm("a6"))
 {
+	struct ExecBase *SysBase = base->sysBase;
 	if (!dev || !isr)
 		return;
 	struct pci_device *idev = pcie_dev_from_openpci(dev);
@@ -221,6 +225,7 @@ ULONG LibGetIntVectorType(struct pci_dev *dev asm("a0"), struct PCIELibBase *bas
  */
 BOOL LibAddIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"))
 {
+	struct ExecBase *SysBase = base->sysBase;
 	if (!isr || !dev || dev->irq == 0)
 		return FALSE;
 
@@ -249,6 +254,7 @@ BOOL LibAddIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a
  */
 void LibRemIntServer(struct Interrupt *isr asm("a0"), struct pci_dev *dev asm("a1"), struct PCIELibBase *base asm("a6"))
 {
+	struct ExecBase *SysBase = base->sysBase;
 	if (!isr || !dev)
 		return;
 

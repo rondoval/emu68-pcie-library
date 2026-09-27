@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(openpci.library VERSION 45.12 LANGUAGES C ASM)
+project(openpci.library VERSION 45.13 LANGUAGES C ASM)
 
 # Version string
 string(TIMESTAMP CURRENT_DATE "(%d.%m.%Y)")

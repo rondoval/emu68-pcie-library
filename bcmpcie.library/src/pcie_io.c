@@ -64,6 +64,7 @@ void LibPCIOutl(ULONG val asm("d0"), APTR addr asm("a0"), struct PCIELibBase *ba
 
 void LibPCIToHostCpy(APTR src asm("a0"), APTR dst asm("a1"), ULONG sz asm("d0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     (void)base;
     KASSERT(((ULONG)src & 7) == 0 && ((ULONG)dst & 7) == 0,
             "pci_to_hostcpy: unaligned address");
@@ -72,6 +73,7 @@ void LibPCIToHostCpy(APTR src asm("a0"), APTR dst asm("a1"), ULONG sz asm("d0"),
 
 void LibHostToPCICpy(APTR src asm("a0"), APTR dst asm("a1"), ULONG sz asm("d0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     (void)base;
     KASSERT(((ULONG)src & 7) == 0 && ((ULONG)dst & 7) == 0,
             "host_to_pcicpy: unaligned address");
@@ -80,6 +82,7 @@ void LibHostToPCICpy(APTR src asm("a0"), APTR dst asm("a1"), ULONG sz asm("d0"),
 
 void LibPCIToPCICpy(APTR src asm("a0"), APTR dst asm("a1"), ULONG sz asm("d0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     (void)base;
     KASSERT(((ULONG)src & 7) == 0 && ((ULONG)dst & 7) == 0,
             "pci_to_pcicpy: unaligned address");
@@ -92,6 +95,7 @@ void LibPCIToPCICpy(APTR src asm("a0"), APTR dst asm("a1"), ULONG sz asm("d0"), 
 
 UBYTE LibReadConfigByte(UBYTE reg asm("d0"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return 0xFF;
     ObtainSemaphore(&base->semaphore);
     u8 val = 0xFF;
@@ -102,6 +106,7 @@ UBYTE LibReadConfigByte(UBYTE reg asm("d0"), struct pci_dev *dev asm("a0"), stru
 
 UWORD LibReadConfigWord(UBYTE reg asm("d0"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return 0xFFFF;
     ObtainSemaphore(&base->semaphore);
     u16 val = 0xFFFF;
@@ -112,6 +117,7 @@ UWORD LibReadConfigWord(UBYTE reg asm("d0"), struct pci_dev *dev asm("a0"), stru
 
 ULONG LibReadConfigLong(UBYTE reg asm("d0"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return 0xFFFFFFFFUL;
     ObtainSemaphore(&base->semaphore);
     u32 val = 0xFFFFFFFFUL;
@@ -122,6 +128,7 @@ ULONG LibReadConfigLong(UBYTE reg asm("d0"), struct pci_dev *dev asm("a0"), stru
 
 void LibWriteConfigByte(UBYTE reg asm("d0"), UBYTE val asm("d1"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return;
     ObtainSemaphore(&base->semaphore);
     pci_write_config8(pcie_dev_from_openpci(dev), (u32)reg, (u32)val);
@@ -130,6 +137,7 @@ void LibWriteConfigByte(UBYTE reg asm("d0"), UBYTE val asm("d1"), struct pci_dev
 
 void LibWriteConfigWord(UBYTE reg asm("d0"), UWORD val asm("d1"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return;
     ObtainSemaphore(&base->semaphore);
     pci_write_config16(pcie_dev_from_openpci(dev), (u32)reg, (u32)val);
@@ -138,6 +146,7 @@ void LibWriteConfigWord(UBYTE reg asm("d0"), UWORD val asm("d1"), struct pci_dev
 
 void LibWriteConfigLong(UBYTE reg asm("d0"), ULONG val asm("d1"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return;
     ObtainSemaphore(&base->semaphore);
     pci_write_config32(pcie_dev_from_openpci(dev), (u32)reg, (u32)val);
@@ -150,6 +159,7 @@ void LibWriteConfigLong(UBYTE reg asm("d0"), ULONG val asm("d1"), struct pci_dev
 
 UBYTE LibReadExtConfigByte(ULONG reg asm("d0"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return 0xFF;
     ObtainSemaphore(&base->semaphore);
     u8 val = 0xFF;
@@ -160,6 +170,7 @@ UBYTE LibReadExtConfigByte(ULONG reg asm("d0"), struct pci_dev *dev asm("a0"), s
 
 UWORD LibReadExtConfigWord(ULONG reg asm("d0"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return 0xFFFF;
     ObtainSemaphore(&base->semaphore);
     u16 val = 0xFFFF;
@@ -170,6 +181,7 @@ UWORD LibReadExtConfigWord(ULONG reg asm("d0"), struct pci_dev *dev asm("a0"), s
 
 ULONG LibReadExtConfigLong(ULONG reg asm("d0"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return 0xFFFFFFFFUL;
     ObtainSemaphore(&base->semaphore);
     u32 val = 0xFFFFFFFFUL;
@@ -180,6 +192,7 @@ ULONG LibReadExtConfigLong(ULONG reg asm("d0"), struct pci_dev *dev asm("a0"), s
 
 void LibWriteExtConfigByte(ULONG reg asm("d0"), UBYTE val asm("d1"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return;
     ObtainSemaphore(&base->semaphore);
     pci_write_config8(pcie_dev_from_openpci(dev), reg, (u32)val);
@@ -188,6 +201,7 @@ void LibWriteExtConfigByte(ULONG reg asm("d0"), UBYTE val asm("d1"), struct pci_
 
 void LibWriteExtConfigWord(ULONG reg asm("d0"), UWORD val asm("d1"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return;
     ObtainSemaphore(&base->semaphore);
     pci_write_config16(pcie_dev_from_openpci(dev), reg, (u32)val);
@@ -196,6 +210,7 @@ void LibWriteExtConfigWord(ULONG reg asm("d0"), UWORD val asm("d1"), struct pci_
 
 void LibWriteExtConfigLong(ULONG reg asm("d0"), ULONG val asm("d1"), struct pci_dev *dev asm("a0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     if (!dev) return;
     ObtainSemaphore(&base->semaphore);
     pci_write_config32(pcie_dev_from_openpci(dev), reg, (u32)val);

@@ -9,7 +9,7 @@
 #include <exec/memory.h>
 
 #define __NOLIBBASE__
-#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 
 #ifdef __INTELLISENSE__
 #include <clib/exec_protos.h>
@@ -80,6 +80,7 @@
 struct PCIELibBase {
     struct Library          libNode;
     ULONG                   segList;
+    struct ExecBase        *sysBase;        /* from LibInit's a6; the controller copies it */
 
     struct SignalSemaphore  semaphore;      /* protects all mutable state */
 
