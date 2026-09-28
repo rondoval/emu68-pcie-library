@@ -64,7 +64,7 @@ struct OpenPCIBase {
 /* -----------------------------------------------------------------------
  * Forward declarations
  * ----------------------------------------------------------------------- */
-LONG __attribute__((used, no_reorder)) doNotExecute(void);
+LONG __attribute__((used, section(".text.entry"))) doNotExecute(void);
 extern const UBYTE endOfCode;
 
 static const char libraryName[]     = LIBRARY_NAME;
@@ -74,7 +74,7 @@ static const APTR initTable[4];
 /* -----------------------------------------------------------------------
  * Resident tag
  * ----------------------------------------------------------------------- */
-const struct Resident openpciResident __attribute__((used)) = {
+const struct Resident openpciResident __attribute__((used, section(".text.modhdr"))) = {
     RTC_MATCHWORD,
     (struct Resident *)&openpciResident,
     (APTR)&endOfCode,
@@ -90,7 +90,7 @@ const struct Resident openpciResident __attribute__((used)) = {
 /* -----------------------------------------------------------------------
  * Entry point — returns -1 if the binary is executed directly
  * ----------------------------------------------------------------------- */
-LONG __attribute__((used, no_reorder)) doNotExecute(void)
+LONG __attribute__((used, section(".text.entry"))) doNotExecute(void)
 {
     return -1;
 }

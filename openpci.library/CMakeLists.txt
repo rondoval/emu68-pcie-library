@@ -26,14 +26,12 @@ add_link_options(
     -Wall
     -Wextra
     -s
-    -Wl,-e,_doNotExecute
 )
 
 # Executable
 add_executable(openpci_library
     src/openpci_main.c
     src/openpci_trampolines.S
-    src/openpci_end.c
 )
 
 target_compile_definitions(openpci_library
@@ -58,6 +56,10 @@ set_target_properties(openpci_library PROPERTIES
     OUTPUT_NAME openpci
     SUFFIX ".library"
 )
+
+# Layout contract (entry at offset 0, RT_ENDSKIP, no writable sections) belongs to the
+# linker, not to source order -- see Emu68CommonModuleLayout.cmake.
+emu68_module_layout(openpci_library)
 
 install(
     TARGETS openpci_library

@@ -77,7 +77,6 @@ add_link_options(
     -Wall
     -Wextra
     -s
-    -Wl,-e,_doNotExecute
 )
 
 # Source files
@@ -94,7 +93,6 @@ add_executable(pcie_library
     src/pcie_io.c
     src/pcie_mem.c
     ${pcie_core_sources}
-    src/pcie_end.c
 )
 
 target_include_directories(pcie_headers
@@ -131,10 +129,15 @@ target_link_libraries(pcie_library
 
 # ROM-able: no writable .data/.bss may sneak in. For the serial backend this instead
 # links debug.lib (+ __divsi3 glue) and skips the check.
-emu68_debug_backend_finalize(pcie_library ROMABLE)
+# Layout contract (entry at offset 0, RT_ENDSKIP, no writable sections) belongs to the
+# linker, not to source order -- see Emu68CommonModuleLayout.cmake.
+emu68_module_layout(pcie_library)
 
 # Exec interrupt servers answer with the Z flag, not D0 (exec.library/AddIntServer);
 # a compiler epilogue that ends in MOVE rather than MOVEM silently overwrites it.
+# emu68_isr_z_check() slices each server out of the LINKED module (by the section
+# EMU68_INTSERVER() puts it in), so the servers are ordinary LTO'd TUs.
+emu68_enable_lto(pcie_library)
 emu68_isr_z_check(pcie_library SERVERS brcm_msi_demux_isr)
 
 set_target_properties(pcie_library PROPERTIES

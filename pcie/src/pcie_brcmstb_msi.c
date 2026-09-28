@@ -18,6 +18,7 @@
 #include <bits.h>
 #include <errors.h>
 #include <iomem.h>
+#include <intserver.h>
 #include <pci.h>
 #include <bcm2711.h>
 #include <pcie_brcmstb.h>
@@ -154,7 +155,9 @@ void brcm_intx_rem_server(struct pci_controller *pcie, struct pci_device *dev, s
  * walk short and starve whatever else sits on the line.  See
  * interrupt-chaining.md in the gic400 component.
  */
-static ULONG brcm_msi_demux_isr(struct ExecBase *SysBase asm("a6"), struct pci_controller *pcie asm("a1"), ULONG gic_irq asm("d0"))
+static EMU68_INTSERVER(brcm_msi_demux_isr)
+ULONG brcm_msi_demux_isr(struct ExecBase *SysBase asm("a6"),
+                         struct pci_controller *pcie asm("a1"), ULONG gic_irq asm("d0"))
 {
 	(void)gic_irq;
 

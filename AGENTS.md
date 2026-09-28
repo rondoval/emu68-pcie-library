@@ -28,7 +28,7 @@
 
 ## Role
 
-- `bcmpcie.library` is a real AmigaOS dynamic library opened by name (`OpenLibrary("bcmpcie.library", 1)`), shared by multiple consumers. It is built ROM-able (no writable `.data`/`.bss`, enforced by `emu68_rom_check`).
+- `bcmpcie.library` is a real AmigaOS dynamic library opened by name (`OpenLibrary("bcmpcie.library", 1)`), shared by multiple consumers. It is built ROM-able (no writable `.data`/`.bss`, enforced by the `ASSERT` in the shared module layout script, applied by `emu68_module_layout`).
 - Consumers (e.g. `emu68-xhci-driver`, `lspci`) open it by name and link only against the SFD-generated headers (`Emu68PCIe::pcie_headers`), not a static archive.
 - `openpci.library` is a thin shim that opens `bcmpcie.library` on first use and forwards the classic openpci API (no BCM2711 extensions).
 - `lspci` is the standalone bring-up and debugging tool for enumeration and BAR assignment.

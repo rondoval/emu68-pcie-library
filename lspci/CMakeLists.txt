@@ -39,7 +39,6 @@ target_link_libraries(lspci
 )
 
 # Hosted CLI program: not ROMABLE, so no ROM check.
-emu68_debug_backend_finalize(lspci)
 
 # pcie_library_sfd_headers generates proto/bcmpcie.h (and clib/, inline/, pragmas/) into
 # the build tree. Reference it directly so lspci can build before the install step
