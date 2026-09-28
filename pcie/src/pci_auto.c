@@ -683,9 +683,15 @@ s32 pciauto_config_device(struct pci_device *dev)
 		pciauto_setup_device(dev, pci_mem, pci_prefetch, pci_io);
 
 		struct pci_bus *bus;
-		pci_create_bus(&bus, dev->bus, dev, ctlr);
+		s32 err = pci_create_bus(&bus, dev->bus, dev, ctlr);
+		if (err < 0)
+		{
+			Kprintf("[pcie] %s: Failed to create bus for device %ld\n",
+					__func__, PCI_DEV(pci_get_bdf(dev)));
+			return err;
+		}
 
-		s32 err = pci_probe_bus(bus);
+		err = pci_probe_bus(bus);
 		if (err < 0)
 		{
 			Kprintf("[pcie] %s: Failed to probe bus %ld\n", __func__, sub_bus);

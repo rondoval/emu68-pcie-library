@@ -95,6 +95,17 @@ have the details.
 - `AddIntVectorServer` on an INTx line that already has a server returns
   `PCIE_ERR_BUSY` instead of `PCIE_ERR_IO`.
 
+### Bus enumeration
+
+- **A PCI-to-PCI bridge behind which the bus could not be allocated was probed
+  through an uninitialised pointer.** `pci_create_bus()` leaves its output
+  pointer untouched when it fails, and its return value was ignored, so an
+  allocation failure while enumerating a bridge sent `pci_probe_bus()` into a
+  stale stack slot. Out-of-memory during enumeration is rare, which is why this
+  was never seen — the failure would have been a crash at boot with no
+  diagnostic. The return value is now checked and enumeration stops with the
+  error.
+
 ---
 
 # Release notes — bcmpcie.library 2.4
