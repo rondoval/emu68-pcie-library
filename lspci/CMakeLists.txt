@@ -4,6 +4,9 @@ project(lspci VERSION ${CMAKE_PROJECT_VERSION})
 # Version stamp ($VER:) embedded in the binary.  CURRENT_DATE is not inherited
 # from the pcie-library parent scope, so derive it here as the sibling libraries do.
 string(TIMESTAMP CURRENT_DATE "(%d.%m.%Y)")
+if(EMU68_BUILD_STAMP)   # local-build marker from the stack's build.sh; empty in releases
+    string(APPEND CURRENT_DATE " ${EMU68_BUILD_STAMP}")
+endif()
 
 # Compile and link options
 add_compile_options(
