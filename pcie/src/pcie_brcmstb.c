@@ -408,28 +408,29 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		return -ENODEV;
 	}
 
-	ctrl->dt_node_name = DT_GetAlias(SysBase, (CONST_STRPTR) "pcie0");
+	ctrl->dt_node_name = DT_GetAlias(DeviceTreeBase, (CONST_STRPTR) "pcie0");
 	if (ctrl->dt_node_name == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get aliases from device tree\n", __func__);
-		return -1;
+		return -ENOENT;
 	}
 
 	APTR key = DT_OpenKey(ctrl->dt_node_name);
 	if (key == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to open key %s\n", __func__, ctrl->dt_node_name);
-		return -1;
+		return -ENOENT;
 	}
 
-	ctrl->compatible = DT_GetPropValue(DT_FindProperty(key, (CONST_STRPTR) "compatible"));
+	APTR compatible = DT_FindProperty(key, (CONST_STRPTR) "compatible");
+	ctrl->compatible = compatible ? DT_GetPropValue(compatible) : (CONST_STRPTR) "";
 
-	ctrl->base = DT_GetBaseAddressVirtual(SysBase, ctrl->dt_node_name);
+	ctrl->base = DT_GetBaseAddressVirtual(DeviceTreeBase, key, 0);
 	if (ctrl->base == NULL)
 	{
 		Kprintf("[pcie] %s: Failed to get PCIe base address\n", __func__);
 		DT_CloseKey(key);
-		return -1;
+		return -EINVAL;
 	}
 
 	KprintfT("[pcie] %s: compatible: %s\n", __func__, ctrl->compatible);
@@ -452,55 +453,132 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 	}
 	u32 mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(u32);
 	ctrl->mmio_window_phys = DT_GetNumber(DT_GetPropValue(mmio_window_phys_prop), mmio_window_phys_cells);
-	ctrl->mmio_window_virtual = (u8 *)DT_GetPropertyValueULONG(SysBase, key, "emu68,pci-mmio-virt", 0, FALSE);
-	ctrl->mmio_window_size = DT_GetPropertyValueULONG(SysBase, key, "emu68,pci-mmio-size", SZ_64M, FALSE);
+	ctrl->mmio_window_virtual = (u8 *)DT_GetPropertyValueULONG(DeviceTreeBase, key, "emu68,pci-mmio-virt", 0);
+	ctrl->mmio_window_size = DT_GetPropertyValueULONG(DeviceTreeBase, key, "emu68,pci-mmio-size", SZ_64M);
 	KprintfT("[pcie] %s: emu68,pci-mmio-phys = 0x%lx%08lx\n", __func__, (ULONG)(ctrl->mmio_window_phys >> 32), (ULONG)(ctrl->mmio_window_phys & 0xffffffff));
 	KprintfT("[pcie] %s: emu68,pci-mmio-virt = 0x%lx\n", __func__, (ULONG)ctrl->mmio_window_virtual);
 	KprintfT("[pcie] %s: emu68,pci-mmio-size = 0x%lx\n", __func__, (ULONG)(ctrl->mmio_window_size));
 
-	/* interrupt-map: one entry per INTx pin, <child-addr child-int phandle
-	 * parent-spec>, the parent being the GIC with its 3-cell specifier
-	 * <type number flags>.  Only GIC_SPI (type 0) entries are routable; the
-	 * stored value is the absolute GIC IRQ (SPI + 32), as DT_GetInterrupt
-	 * returns it for the MSI line below.  Unmapped pins stay 0. */
+	/* interrupt-map: one entry per INTx pin,
+	 *
+	 *   <child unit address> <child interrupt> <parent phandle> <parent unit address> <parent interrupt>
+	 *
+	 * The child cells are this node's #address-cells and #interrupt-cells; the
+	 * parent's are those of the node the phandle names (#address-cells absent
+	 * means none, as Linux reads it).  That node is the GIC, whose interrupt
+	 * is <type number flags>; only GIC_SPI (type 0) is routable.  The stored
+	 * value is the absolute GIC IRQ (SPI + 32), as DT_GetInterrupt returns it
+	 * for the MSI line below.  Unmapped pins stay 0. */
 	APTR int_map_prop = DT_FindProperty(key, (CONST_STRPTR) "interrupt-map");
 	if (int_map_prop)
 	{
-		const u32 addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
-		const u32 child_int_cells = DT_GetPropertyValueULONG(SysBase, key, "#interrupt-cells", 1, FALSE);
-		const u32 gic_spec_cells = 3;
-		const u32 entry_size = addr_cells + child_int_cells + 1 + gic_spec_cells;
+		const u32 child_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#address-cells", 2);
+		const u32 child_int_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#interrupt-cells", 1);
+		const u32 child_cells = child_addr_cells + child_int_cells + 1; /* up to and including the phandle */
+		const u32 *entry = DT_GetPropValue(int_map_prop);
+		u32 cells_left = DT_GetPropLen(int_map_prop) / sizeof(u32);
+		APTR root = DT_OpenKey((CONST_STRPTR) "/");
 
-		const u32 *int_map = (const u32 *)DT_GetPropValue(int_map_prop);
-		const u32 entries = DT_GetPropLen(int_map_prop) / (sizeof(u32) * entry_size);
-
-		KprintfT("[pcie] %s: interrupt-map with %ld entries\n", __func__, entries);
-
-		for (u32 i = 0; i < entries; i++)
+		while (cells_left >= child_cells)
 		{
-			const u32 *entry = int_map + i * entry_size;
-			const u32 child_interrupt = (u32)DT_GetNumber(entry + addr_cells, child_int_cells);
-			const u32 *spec = entry + addr_cells + child_int_cells + 1;
-			const u32 int_type = (u32)DT_GetNumber(spec, 1);
-			const u32 spi = (u32)DT_GetNumber(spec + 1, 1);
+			const u32 pin = (u32)DT_GetNumber(entry + child_addr_cells, child_int_cells);
+			const u32 phandle = entry[child_cells - 1];
+			APTR parent = DT_FindByPHandle(DeviceTreeBase, root, phandle); /* NULL reads as the defaults below */
+			const u32 parent_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, parent, "#address-cells", 0);
+			const u32 parent_int_cells = DT_GetPropertyValueULONG(DeviceTreeBase, parent, "#interrupt-cells", 0);
+			const u32 entry_cells = child_cells + parent_addr_cells + parent_int_cells;
+			if (parent == NULL || parent_int_cells < 2 || cells_left < entry_cells)
+			{
+				Kprintf("[pcie] %s: interrupt-map: pin %ld has an unusable parent (phandle %ld)\n", __func__, pin, phandle);
+				break;
+			}
 
-			KprintfT("[pcie] %s: interrupt-map entry %ld: child=%ld type=%ld spi=%ld flags=0x%lx\n",
-					 __func__, i, child_interrupt, int_type, spi, (u32)DT_GetNumber(spec + 2, 1));
+			const u32 *irq = entry + child_cells + parent_addr_cells;
+			KprintfT("[pcie] %s: interrupt-map: pin %ld -> phandle %ld, type %ld, number %ld\n",
+					 __func__, pin, phandle, irq[0], irq[1]);
+			if (pin >= 1 && pin <= 4 && irq[0] == 0 /* GIC_SPI */)
+				ctrl->INT_x_mapping[pin - 1] = (s32)(irq[1] + 32);
 
-			if (child_interrupt >= 1 && child_interrupt <= 4 && int_type == 0)
-				ctrl->INT_x_mapping[child_interrupt - 1] = (s32)(spi + 32);
+			entry += entry_cells;
+			cells_left -= entry_cells;
 		}
+		DT_CloseKey(root);
 	}
 
-	ctrl->msi.gic_irq = DT_GetInterrupt(SysBase, key, 1); // first interrupt is for the host controller; second interrupt is MSI
+	/* "interrupts": the first is the host controller's own, the second the MSI line */
+	ctrl->msi.gic_irq = DT_GetInterrupt(DeviceTreeBase, key, 1);
+	DT_CloseKey(key);
+	if (ctrl->msi.gic_irq < 0)
+	{
+		Kprintf("[pcie] %s: Device '%s': no MSI interrupt in the device tree\n", __func__, ctrl->dt_node_name);
+		return -EINVAL;
+	}
 	KprintfT("[pcie] %s: MSI IRQ = %ld\n", __func__, ctrl->msi.gic_irq);
 
-	// We're done with the device tree
-	DT_CloseKey(key);
 	return 0;
 }
 
-static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_region *memp, u32 index)
+/*
+ * PCI "ranges" and "dma-ranges" are lists of records
+ *
+ *   <PCI address> <CPU address> <size>
+ *
+ *   PCI address   the PCI node's #address-cells.  The first cell carries
+ *                 attributes and no address bits, the cells after it the
+ *                 address, most significant first.
+ *   CPU address   the parent node's #address-cells
+ *   size          the PCI node's #size-cells
+ *
+ * The attribute cell is a field of its own, not high bits of the address, so
+ * it is read on its own and the address starts after it.  Its bits, most
+ * significant first:
+ *
+ *   npt000ss bbbbbbbb dddddfff rrrrrrrr
+ *
+ *   n         the address is fixed, not relocatable
+ *   p         the memory is prefetchable
+ *   t         the address is aliased (memory below 1 MiB, I/O below 64 KiB)
+ *   000       reserved, zero
+ *   ss        address space: 00 configuration, 01 I/O, 10 32-bit memory,
+ *             11 64-bit memory
+ *   bbbbbbbb  bus number
+ *   ddddd     device number
+ *   fff       function number
+ *   rrrrrrrr  configuration-space register (the BAR) the address belongs to
+ *
+ * Bus, device, function and register name one device's BAR, in that device's
+ * "reg" or "assigned-addresses".  A range record describes a whole address
+ * space, so they are zero there, and only ss and p are read here.
+ */
+#define DT_PCI_ATTR_CELLS 1 /* attribute cells in front of the PCI address */
+
+#define DT_PCI_ATTR_SPACE 0x03000000 /* ss: which address space */
+#define DT_PCI_SPACE_IO 0x01000000
+#define DT_PCI_SPACE_MEM32 0x02000000
+#define DT_PCI_SPACE_MEM64 0x03000000
+#define DT_PCI_ATTR_PREFETCH 0x40000000 /* p */
+
+/* One record, as the firmware wrote it */
+struct dt_pci_range
+{
+	u32 attr; /* the PCI address's attribute cell */
+	u64 bus;  /* the PCI address */
+	u64 cpu;  /* the CPU address */
+	u64 size;
+};
+
+/* A walk over the records of one such property */
+struct dt_pci_ranges
+{
+	const u32 *next;
+	u32 cells_left;
+	u32 pci_addr_cells; /* #address-cells of the PCI node */
+	u32 cpu_addr_cells; /* #address-cells of its parent */
+	u32 size_cells;		/* #size-cells of the PCI node */
+	u32 record_cells;	/* the three added up */
+};
+
+static s32 dt_pci_ranges_open(struct pci_controller *ctlr, const char *propname, struct dt_pci_ranges *it)
 {
 	struct ExecBase *SysBase = ctlr->sysBase;
 	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
@@ -509,166 +587,187 @@ static s32 pci_get_devtree_dma_regions(struct pci_controller *ctlr, struct pci_r
 		Kprintf("[pcie] %s: devicetree.resource unavailable (not running on Emu68)\n", __func__);
 		return -ENODEV;
 	}
-	u32 cells_per_record, i = 0;
 
 	APTR key = DT_OpenKey(ctlr->dt_node_name);
-	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "dma-ranges");
-	if (!prop)
+	if (key == NULL)
 	{
-		Kprintf("[pcie] %s: Device '%s': Cannot decode dma-ranges\n", __func__, ctlr->dt_node_name);
+		Kprintf("[pcie] %s: Failed to open key %s\n", __func__, ctlr->dt_node_name);
+		return -ENOENT;
+	}
+
+	APTR prop = DT_FindProperty(key, (CONST_STRPTR)propname);
+	if (prop == NULL)
+	{
+		Kprintf("[pcie] %s: Device '%s': no %s property\n", __func__, ctlr->dt_node_name, propname);
 		DT_CloseKey(key);
 		return -EINVAL;
 	}
 
-	const u32 *dma_ranges = (const u32 *)DT_GetPropValue(prop);
-	u32 len = DT_GetPropLen(prop);
+	it->next = DT_GetPropValue(prop); /* property values outlive the key */
+	it->cells_left = DT_GetPropLen(prop) / sizeof(u32);
+	it->pci_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#address-cells", 0);
+	it->cpu_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, DT_GetParent(key), "#address-cells", 2);
+	it->size_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#size-cells", 1);
+	it->record_cells = it->pci_addr_cells + it->cpu_addr_cells + it->size_cells;
+	DT_CloseKey(key);
 
-	u32 pci_addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
-	u32 addr_cells = DT_GetPropertyValueULONG(SysBase, DT_GetParent(key), "#address-cells", 2, FALSE);
-	u32 size_cells = DT_GetPropertyValueULONG(SysBase, key, "#size-cells", 1, FALSE);
-
-	/* PCI addresses are always 3-cells */
-	len /= sizeof(u32);
-	cells_per_record = pci_addr_cells + addr_cells + size_cells;
-	KprintfT("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
-
-	while (len >= cells_per_record)
+	/* A PCI node states its address length; the generic default would be wrong */
+	if (it->pci_addr_cells <= DT_PCI_ATTR_CELLS)
 	{
-		if (i == index)
-		{
-			memp->bus_start = (pci_addr_t)DT_GetNumber(dma_ranges + 1, 2);
-			memp->phys_start = DT_GetNumber(dma_ranges + pci_addr_cells, addr_cells);
-			memp->size = (pci_size_t)DT_GetNumber(dma_ranges + pci_addr_cells + addr_cells, size_cells);
-			KprintfT("[pcie] %s: dma-range %ld, bus_start=0x%lx%08lx, phys_start=0x%lx%08lx, size=0x%lx%08lx\n",
-					 __func__, i, (ULONG)((u64)(memp->bus_start) >> 32), (ULONG)(memp->bus_start & 0xffffffff), (ULONG)(memp->phys_start >> 32), (ULONG)(memp->phys_start & 0xffffffff), (ULONG)((u64)(memp->size) >> 32), (ULONG)(memp->size & 0xffffffff));
-			return 0;
-		}
-		dma_ranges += cells_per_record;
-		len -= cells_per_record;
-		i++;
+		Kprintf("[pcie] %s: Device '%s': #address-cells = %ld leaves no room for a PCI address\n",
+				__func__, ctlr->dt_node_name, it->pci_addr_cells);
+		return -EINVAL;
 	}
 
-	return -EINVAL;
+	KprintfT("[pcie] %s: %s: %ld cells, %ld per record (%ld + %ld + %ld)\n", __func__, propname, it->cells_left,
+			 it->record_cells, it->pci_addr_cells, it->cpu_addr_cells, it->size_cells);
+	return 0;
 }
 
-static s32 pci_get_devtree_regions(struct pci_controller *hose)
+static BOOL dt_pci_ranges_next(struct dt_pci_ranges *it, struct dt_pci_range *r)
 {
-	struct ExecBase *SysBase = hose->sysBase;
-	APTR DeviceTreeBase = OpenResource((CONST_STRPTR) "devicetree.resource");
-	if (DeviceTreeBase == NULL)
-	{
-		Kprintf("[pcie] %s: devicetree.resource unavailable (not running on Emu68)\n", __func__);
-		return -ENODEV;
-	}
+	if (it->cells_left < it->record_cells)
+		return FALSE;
 
-	APTR key = DT_OpenKey(hose->dt_node_name);
-	APTR prop = DT_FindProperty(key, (CONST_STRPTR) "ranges");
-	if (!prop)
+	const u32 *rec = it->next;
+	r->attr = rec[0];
+	r->bus = DT_GetNumber(rec + DT_PCI_ATTR_CELLS, it->pci_addr_cells - DT_PCI_ATTR_CELLS);
+	r->cpu = DT_GetNumber(rec + it->pci_addr_cells, it->cpu_addr_cells);
+	r->size = DT_GetNumber(rec + it->pci_addr_cells + it->cpu_addr_cells, it->size_cells);
+	KprintfT("[pcie] %s: attr=0x%08lx bus=0x%lx%08lx cpu=0x%lx%08lx size=0x%lx%08lx\n", __func__, r->attr,
+			 (ULONG)(r->bus >> 32), (ULONG)r->bus, (ULONG)(r->cpu >> 32), (ULONG)r->cpu,
+			 (ULONG)(r->size >> 32), (ULONG)r->size);
+
+	it->next += it->record_cells;
+	it->cells_left -= it->record_cells;
+	return TRUE;
+}
+
+/*
+ * brcm_pcie_dma_window - the inbound (DMA) window this stack programs.
+ *
+ * dma-ranges says two things: which CPU memory a device may reach (phys,
+ * size), and at which PCI address the firmware would have it appear (bus).
+ * Only the first is taken from it.
+ *
+ * Where the window sits in PCI space is the host's choice - RC_BAR2 takes a
+ * base address, and the memory behind it starts at CPU address 0 either way.
+ * CM4 firmware chooses a base above 4 GiB (0x4_0000_0000), which would make
+ * every DMA address a 64-bit "CPU address + 16 GiB".  This stack is 32-bit and
+ * promises its callers the opposite, that a Fast RAM address is its own bus
+ * address (PRM_PCIToHostOffset is 0); drivers hand a device the CPU address
+ * unchanged.  So the window is placed at base 0 instead: same memory, bus
+ * address == CPU address.  That is a different placement, not the firmware's
+ * address with its upper half cut off.
+ *
+ * The window also stops at 2 GiB.  Emu68 gives the 68k side no RAM beyond
+ * that, and it keeps the window below the outbound window and the MSI target,
+ * which share the 32-bit PCI space with it.
+ */
+#define PCIE_DMA_WIN_BASE 0ULL			/* PCI address of CPU address 0 */
+#define PCIE_DMA_WIN_END 0x80000000ULL	/* CPU address the window stops at */
+
+static s32 brcm_pcie_dma_window(struct pci_controller *ctlr, struct pci_region *win)
+{
+	struct dt_pci_ranges it;
+	s32 ret = dt_pci_ranges_open(ctlr, "dma-ranges", &it);
+	if (ret)
+		return ret;
+
+	struct dt_pci_range dt; /* the first record only: bcm2711 has one inbound window */
+	if (!dt_pci_ranges_next(&it, &dt) || dt.size == 0 || dt.cpu >= PCIE_DMA_WIN_END)
 	{
-		Kprintf("[pcie] %s: Cannot find 'ranges' property in device tree\n", __func__);
-		DT_CloseKey(key);
+		Kprintf("[pcie] %s: dma-ranges is empty or beyond the 32-bit DMA window\n", __func__);
 		return -EINVAL;
 	}
 
-	u32 *ranges = (u32 *)DT_GetPropValue(prop);
-	u32 len = DT_GetPropLen(prop);
+	u64 size = dt.size;
+	if (size > PCIE_DMA_WIN_END - dt.cpu)
+		size = PCIE_DMA_WIN_END - dt.cpu;
 
-	u32 pci_addr_cells = DT_GetPropertyValueULONG(SysBase, key, "#address-cells", 2, FALSE);
-	u32 addr_cells = DT_GetPropertyValueULONG(SysBase, DT_GetParent(key), "#address-cells", 2, FALSE);
-	u32 size_cells = DT_GetPropertyValueULONG(SysBase, key, "#size-cells", 1, FALSE);
+	/* All three fit in 32 bits: cpu and cpu + size are at most 2 GiB */
+	win->phys_start = dt.cpu;
+	win->bus_start = (pci_addr_t)(PCIE_DMA_WIN_BASE + dt.cpu);
+	win->size = (pci_size_t)size;
+	KprintfT("[pcie] %s: window: PCI 0x%08lx = CPU 0x%08lx, size 0x%08lx (the device tree has it at PCI 0x%lx%08lx)\n",
+			 __func__, (ULONG)win->bus_start, (ULONG)win->phys_start, (ULONG)win->size,
+			 (ULONG)(dt.bus >> 32), (ULONG)dt.bus);
+	return 0;
+}
 
-	/* PCI addresses are always 3-cells */
-	len /= sizeof(u32);
-	const u32 cells_per_record = pci_addr_cells + addr_cells + size_cells;
-	hose->region_count = 0;
-	KprintfT("[pcie] %s: len=%ld, cells_per_record=%ld\n", __func__, len, cells_per_record);
+/* The widest values the library's address types hold (pci_types.h) */
+#define PCI_ADDR_MAX ((u64) ~(pci_addr_t)0)
+#define PHYS_ADDR_MAX ((u64) ~(phys_addr_t)0)
 
-	/* Dynamically allocate the regions array */
-	u32 max_regions = len / cells_per_record + CONFIG_NR_DRAM_BANKS;
+static s32 pci_get_devtree_regions(struct pci_controller *hose, const struct pci_region *dma_win)
+{
+	struct ExecBase *SysBase = hose->sysBase;
+	struct dt_pci_ranges it;
+	s32 ret = dt_pci_ranges_open(hose, "ranges", &it);
+	if (ret)
+		return ret;
+
+	/* Room for every record plus the Fast RAM regions added below */
+	u32 max_regions = it.cells_left / it.record_cells + CONFIG_NR_DRAM_BANKS;
 	hose->regions = (struct pci_region *)AllocVec(max_regions * sizeof(struct pci_region), MEMF_CLEAR);
 	if (!hose->regions)
 		return -ENOMEM;
+	hose->region_count = 0;
 
-	for (u32 i = 0; i < max_regions; i++, len -= cells_per_record)
+	struct dt_pci_range r;
+	while (dt_pci_ranges_next(&it, &r))
 	{
-		u64 pci_addr, addr, size;
-		u32 space_code;
-		u32 flags;
 		u32 type;
-		u32 pos;
-
-		if (len < cells_per_record)
-			break;
-		flags = ranges[0];
-		space_code = (flags >> 24) & 3;
-		pci_addr = DT_GetNumber(ranges + 1, 2);
-		ranges += pci_addr_cells;
-		addr = DT_GetNumber(ranges, addr_cells);
-		ranges += addr_cells;
-		size = DT_GetNumber(ranges, size_cells);
-		ranges += size_cells;
-		KprintfT("[pcie] %s: region %ld, pci_addr=0x%lx%08lx, addr=0x%lx%08lx, size=0x%lx%08lx, space_code=%ld\n",
-				 __func__, hose->region_count, (ULONG)(pci_addr >> 32), (ULONG)(pci_addr & 0xffffffff), (ULONG)(addr >> 32), (ULONG)(addr & 0xffffffff), (ULONG)(size >> 32), (ULONG)(size & 0xffffffff), space_code);
-		if (space_code & 2)
+		switch (r.attr & DT_PCI_ATTR_SPACE)
 		{
-			type = flags & (1U << 30) ? PCI_REGION_PREFETCH : PCI_REGION_MEM;
-		}
-		else if (space_code & 1)
-		{
+		case DT_PCI_SPACE_IO:
 			type = PCI_REGION_IO;
-		}
-		else
-		{
+			break;
+		case DT_PCI_SPACE_MEM32:
+		case DT_PCI_SPACE_MEM64:
+			type = r.attr & DT_PCI_ATTR_PREFETCH ? PCI_REGION_PREFETCH : PCI_REGION_MEM;
+			break;
+		default: /* configuration space */
 			continue;
 		}
 
+		/* The library's address types are narrower than the device tree's */
 #ifndef CONFIG_SYS_PCI_64BIT
-		if (type == PCI_REGION_MEM && u64_hi32(pci_addr))
+		if (u64_hi32(r.bus) || u64_hi32(r.size))
 		{
-			Kprintf("[pcie] %s: - pci_addr beyond the 32-bit boundary, ignoring\n", __func__);
+			Kprintf("[pcie] %s: - PCI address or size beyond 32 bits, ignoring\n", __func__);
 			continue;
 		}
 #endif
-
 #ifndef CONFIG_PHYS_64BIT
-		if (u64_hi32(addr))
+		if (u64_hi32(r.cpu) || u64_hi32(r.size))
 		{
-			Kprintf("[pcie] %s: - addr beyond the 32-bit boundary, ignoring\n", __func__);
+			Kprintf("[pcie] %s: - CPU address or size beyond 32 bits, ignoring\n", __func__);
 			continue;
 		}
 #endif
-
-		if (~((pci_addr_t)0) - pci_addr < size)
+		/* and the last byte of the range must still be inside them */
+		if (r.size == 0 || r.size - 1 > PCI_ADDR_MAX - r.bus || r.size - 1 > PHYS_ADDR_MAX - r.cpu)
 		{
-			Kprintf("[pcie] %s: - PCI range exceeds max address, ignoring\n", __func__);
+			Kprintf("[pcie] %s: - range runs past the end of the address space, ignoring\n", __func__);
 			continue;
 		}
 
-		if (~((phys_addr_t)0) - addr < size)
-		{
-			Kprintf("[pcie] %s: - phys range exceeds max address, ignoring\n", __func__);
-			continue;
-		}
-
-		pos = hose->region_count++;
-		KprintfT("[pcie] %s: - type=%ld, pos=%ld\n", __func__, type, pos);
-		pci_set_region(hose->regions + pos, (pci_addr_t)pci_addr, (phys_addr_t)addr, (pci_size_t)size, type);
+		u32 pos = hose->region_count++;
+		KprintfT("[pcie] %s: - region %ld: type=%ld\n", __func__, pos, type);
+		pci_set_region(hose->regions + pos, (pci_addr_t)r.bus, (phys_addr_t)r.cpu, (pci_size_t)r.size, type);
 	}
 
 	/* Add a region for our local memory — but only the Emu68 (Pi-DRAM) RAM that the
 	 * PCIe inbound window (dma-ranges) actually decodes.  Registering Zorro/accelerator
 	 * Fast RAM here would let pci_phys_to_bus translate addresses the engine cannot
-	 * reach.  If dma-ranges is unavailable, fall back to registering all Fast RAM. */
+	 * reach. */
 	KprintfT("[pcie] %s: Adding system memory regions\n", __func__);
-	struct pci_region dma_win;
-	BOOL have_dma_win = (pci_get_devtree_dma_regions(hose, &dma_win, 0) == 0);
 	/* The inbound window translates PCI bus <-> CPU phys by this offset (the value
-	 * programmed into RC_BAR2, below).  The SYS_MEMORY region must encode the same
-	 * offset so pci_phys_to_bus() yields a bus address the window maps back to the
-	 * buffer; normally offset is 0. */
-	pci_addr_t dma_offset = have_dma_win
-								? (pci_addr_t)(dma_win.bus_start - dma_win.phys_start)
-								: 0;
+	 * the caller programs into RC_BAR2).  The SYS_MEMORY region must encode the
+	 * same offset so pci_phys_to_bus() yields a bus address the window maps back
+	 * to the buffer.*/
+	pci_addr_t dma_offset = (pci_addr_t)(dma_win->bus_start - dma_win->phys_start);
 
 	Forbid();
 	struct MemHeader *mh = (struct MemHeader *)SysBase->MemList.lh_Head;
@@ -685,9 +784,8 @@ static s32 pci_get_devtree_regions(struct pci_controller *hose)
 			continue;
 		u32 size = end - start;
 
-		if (have_dma_win &&
-			((phys_addr_t)start < dma_win.phys_start ||
-			 (phys_addr_t)end > dma_win.phys_start + dma_win.size))
+		if ((phys_addr_t)start < dma_win->phys_start ||
+			(phys_addr_t)end > dma_win->phys_start + dma_win->size)
 		{
 			KprintfT("[pcie] %s: - skipping non-DMA Fast RAM 0x%lx..0x%lx\n", __func__, start, end);
 			continue;
@@ -745,19 +843,18 @@ s32 brcm_pcie_probe(struct pci_controller *ctlr, u32 bus_number_base)
 					  MISC_CTRL_PCIE_RCB_MPS_MODE_MASK |
 					  MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 
-	s32 ret = pci_get_devtree_regions(ctlr);
-	if (ret)
-	{
-		Kprintf("[pcie] %s: failed to get ranges\n", __func__);
-		return ret;
-	}
-
 	struct pci_region region;
-	/* This takes only first region */
-	ret = pci_get_devtree_dma_regions(ctlr, &region, 0);
+	s32 ret = brcm_pcie_dma_window(ctlr, &region);
 	if (ret)
 	{
 		Kprintf("[pcie] %s: failed to get dma-ranges\n", __func__);
+		return ret;
+	}
+
+	ret = pci_get_devtree_regions(ctlr, &region);
+	if (ret)
+	{
+		Kprintf("[pcie] %s: failed to get ranges\n", __func__);
 		return ret;
 	}
 

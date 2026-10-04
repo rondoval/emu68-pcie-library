@@ -1,7 +1,6 @@
 # Release notes — bcmpcie.library 2.5
 
-Changes since v2.4. Needs emu68-common 2.0.0.
-
+Changes since v2.4.
 ---
 
 ## Breaking changes
@@ -12,99 +11,49 @@ None.
 
 ## Improvements
 
-### `MaskIntVector` masks MSI and MSI-X at the root complex
-
-For MSI and MSI-X, `MaskIntVector` / `UnmaskIntVector` now gate the vector in
-the Pi's PCIe controller (its MSI demux) instead of at the device. That is a
-register write inside the Pi rather than a transaction over the PCIe link, so
-it is cheap enough to call on every interrupt: mask in the interrupt server,
-unmask once the task has drained, and a message that arrives in between fires
-on unmask. Both calls now always return `TRUE` for MSI and MSI-X, including
-MSI devices without per-vector mask bits, which used to return `FALSE`. The
-device-level mask is now only opened by `AddIntVectorServer` and closed by
-`RemIntVectorServer`.
-
-### INTx lines are not promised to be exclusive
-
-An INTx line can carry more than one function — the pin swizzle maps the whole
-device tree onto four lines. `gic400.library` takes one interrupt server per
-interrupt, so the second device on a line gets `PCIE_ERR_BUSY` today; that is
-gic400's limitation, not this library's, and it is expected to go. When gic400
-gains server chaining, the call starts succeeding and every server on the line
-is called for every interrupt on it — with no change to this library.
-
-Write INTx interrupt servers for that now. Test a register of your own device
-first and return "not handled" — with the Z flag set, per
-`exec.library/AddIntServer` — unless it raised the interrupt. Config space is
-not reachable from an interrupt server, so the test has to be a memory-mapped
-register. `MaskIntVector` needs no change of habit: on INTx it gates your device
-alone, which is what makes mask-in-the-server / unmask-after-the-drain safe on a
-shared line. MSI and MSI-X vectors are device-private and are never shared.
-The developer guide (§9) and `interrupt-chaining.md` in the gic400 component
-have the details.
-
-### Interrupt vectors
-
-- `FreeIntVectors` first detaches any interrupt server that is still attached.
-  Before, freeing an INTx allocation with its server attached left the server
-  registered with gic400, and that line could not be used again.
-- A vector takes one interrupt server: `AddIntVectorServer` on a vector that
-  already has one returns `PCIE_ERR_BUSY` (it used to replace the server
-  silently), and `RemIntVectorServer` ignores a server that is not the
-  vector's.
-- A device's MSI-X table is located and checked when the device is probed. A
-  device whose table cannot be reached is treated as having no MSI-X and gets
-  MSI or INTx.
-- The obsolete `pci_add_intserver` works on a device that has MSI but no INTx
-  pin (after `EnableMSI`). It used to refuse.
-
-### MSI dispatch
-
-- The root complex delivers MSI and MSI-X only for vectors that have a server
-  attached. A message for any other vector is held and discarded when that
-  vector next gets a server; before, it raised an interrupt that nobody
-  handled.
-
-- The MSI dispatcher hands each interrupt server the Exec base it received
-  instead of reading address 4 for every vector, and no longer waits for its
-  controller register accesses to complete.
-- The MSI demux interrupt server reports "not handled" when the controller's
-  MSI status register was empty, instead of always claiming the interrupt. It
-  makes no difference while its interrupt is its own, and is what lets it share
-  one with something else later.
-- Interrupt servers may now use `A5` freely, as Exec allows. Before, a server
-  that changed `A5` could corrupt the dispatcher.
+- **Cheaper interrupts.** MSI and MSI-X interrupts are now masked inside the
+  Pi's PCIe controller instead of at the device. `xhci.device` and
+  `nvme.device` use this to spend less time on every interrupt.
 
 ---
 
 ## Fixes
 
-### INTx
+- **PCIe devices now work on a CM4 with 4 GB of RAM or more.** No device could
+  transfer data there, so an NVMe drive, for example, never came up.
+- **A removed INTx interrupt server could leave its device interrupting.**
+  Masking an INTx interrupt had no effect.
+- **A stray MSI message no longer raises an interrupt nobody handles.**
+  Messages are delivered only for vectors that have a server attached.
+- **A possible crash at boot** if memory ran out while scanning the PCIe bus.
 
-- Masking an INTx interrupt never took effect, so removing an INTx interrupt
-  server left the device free to keep asserting its line. `MaskIntVector` /
-  `UnmaskIntVector` (and the obsolete `CheckSetINTxMask`) now write the PCI
-  command register's INTx-disable bit unconditionally and return `TRUE`. The
-  old "deferred, interrupt pending" `FALSE` result is gone: the write gates the
-  one device, so there is no shared-line pending state to check first. For INTx
-  these calls touch config space, so call them from a task, not from an
-  interrupt server.
-- A device whose INTx pin has no entry in the controller's interrupt map was
-  registered on the wrong GIC interrupt. It now gets no INTx at all
-  (`AllocIntVectors` with only `PCI_IRQ_INTX` returns `PCIE_ERR_NODEV`).
-- `AddIntVectorServer` on an INTx line that already has a server returns
-  `PCIE_ERR_BUSY` instead of `PCIE_ERR_IO`.
+---
 
-### Bus enumeration
+## For developers
 
-- **A PCI-to-PCI bridge behind which the bus could not be allocated was probed
-  through an uninitialised pointer.** `pci_create_bus()` leaves its output
-  pointer untouched when it fails, and its return value was ignored, so an
-  allocation failure while enumerating a bridge sent `pci_probe_bus()` into a
-  stale stack slot. Out-of-memory during enumeration is rare, which is why this
-  was never seen — the failure would have been a crash at boot with no
-  diagnostic. The return value is now checked and enumeration stops with the
-  error.
+- **`MaskIntVector` / `UnmaskIntVector` on MSI and MSI-X** gate the vector at
+  the root complex: a local register write, cheap enough for every interrupt.
+  Mask in the interrupt server, unmask once the task has drained; a message
+  that arrives in between fires on unmask. Both always return `TRUE`.
+- **On INTx** they write the INTx-disable bit of the PCI command register and
+  return `TRUE`; the old "deferred" `FALSE` result is gone.
+- **INTx lines can be shared.** An INTx interrupt server must test a
+  memory-mapped register of its own device and return "not handled" (Z flag
+  set) unless that device raised the interrupt. Until `gic400.library` chains
+  servers, a second server on a line gets `PCIE_ERR_BUSY`. See the developer
+  guide, §9.
+- **One server per vector.** `AddIntVectorServer` on a vector that already has
+  one returns `PCIE_ERR_BUSY` instead of replacing it, and `RemIntVectorServer`
+  ignores a server that is not the vector's. `FreeIntVectors` detaches a server
+  that is still attached.
+- **A device whose INTx pin is not in the interrupt map gets no INTx**
+  (`AllocIntVectors` with only `PCI_IRQ_INTX` returns `PCIE_ERR_NODEV`). It
+  used to be registered on the wrong interrupt.
+- **A device whose MSI-X table cannot be reached** is treated as having no
+  MSI-X and gets MSI or INTx.
+- The obsolete `pci_add_intserver` works on a device that has MSI but no INTx
+  pin (after `EnableMSI`).
+- Interrupt servers may use `A5` freely, as Exec allows.
 
 ---
 
