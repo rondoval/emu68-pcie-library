@@ -1,56 +1,90 @@
-# emu68-pcie-library Agent Notes
+# emu68-pcie-library
+
+## Architecture Notes
+
+**Two public libraries:**
+- `bcmpcie.library` — full BCM2711-specific API (openpci v2 + BCM extensions v3 tag API)
+- `openpci.library` — thin shim over bcmpcie for classic openpci compatibility; new code should use bcmpcie directly
+
+**Source layout:** generic PCIe core lives in `pcie/src/` (glob-compiled into the library); the AmigaOS library glue (entry point, LVO handlers, jump table) lives in `bcmpcie.library/src/`.
+
+**Key module roles:**
+
+| Module | Role |
+|---|---|
+| `pcie/src/pcie_brcmstb.c` | BCM STB controller bring-up, port training (ported from Linux) |
+| `pcie/src/pcie_brcmstb_msi.c` | Interrupt back-end: gic400 registration, BCM2711 MSI demux (slot bind/mask, dispatch ISR) |
+| `pcie/src/pci_auto.c` | BAR sizing and resource auto-configuration |
+| `pcie/src/pci_irq.c` | Interrupt core: choice of type, demux-slot pool, servers, runtime mask (`pci_irq.h` holds the vocabulary and every core prototype) |
+| `pcie/src/pcie_msi.c`, `pcie_msix.c`, `pci_int.c` | One interrupt type each: probe-time discovery and device programming |
+| `pcie/src/pci_probe.c` | Bus enumeration |
+| `pcie/src/vl805_reset.c` | VL805 firmware reload via `mailbox.resource` after PCIe reset |
+| `bcmpcie.library/src/pcie_main.c` | Library entry point, device list, jump table |
+| `bcmpcie.library/src/pcie_irq.c` | Interrupt LVOs: argument checks, `base->semaphore` for alloc/free/add/rem, errno → `PCIE_ERR_*`; `MaskIntVector`/`UnmaskIntVector` take no lock |
+
+**`pci_dev.reserved`** is repurposed as a back-pointer to the internal `pci_device` struct. Do not overwrite it.
+
+**VL805:** The VIA VL805 USB chip on Pi 4 needs firmware loaded via VideoCore mailbox (`mailbox.resource`) after PCIe link training completes (see `pcie/src/vl805_reset.c`).
 
 ## Role
 
-- This repo ships `bcmpcie.library`, a real AmigaOS dynamic library opened by name (`OpenLibrary("bcmpcie.library", …)`) and shared by multiple consumers. It is built ROM-able (no writable `.data`/`.bss`, enforced by `emu68_rom_check`).
-- Consumers (`emu68-xhci-driver`, `lspci`) link only its headers (`Emu68PCIe::pcie_headers`), not the implementation, and open it at runtime by name.
+- `bcmpcie.library` is a real AmigaOS dynamic library opened by name (`OpenLibrary("bcmpcie.library", 1)`), shared by multiple consumers. It is built ROM-able (no writable `.data`/`.bss`, enforced by the `ASSERT` in the shared module layout script, applied by `emu68_module_layout`).
+- Consumers (e.g. `emu68-xhci-driver`, `lspci`) open it by name and link only against the SFD-generated headers (`Emu68PCIe::pcie_headers`), not a static archive.
+- `openpci.library` is a thin shim that opens `bcmpcie.library` on first use and forwards the classic openpci API (no BCM2711 extensions).
 - `lspci` is the standalone bring-up and debugging tool for enumeration and BAR assignment.
 
-## Build
+## Build Commands
 
-- Required installed dependencies: `emu68-common`, `emu68-gic400-library`, and `mailbox` (mailbox.resource, used for VL805 firmware reload).
-- Build through the superbuild's container wrapper — never host `cmake` (build trees
-  are configured at `/work` inside the toolchain container):
-  - from the `emu68-driver-stack` superbuild root: `./scripts/docker-build.sh --target emu68-pcie-library`
-- Debug backend: `EMU68_CONFIGURE_ARGS="-DEMU68_DEBUG_BACKEND=serial" ./scripts/docker-build.sh` (default `pistorm` | `serial` | `off`); selected stack-wide via `emu68-common`, `serial` links `debug.lib` and is not ROM-able.
+Required installed dependencies: `emu68-common`, `emu68-gic400-library`, and `mailbox` (the library links `mailbox.resource` for VL805 firmware reload). The top-level project builds three targets: `pcie_library` (output `bcmpcie.library`), `openpci_library` (output `openpci.library`), and `lspci`.
 
-## Code Handling
+Build through the superbuild's container wrapper — never host `cmake` (build trees
+are configured at `/work` inside the toolchain container), from the
+`emu68-driver-stack` superbuild root:
 
-- Be conservative with public PCIe API changes — the SFD jump table is the ABI; `emu68-xhci-driver` and `lspci` open the library by name and link only its headers.
-- It is a shared, opened-by-name library: when introducing new state, ownership, or APIs, account for multiple concurrent consumers and guard shared runtime state under `base->semaphore`.
-- Preserve the current BCM2711 + VL805 assumptions unless the task is explicitly widening hardware support.
-- Changes to enumeration, BAR assignment, or MSI setup should be validated with both library consumers and `lspci` where possible.
-- Licensing in this repo was audited against its U-Boot/Linux provenance. Preserve existing file-level SPDX headers; in particular, do not overwrite the special non-GPL provenance on `pcie/include/bcm2711.h`.
+```sh
+./scripts/docker-build.sh --target emu68-pcie-library
+```
+
+Debug backend: `EMU68_CONFIGURE_ARGS="-DEMU68_DEBUG_BACKEND=serial" ./scripts/docker-build.sh` (default `pistorm` | `serial` | `off`). Selected stack-wide via `emu68-common`; `serial` links `debug.lib` and is not ROM-able.
+
+SFD headers are generated at build time by `cmake/GenerateSfdHeaders.cmake` (target `pcie_library_sfd_headers`) from `sfd/bcmpcie.sfd` into `build/bcmpcie.library/generated/include`.
 
 ## SFD and Jump Table Discipline
 
 - The SFD file (`sfd/bcmpcie.sfd`) and the C jump table in `bcmpcie.library/src/pcie_main.c` must stay in sync at all times.
-- LVO offset comments in both files are documentation only, but must reflect the actual position of each entry. Each slot is 6 bytes, so LVOs run in steps of 6 (e.g. -30, -36, -42, …).
+- LVO offset comments are documentation only but must reflect the actual position of each entry. Each slot is 6 bytes; LVOs run in steps of 6 (e.g. -30, -36, -42, …).
 - When adding entries, append at the end of the table and assign the next available LVO. Update the section comment if starting a new group.
-- **Default removal policy: do NOT remove an entry and renumber.** Instead, replace it with a null stub in the jump table (`(APTR)LibStub_<Name>` or `(APTR)NULL`) and mark it reserved/deprecated in the SFD (e.g. `* RESERVED (was FooBar)`). This preserves all LVO positions for existing callers. Only renumber when explicitly asked to compact the table.
-- If renumbering is explicitly requested: removing N entries shifts every following LVO by +6N (the negative magnitude decreases by 6N). Update every subsequent LVO comment in both the SFD and the jump table, and update any section header comments (e.g. `* -288: Extended config space access`) to match the new first entry in that group.
+- **Default removal policy: do NOT remove an entry and renumber.** Instead, replace it with a null stub (`(APTR)LibStub_<Name>` or `(APTR)NULL`) and mark it reserved/deprecated in the SFD (e.g. `* RESERVED (was FooBar)`). Only renumber when explicitly asked to compact the table.
+- If renumbering is explicitly requested: removing N entries shifts every following LVO by +6N. Update every subsequent LVO comment in both files, plus any section header comments (e.g. `* -288: Extended config space access`) so they match the new first entry in that group.
 - Always verify SFD section header LVOs match the first function in that group after any change.
 
 ## Internal Device Model
 
-- `struct pci_device` (internal, not public) now carries a BAR cache: `header_type`, `bars_num`, and `bars[6]` (`struct pci_bar_info`). These are populated during `pciauto_setup_device` and must not be reprobed at open time.
-- `pci_bar_info.bar_response` is `pci_size_t` (64-bit when `CONFIG_SYS_PCI_64BIT` is enabled). It stores the raw PCI BAR sizing response including all flag bits. The old `size_mask` field has been removed.
-- `pdev->base_address[i]` (openpci `struct pci_dev`) is already the 68K virtual MMIO pointer for BAR `i`, set directly from `idev->bars[i].virt_addr` by `pcie_make_pdev`. There is no need to call `pci_map_bar` or `pci_bus_to_virt` again at open time.
+- `struct pci_device` (internal, not public) carries a BAR cache: `header_type`, `bars_num`, and `bars[6]` (`struct pci_bar_info`). Populated during `pciauto_setup_device`; must not be reprobed at open time.
+- `pci_bar_info.bar_response` is `pci_size_t` (64-bit when `CONFIG_SYS_PCI_64BIT` is enabled). Stores the raw PCI BAR sizing response including all flag bits. The old `size_mask` field has been removed.
+- `pdev->base_address[i]` (openpci `struct pci_dev`) is already the 68K virtual MMIO pointer for BAR `i`, set from `idev->bars[i].virt_addr` by `pcie_make_pdev`. Do not call `pci_map_bar` or `pci_bus_to_virt` again at open time.
 - `pdev->base_size[i]` stores `(ULONG)idev->bars[i].bar_response` — the raw sizing response with flags in the low bits (openpci convention: `actual_size = ~(base_size[i] & mask) + 1`). `PRM_MemoryFlags` reads `base_size[i] & 0xF`; `PRM_MemorySize` masks type bits before computing size.
 - `bars_num` and `header_type` are set once in `pci_create_device` and must not be overwritten by `pci_bind_bus_devices` on the existing-device path.
-- BAR slot index must be computed as `(bar_reg - PCI_BASE_ADDRESS_0) / 4`; do not use a `bar_nr` counter that increments only once per 64-bit BAR pair, as it diverges from the physical slot index.
-- `PRM_BoardOwner` in `LibSetBoardAttrsA`: sets `dev->owner` directly under semaphore. Non-NULL value only succeeds if `dev->owner == NULL` (returns FALSE otherwise). NULL always clears the owner unconditionally.
+- BAR slot index must be computed as `(bar_reg - PCI_BASE_ADDRESS_0) / 4`; do not use a `bar_nr` counter that increments only once per 64-bit BAR pair.
+- `PRM_BoardOwner` in `LibSetBoardAttrsA`: sets `dev->owner` directly under semaphore. A non-NULL value only succeeds if `dev->owner == NULL` (returns FALSE otherwise); NULL always clears the owner unconditionally.
 
 ## Address Translation
 
 - `LibLogicToPhysic` and `LibPhysicToLogic` handle two address spaces:
-  - **BAR windows**: `virt_addr` (emu68 logical) ↔ `bus_addr` (PCI bus address) are both in the BAR cache; offset arithmetic is applied directly without going through the MMU or DMA region table.
+  - **BAR windows**: `virt_addr` ↔ `bus_addr` are both in the BAR cache; offset arithmetic applied directly.
   - **DMA RAM (Fast RAM)**: logical == ARM physical (1:1), so `pci_phys_to_bus` / `pci_bus_to_phys` are used as fallback.
 - Both functions return NULL when no `pci_dev` is supplied.
 - `LibObtainPCIRegion` only searches MEM BARs; IO BARs (`bar->type == PCI_REGION_IO`) are skipped per spec: "This function can only gain access to memory mapped regions, not to IO mapped regions."
 
+## Code Handling
+
+- Be conservative with public PCIe API changes; `emu68-xhci-driver` opens `bcmpcie.library` by name and depends on its LVO/SFD ABI. Adding/removing/reordering jump-table entries breaks resident consumers.
+- The library is opened concurrently by multiple consumers — keep shared/global state safe under `base->semaphore`, and avoid baking in single-owner assumptions.
+- Preserve the current BCM2711 + VL805 assumptions unless the task is explicitly widening hardware support.
+- Licensing was audited against U-Boot/Linux provenance. Preserve existing file-level SPDX headers; do not overwrite the special non-GPL provenance on `pcie/include/bcm2711.h`.
+
 ## Validation
 
 - Small changes can be validated in this repo alone.
-- Interface or behavior changes that affect xHCI should also be validated by rebuilding `emu68-xhci-driver`, preferably through `emu68-driver-stack`.
-
+- Changes to enumeration, BAR assignment, or MSI setup should be validated with both library consumers and `lspci` where possible.
+- Interface or behavior changes affecting xHCI should also be validated by rebuilding `emu68-xhci-driver`, preferably through `emu68-driver-stack`.

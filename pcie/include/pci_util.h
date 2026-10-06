@@ -20,10 +20,16 @@ pci_dev_t pci_get_bdf(const struct pci_device *dev);
 /**
  * pci_get_controller() - Get the controller that owns a bus
  *
+ * Every bus carries it (a child bus copies its parent's at bind), so this is
+ * never NULL.
+ *
  * @bus:   Bus to query
  * Return: Pointer to the pci_controller this bus is registered under
  */
-struct pci_controller *pci_get_controller(const struct pci_bus *bus);
+static inline struct pci_controller *pci_get_controller(const struct pci_bus *bus)
+{
+	return bus->controller;
+}
 
 /**
  * pci_get_bus() - Find a bus by bus number within a controller

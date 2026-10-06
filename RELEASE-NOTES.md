@@ -1,3 +1,62 @@
+# Release notes — bcmpcie.library 2.5
+
+Changes since v2.4.
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## Improvements
+
+- **Cheaper interrupts.** MSI and MSI-X interrupts are now masked inside the
+  Pi's PCIe controller instead of at the device. `xhci.device` and
+  `nvme.device` use this to spend less time on every interrupt.
+
+---
+
+## Fixes
+
+- **PCIe devices now work on a CM4 with 4 GB of RAM or more.** No device could
+  transfer data there, so an NVMe drive, for example, never came up.
+- **A removed INTx interrupt server could leave its device interrupting.**
+  Masking an INTx interrupt had no effect.
+- **A stray MSI message no longer raises an interrupt nobody handles.**
+  Messages are delivered only for vectors that have a server attached.
+- **A possible crash at boot** if memory ran out while scanning the PCIe bus.
+
+---
+
+## For developers
+
+- **`MaskIntVector` / `UnmaskIntVector` on MSI and MSI-X** gate the vector at
+  the root complex: a local register write, cheap enough for every interrupt.
+  Mask in the interrupt server, unmask once the task has drained; a message
+  that arrives in between fires on unmask. Both always return `TRUE`.
+- **On INTx** they write the INTx-disable bit of the PCI command register and
+  return `TRUE`; the old "deferred" `FALSE` result is gone.
+- **INTx lines can be shared.** An INTx interrupt server must test a
+  memory-mapped register of its own device and return "not handled" (Z flag
+  set) unless that device raised the interrupt. Until `gic400.library` chains
+  servers, a second server on a line gets `PCIE_ERR_BUSY`. See the developer
+  guide, §9.
+- **One server per vector.** `AddIntVectorServer` on a vector that already has
+  one returns `PCIE_ERR_BUSY` instead of replacing it, and `RemIntVectorServer`
+  ignores a server that is not the vector's. `FreeIntVectors` detaches a server
+  that is still attached.
+- **A device whose INTx pin is not in the interrupt map gets no INTx**
+  (`AllocIntVectors` with only `PCI_IRQ_INTX` returns `PCIE_ERR_NODEV`). It
+  used to be registered on the wrong interrupt.
+- **A device whose MSI-X table cannot be reached** is treated as having no
+  MSI-X and gets MSI or INTx.
+- The obsolete `pci_add_intserver` works on a device that has MSI but no INTx
+  pin (after `EnableMSI`).
+- Interrupt servers may use `A5` freely, as Exec allows.
+
+---
+
 # Release notes — bcmpcie.library 2.4
 
 Changes since v2.3.

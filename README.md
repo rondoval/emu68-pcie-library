@@ -165,9 +165,9 @@ openpci.library/    Compatibility shim: forwards openpci API to bcmpcie.library
 pcie/               Shared internal PCIe engine (not a public API)
   src/
     pcie_brcmstb.c          Broadcom STB PCIe controller driver (ported from Linux)
-    pcie_brcmstb_msi.c      BCM2711 MSI demux controller (vector pool + dispatch ISR)
+    pcie_brcmstb_msi.c      Interrupt back-end: gic400, BCM2711 MSI demux (slots + dispatch ISR)
     vl805_reset.c           BCM2711 mailbox helper for reloading VL805 firmware
-    pci_irq.c               Typed/multi-vector interrupt-allocation core (MSI/MSI-X)
+    pci_irq.c               Interrupt core: type choice, slot pool, servers, runtime mask
     pcie_msi.c              MSI capability programming (multi-message)
     pcie_msix.c             MSI-X capability + table programming
     pci_probe.c             Bus and device enumeration
@@ -176,7 +176,7 @@ pcie/               Shared internal PCIe engine (not a public API)
     pci_capability.c        PCI capability list traversal
     pci_io.c                Config-space read/write primitives
     pci_lookup.c            Vendor / device ID look-up table
-    pci_int.c               Traditional PCI INTx interrupt line management
+    pci_int.c               INTx: pin routing, command-register enable
     pci_util.c              Miscellaneous utilities
 
 sfd/                bcmpcie.sfd — SFD file defining all library functions and LVOs

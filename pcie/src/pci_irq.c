@@ -2,48 +2,37 @@
 /*
  * Generic, controller-agnostic interrupt-vector management.  See pci_irq.h.
  *
- * Holds the demux-slot pool (a bitmap of opaque tokens) and the type-agnostic
- * dispatch over dev->active.mode.  Per-type reservation and capability
- * programming live in pcie_msi.c / pcie_msix.c; the message encoding and the
- * per-slot ISR table live in the controller back-end (pcie_brcmstb_msi.c).
+ * Holds the demux-slot pool (a bitmap of opaque tokens), the choice of
+ * interrupt type, and the type-agnostic dispatch over dev->active.mode.
+ * Per-type reservation and capability programming live in pcie_msi.c /
+ * pcie_msix.c / pci_int.c; the message encoding and the per-slot server table
+ * live in the controller back-end (pcie_brcmstb_msi.c).
  */
 
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
+#include <bits.h>
 #include <errors.h>
 
 #include <pci.h>
 #include <pci_irq.h>
-#include <pci_int.h>
-#include <pci_msi.h>
-#include <pci_msix.h>
 #include <pci_util.h>
 #include <pcie_brcmstb.h>
 
 /* ---- demux-slot pool (pcie->msi.used bitmap; slots are opaque here) ---- */
 
-u32 pci_irq_slots_free_count(const struct pci_controller *pcie)
+u32 pci_irq_slots_alloc_any(struct pci_controller *pcie, u32 n, s32 *out)
 {
-	u32 n = 0;
-	for (u32 i = 0; i < MSI_MAX_VECTORS; i++)
-		if (!(pcie->msi.used & (1u << i)))
-			n++;
-	return n;
-}
-
-s32 pci_irq_slots_alloc_any(struct pci_controller *pcie, u32 n, s32 *out)
-{
-	if (pci_irq_slots_free_count(pcie) < n)
-		return -1;
-
 	u32 k = 0;
 	for (s32 i = 0; i < MSI_MAX_VECTORS && k < n; i++)
 	{
 		if (!(pcie->msi.used & (1u << i)))
 		{
 			pcie->msi.used |= (1u << i);
-			out[k++] = (s32)i;
+			out[k++] = i;
 		}
 	}
-	return 0;
+	return k;
 }
 
 s32 pci_irq_slots_alloc_aligned(struct pci_controller *pcie, u32 n)
@@ -63,121 +52,172 @@ s32 pci_irq_slots_alloc_aligned(struct pci_controller *pcie, u32 n)
 void pci_irq_slots_free(struct pci_controller *pcie, const s32 *slots, u32 n)
 {
 	for (u32 i = 0; i < n; i++)
-	{
-		s32 s = slots[i];
-		if (s >= 0 && s < MSI_MAX_VECTORS)
-			pcie->msi.used &= ~(1u << (u32)s);
-	}
+		pcie->msi.used &= ~(1u << (u32)slots[i]);
 }
 
-/* ---- type-agnostic dispatch over dev->active.mode ---- */
+/* ---- allocation ---- */
 
-void pci_irq_free(struct pci_device *dev)
+s32 pci_irq_vectors_alloc(struct pci_device *dev, u32 min, u32 max, u32 flags)
 {
-	struct pci_controller *pcie = pci_get_controller(dev->bus);
+	if (dev->active.mode)
+		return -EBUSY;
+	if (min < 1)
+		min = 1;
+	if (max > MSI_MAX_VECTORS)
+		max = MSI_MAX_VECTORS;
+	if (max < min)
+		return -ERANGE;
 
-	if (dev->active.mode == PCI_IRQT_INTX)
-	{
-		/* INTx holds no demux slot or device capability to release. */
-		dev->active.mode = PCI_IRQT_NONE;
-		dev->active.nvec = 0;
-		return;
-	}
-	if (dev->active.mode == PCI_IRQT_MSIX)
-		pci_msix_shutdown(dev);
-	else if (dev->active.mode == PCI_IRQT_MSI)
-		pci_msi_shutdown(dev);
+	/* Best type first; the next one is tried when the one before it is not
+	 * allowed or fails, and the last failure is the one reported. */
+	u32 mode;
+	s32 n = -ENODEV;
+	if ((flags & PCI_IRQ_MSIX) && (n = pci_msix_alloc(dev, min, max)) > 0)
+		mode = PCI_IRQ_MSIX;
+	else if ((flags & PCI_IRQ_MSI) && (n = pci_msi_alloc(dev, min, max)) > 0)
+		mode = PCI_IRQ_MSI;
+	else if ((flags & PCI_IRQ_INTX) && (n = pci_intx_alloc(dev, min, max)) > 0)
+		mode = PCI_IRQ_INTX;
 	else
-		return;
+		return n;
 
-	if (pcie)
-	{
-		for (u32 v = 0; v < dev->active.nvec; v++)
-			brcm_msi_unbind(pcie, dev->active.slots[v]);
-		pci_irq_slots_free(pcie, dev->active.slots, dev->active.nvec);
-	}
-	dev->active.mode = PCI_IRQT_NONE;
-	dev->active.nvec = 0;
+	dev->active.mode = mode;
+	dev->active.nvec = (u16)n;
+	return n;
 }
 
-BOOL pci_irq_mask(struct pci_device *dev, u32 vec)
+/* ---- servers ---- */
+
+/* The server attached to @vec, or NULL. */
+static struct Interrupt *pci_irq_vec_server(const struct pci_device *dev, u32 vec)
 {
-	if (vec >= dev->active.nvec)
-		return FALSE;
-	if (dev->active.mode == PCI_IRQT_INTX)
-		return pci_check_and_set_intx_mask(dev, TRUE);
-	if (dev->active.mode == PCI_IRQT_MSIX)
-	{
-		pci_msix_mask_irq(dev, (int)vec); /* MSI-X per-vector mask is mandatory */
-		return TRUE;
-	}
-	if (dev->active.mode == PCI_IRQT_MSI)
-	{
-		/* MSI per-vector masking is optional; without it there is no mask bit. */
-		if (!dev->msi.maskable)
-			return FALSE;
-		pci_msi_mask_irq(dev, (int)vec);
-		return TRUE;
-	}
-	return FALSE;
+	if (dev->active.mode == PCI_IRQ_INTX)
+		return dev->active.intx_server;
+	return brcm_msi_slot_server(pci_get_controller(dev->bus), dev->active.slots[vec]);
 }
 
-BOOL pci_irq_unmask(struct pci_device *dev, u32 vec)
+/*
+ * Device-level vector gate: the MSI-X table entry or the MSI per-vector mask
+ * bit (a PCIe write).  Opened when a server is added, closed when it is
+ * removed; the runtime mask (pci_irq_vec_mask/unmask) works at the root complex.
+ * MSI per-vector masking is optional: without mask bits the MSI gate does nothing.
+ */
+static void pci_irq_vec_close(struct pci_device *dev, u32 vec)
 {
-	if (vec >= dev->active.nvec)
-		return FALSE;
-	if (dev->active.mode == PCI_IRQT_INTX)
-		return pci_check_and_set_intx_mask(dev, FALSE);
-	if (dev->active.mode == PCI_IRQT_MSIX)
-	{
-		pci_msix_unmask_irq(dev, (int)vec); /* MSI-X per-vector mask is mandatory */
-		return TRUE;
-	}
-	if (dev->active.mode == PCI_IRQT_MSI)
-	{
-		/* MSI per-vector masking is optional; without it there is no mask bit. */
-		if (!dev->msi.maskable)
-			return FALSE;
-		pci_msi_unmask_irq(dev, (int)vec);
-		return TRUE;
-	}
-	return FALSE;
+	if (dev->active.mode == PCI_IRQ_MSIX)
+		pci_msix_entry_mask(dev, vec);
+	else
+		pci_msi_update_mask(dev, 0, BIT(vec));
 }
 
-s32 pci_irq_install(struct pci_device *dev, u32 vec, struct Interrupt *isr)
+static void pci_irq_vec_open(struct pci_device *dev, u32 vec)
+{
+	if (dev->active.mode == PCI_IRQ_MSIX)
+		pci_msix_entry_unmask(dev, vec);
+	else
+		pci_msi_update_mask(dev, BIT(vec), 0);
+}
+
+s32 pci_irq_add_server(struct pci_device *dev, u32 vec, struct Interrupt *isr)
 {
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
 
-	if (!pcie || vec >= dev->active.nvec)
+	if (vec >= dev->active.nvec)
 		return -EINVAL;
+	if (pci_irq_vec_server(dev, vec))
+		return -EBUSY;
 
-	if (dev->active.mode == PCI_IRQT_INTX)
+	if (dev->active.mode == PCI_IRQ_INTX)
 	{
-		s32 r = brcm_intx_bind(pcie, dev, isr); /* register ISR with gic400 */
+		s32 r = brcm_intx_add_server(pcie, dev, isr);
 		if (r < 0)
 			return r;
-		pci_intx(dev, TRUE);	  /* enable INTx assertion at the device */
-		pci_irq_unmask(dev, vec); /* clear any stale INTx mask */
+		dev->active.intx_server = isr;
+		pci_intx(dev, TRUE); /* let the device assert the line */
 		return 0;
 	}
 
-	s32 slot = dev->active.slots[vec];
-	if (slot < 0 || slot >= MSI_MAX_VECTORS)
-		return -EINVAL;
-	brcm_msi_bind(pcie, slot, isr); /* controller owns the demux ISR table */
-	pci_irq_unmask(dev, vec);
+	brcm_msi_slot_bind(pcie, dev->active.slots[vec], isr);
+	pci_irq_vec_open(dev, vec); /* the device gate last: its slot is ready */
 	return 0;
 }
 
-void pci_irq_uninstall(struct pci_device *dev, u32 vec, struct Interrupt *isr)
+void pci_irq_rem_server(struct pci_device *dev, u32 vec, struct Interrupt *isr)
 {
 	struct pci_controller *pcie = pci_get_controller(dev->bus);
 
-	if (!pcie || vec >= dev->active.nvec)
+	if (vec >= dev->active.nvec || pci_irq_vec_server(dev, vec) != isr)
 		return;
-	pci_irq_mask(dev, vec);
-	if (dev->active.mode == PCI_IRQT_INTX)
-		brcm_intx_unbind(pcie, dev, isr);
+
+	if (dev->active.mode == PCI_IRQ_INTX)
+	{
+		pci_intx(dev, FALSE); /* quiet the device before its server goes */
+		brcm_intx_rem_server(pcie, dev, isr);
+		dev->active.intx_server = NULL;
+	}
 	else
-		brcm_msi_unbind(pcie, dev->active.slots[vec]);
+	{
+		pci_irq_vec_close(dev, vec); /* the device gate first */
+		brcm_msi_slot_unbind(pcie, dev->active.slots[vec]);
+	}
+}
+
+/* ---- teardown ---- */
+
+void pci_irq_vectors_free(struct pci_device *dev)
+{
+	/* Detach what is still attached, so there is one teardown path */
+	for (u32 v = 0; v < dev->active.nvec; v++)
+	{
+		struct Interrupt *server = pci_irq_vec_server(dev, v);
+		if (server)
+			pci_irq_rem_server(dev, v, server);
+	}
+
+	if (dev->active.mode == PCI_IRQ_MSIX)
+		pci_msix_shutdown(dev);
+	else if (dev->active.mode == PCI_IRQ_MSI)
+		pci_msi_shutdown(dev);
+
+	if (dev->active.mode != PCI_IRQ_INTX)
+		pci_irq_slots_free(pci_get_controller(dev->bus), dev->active.slots, dev->active.nvec);
+
+	dev->active.mode = 0;
+	dev->active.nvec = 0;
+}
+
+/* ---- runtime mask ---- */
+
+/*
+ * MaskIntVector/UnmaskIntVector.  MSI and MSI-X: the root-complex demux slot,
+ * a local register write rather than a PCIe transaction, ISR-safe; a message
+ * that arrives while masked latches and fires on unmask.  Also covers MSI
+ * functions without per-vector mask bits.
+ * INTx: the command-register INTX_DISABLE bit, unconditionally.  It gates this
+ * device only, so on a line shared with another function it quiets our own
+ * contribution and leaves the rest of the line alone - there is no pending
+ * state to guard.  A config-space access, hence task context only.
+ */
+BOOL pci_irq_vec_mask(struct pci_device *dev, u32 vec)
+{
+	if (vec >= dev->active.nvec)
+		return FALSE;
+
+	if (dev->active.mode == PCI_IRQ_INTX)
+		pci_intx(dev, FALSE);
+	else
+		brcm_msi_slot_mask(pci_get_controller(dev->bus), dev->active.slots[vec]);
+	return TRUE;
+}
+
+BOOL pci_irq_vec_unmask(struct pci_device *dev, u32 vec)
+{
+	if (vec >= dev->active.nvec)
+		return FALSE;
+
+	if (dev->active.mode == PCI_IRQ_INTX)
+		pci_intx(dev, TRUE);
+	else
+		brcm_msi_slot_unmask(pci_get_controller(dev->bus), dev->active.slots[vec]);
+	return TRUE;
 }

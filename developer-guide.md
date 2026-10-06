@@ -57,7 +57,8 @@ the entire bus is configured and every `pci_dev` is ready to use.
 ### Advantages over classic Amiga PCI boards
 
 - **MSI instead of shared IRQ lines.**  BCM2711 MSI delivers per-device vectored interrupts
-  — no sharing, no polling, lower latency.
+  — no sharing, no polling, lower latency.  INTx remains available and, unlike MSI, can be
+  shared between functions (see §9).
 - **PCIe bandwidth.**  The BCM2711 controller negotiates up to PCIe Gen 2 ×1 (~500 MB/s),
   versus the 133 MB/s ceiling of a 32-bit 33 MHz PCI bus.
 - ** DMA in both directions.**  The PCIe engine can read from and write to Fast
@@ -387,7 +388,7 @@ if (n < 1)
 
 ULONG itype = GetIntVectorType(pd);   /* LVO -378: PCI_IRQ_MSIX/_MSI/_INTX */
 
-/* Install a server per vector; this also unmasks that vector. */
+/* Attach a server per vector (one each); this also opens that vector. */
 if (AddIntVectorServer(pd, 0, &isr0) != PCIE_OK) {  /* LVO -354 (vector index, isr) */
     FreeIntVectors(pd);
     return ERROR_INTERRUPT;
@@ -403,52 +404,71 @@ for (ULONG v = 0; v < (ULONG)nvec; v++)
     AddIntVectorServer(pd, v, &unit->qisr[v]);
 ```
 
-Tear down in reverse: remove each server, then free the allocation:
+Tear down in reverse: remove each server, then free the allocation
+(`FreeIntVectors` removes any server that is still attached):
 
 ```c
 RemIntVectorServer(pd, 0, &isr0);     /* LVO -360 */
 FreeIntVectors(pd);                   /* LVO -348 */
 ```
 
-### ISR-safe masking — prefer the device's own registers
+### Quieting the interrupt from the server
 
-For a well-behaved driver the recommended pattern, in the ISR, is to (a) probe one of
-*your device's* status registers to answer "is this interrupt mine?" — returning 0 so the
-next server runs when it isn't, which is what makes a shared INTx line work — and (b) quiet
-the interrupt at *your device's* mask/ack register.  That device-level mask deasserts the
-INTx pin (and gates MSI/MSI-X) on its own, so no PCIe-config masking is required.  This is
-how `nvme.device`/`xhci.device` work.
+The usual pattern: the interrupt server masks the source and signals the driver task; the
+task drains the device and unmasks.  A source that stays masked while the task works
+coalesces a burst into one interrupt.  Where to mask depends on the interrupt type:
+
+- **MSI / MSI-X** — `MaskIntVector()` in the server, `UnmaskIntVector()` in the task.  The
+  vector's MSI demux slot is masked at the root complex (a local register write, no PCIe
+  transaction).  A message that arrives while masked latches and fires on unmask.  This is
+  what `nvme.device` does; prefer it to a device mask register that the device's spec
+  forbids in MSI-X mode (NVMe INTMS/INTMC).
+- **INTx** — mask at *your device's* own mask register, which deasserts the pin
+  (`nvme.device`: INTMS/INTMC).  `MaskIntVector()` on INTx writes
+  `PCI_COMMAND.INTX_DISABLE`, a config-space access: **task context only**, never from the
+  server.
+- A device mask register that gates every interrupt type works everywhere
+  (`xhci.device`: IMAN).
+
+`MaskIntVector()` / `UnmaskIntVector()` do **not** acquire the library semaphore.  Both
+return TRUE, or FALSE for a bad vector index.
 
 ```c
-/* Inside ISR — is it ours?  then mask at the device and signal the task */
-if (!device_irq_is_ours(unit)) return 0;   /* let the next shared-line server run */
-device_irq_mask(unit);                      /* device register: deasserts the line */
+/* Interrupt server (MSI/MSI-X) */
+MaskIntVector(pd, 0);                          /* LVO -366 */
 Signal(unit->task, 1UL << unit->irq_signal);
 return 1;
-/* Inside task — rearm at the device after processing */
-device_irq_unmask(unit);
+
+/* Task, after draining the device */
+UnmaskIntVector(pd, 0);                        /* LVO -372 */
 ```
 
-### [bcmpcie extension] — ISR-safe PCIe-level masking (fallback)
+#### Writing an INTx server for a shared line
 
-`MaskIntVector()` / `UnmaskIntVector()` do **not** acquire the library semaphore and are
-safe to call from interrupt context.  They dispatch on the active type automatically
-(per-vector mask for MSI/MSI-X, `PCI_COMMAND.INTX_DISABLE` pin mask for INTx).  Use them
-only when you cannot quiet the device at its own registers (e.g. a generic/pass-through
-handler).  They return whether the (un)mask took effect.  MSI-X per-vector masking is
-mandatory, so it always returns TRUE.  MSI per-vector masking is **optional**: both calls
-return FALSE when the device lacks the Per-Vector Masking Capability — there is no mask bit,
-so the vector cannot be quieted at the device and you must mask it at the device's own
-registers instead.  For INTx, `UnmaskIntVector()` returns FALSE when the line never
-de-asserted (an interrupt is still pending) — the server will not fire again, so you must
-re-signal the task yourself to drain it:
+An INTx line can carry more than one function: the pin swizzle maps the whole device tree onto
+four lines, so two devices can land on the same one.  `gic400.library` currently takes one
+server per interrupt, so today the second device on a line is refused with `PCIE_ERR_BUSY` and
+a server is only ever called for its own device.  That is gic400's limitation and it is
+expected to go: once gic400 chains servers, the call succeeds and **every server on the line is
+called for every interrupt on it**.
 
-```c
-MaskIntVector(pd, 0);                 /* LVO -366 */
-/* ... */
-if (!UnmaskIntVector(pd, 0))          /* LVO -372 — INTx pending-guard */
-    Signal(unit->task, 1UL << unit->irq_signal);
-```
+Write an INTx server for that now — it costs nothing while lines stay exclusive:
+
+- Test a register of **your own device** first and return "not handled" unless it raised the
+  interrupt.  Config space is not reachable from an interrupt server (on bus ≥ 1 it is an
+  index/data pair), so the test has to be a memory-mapped device register — `xhci.device` reads
+  `USBSTS`, `nvme.device` looks for a fresh completion-queue entry.
+- "Not handled" means returning with the **Z flag set**, per `exec.library/AddIntServer`; Z
+  clear ends the walk.  Returning 0 from C normally produces that, but check the disassembly:
+  the autodoc warns that a compiler epilogue can leave the flag set from something else.
+- `MaskIntVector()` needs no change of habit: it gates your device only, so it quiets your
+  contribution and leaves the rest of the line asserted.
+- Chain order is the server's `ln_Pri`, highest first, and every member ahead of the one that
+  claims the interrupt pays its own device-register read — so give a busy device the higher
+  priority.
+
+`gic400.library`'s `interrupt-chaining.md` has the full contract.  MSI and MSI-X vectors are
+device-private and are never shared, so none of this applies to them.
 
 ### [obsolete] — `EnableMSI` / `pci_add_intserver`
 
@@ -691,22 +711,26 @@ if (AddIntVectorServer(pd, 0, &unit->irq_isr) != PCIE_OK) {  /* LVO -354 */
 
 ### Step 8 — ISR masking pattern (irq.c)
 
-Mask at *your device's* own registers, not at the PCIe level.  A device-level mask
-deasserts the INTx pin (and gates MSI/MSI-X) for both interrupt types, so a single write
-quiets the source until the UnitTask rearms — no `MaskMSI`/`CheckSetINTxMask` needed.  See
-§9 ("ISR-safe masking") for why this also handles shared INTx lines correctly.
+The interrupt server masks the source and signals the UnitTask; the task drains the device
+and unmasks.  With MSI or MSI-X, mask the vector (`MaskIntVector`, a register write inside
+the Pi); with INTx, mask at *your device's* own mask register, which deasserts the pin.
+A device mask register that gates every interrupt type is fine for all three.  See §9
+("Quieting the interrupt from the server").
 
 ```c
-/* Inside ISR: confirm it's ours (also the shared-INTx check), mask at the
- * device, then signal UnitTask */
-if (!device_irq_is_ours(unit))
-    return 0;                           /* let the next shared-line server run */
-device_irq_mask(unit);                  /* your device's mask register */
+/* Interrupt server */
+if (unit->itype != PCI_IRQ_INTX)        /* from GetIntVectorType() at attach */
+    MaskIntVector(pd, 0);               /* LVO -366 */
+else
+    device_irq_mask(unit);              /* your device's mask register */
 Signal(unit->task, 1UL << unit->irq_signal);
 return 1;
 
-/* Inside UnitTask after processing: rearm at the device */
-device_irq_unmask(unit);                /* re-raises if events arrived while masked */
+/* UnitTask, after processing: fires again if events arrived while masked */
+if (unit->itype != PCI_IRQ_INTX)
+    UnmaskIntVector(pd, 0);             /* LVO -372 */
+else
+    device_irq_unmask(unit);
 ```
 
 ### Step 9 — Teardown (unit.c)

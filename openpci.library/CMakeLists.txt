@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(openpci.library VERSION 45.12 LANGUAGES C ASM)
+project(openpci.library VERSION 45.13 LANGUAGES C ASM)
 
 # Version string
 string(TIMESTAMP CURRENT_DATE "(%d.%m.%Y)")
+if(EMU68_BUILD_STAMP)   # local-build marker from the stack's build.sh; empty in releases
+    string(APPEND CURRENT_DATE " ${EMU68_BUILD_STAMP}")
+endif()
 set(VERSTRING "$VER: ${PROJECT_NAME} ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR} ${CURRENT_DATE}")
 
 # Compile and link options
@@ -26,14 +29,12 @@ add_link_options(
     -Wall
     -Wextra
     -s
-    -Wl,-e,_doNotExecute
 )
 
 # Executable
 add_executable(openpci_library
     src/openpci_main.c
     src/openpci_trampolines.S
-    src/openpci_end.c
 )
 
 target_compile_definitions(openpci_library
@@ -58,6 +59,10 @@ set_target_properties(openpci_library PROPERTIES
     OUTPUT_NAME openpci
     SUFFIX ".library"
 )
+
+# Layout contract (entry at offset 0, RT_ENDSKIP, no writable sections) belongs to the
+# linker, not to source order -- see Emu68CommonModuleLayout.cmake.
+emu68_module_layout(openpci_library)
 
 install(
     TARGETS openpci_library

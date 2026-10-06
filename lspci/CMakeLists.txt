@@ -4,6 +4,9 @@ project(lspci VERSION ${CMAKE_PROJECT_VERSION})
 # Version stamp ($VER:) embedded in the binary.  CURRENT_DATE is not inherited
 # from the pcie-library parent scope, so derive it here as the sibling libraries do.
 string(TIMESTAMP CURRENT_DATE "(%d.%m.%Y)")
+if(EMU68_BUILD_STAMP)   # local-build marker from the stack's build.sh; empty in releases
+    string(APPEND CURRENT_DATE " ${EMU68_BUILD_STAMP}")
+endif()
 
 # Compile and link options
 add_compile_options(
@@ -38,9 +41,7 @@ target_link_libraries(lspci
         Emu68Common::common
 )
 
-# Hosted CLI program: for the serial backend, link debug.lib (KPrintF). libc
-# supplies __divsi3, so no glue and no ROM check.
-emu68_debug_backend_finalize(lspci)
+# Hosted CLI program: not ROMABLE, so no ROM check.
 
 # pcie_library_sfd_headers generates proto/bcmpcie.h (and clib/, inline/, pragmas/) into
 # the build tree. Reference it directly so lspci can build before the install step

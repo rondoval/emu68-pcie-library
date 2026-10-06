@@ -8,7 +8,7 @@
 #include <clib/exec_protos.h>
 #else
 #define __NOLIBBASE__
-#define EXEC_BASE_NAME (*(struct ExecBase **)4UL)
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <proto/exec.h>
 #endif
 
@@ -29,6 +29,7 @@
 
 s32 pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_device *bridge, struct pci_controller *ctlr)
 {
+	struct ExecBase *SysBase = ctlr->sysBase;
 	KprintfT("[pcie] %s: creating bus for bridge %lx, function %ld\n", __func__, PCI_DEV(bridge->bdf), PCI_FUNC(bridge->bdf));
 	struct pci_bus *bus = AllocMem(sizeof(*bus), MEMF_CLEAR);
 	if (!bus)
@@ -39,6 +40,7 @@ s32 pci_create_bus(struct pci_bus **busp, struct pci_bus *parent, struct pci_dev
 	bus->parent = parent;
 	bus->pci_bridge = bridge;
 	bus->controller = ctlr;
+	bus->sysBase = ctlr->sysBase;
 
 	AddTailMinList(&ctlr->buses, (struct MinNode *)bus);
 	*busp = bus;
@@ -86,6 +88,7 @@ s32 pci_probe_bus(struct pci_bus *bus)
 			return 0;
 
 		bus->controller = bus->parent->controller;
+		bus->sysBase = bus->parent->sysBase;
 	}
 
 	bus->pci_bridge->flags |= DM_FLAG_ACTIVATED;
@@ -141,6 +144,7 @@ s32 pci_auto_config_devices(struct pci_bus *bus)
 
 s32 pci_create_device(struct pci_bus *bus, pci_dev_t bdf, u16 vendor, u16 device, u32 class, u8 header_type, struct pci_device **devp)
 {
+	struct ExecBase *SysBase = bus->sysBase;
 	KprintfT("[pcie] %s: creating pci_device %lx:%ld (vendor 0x%lx device 0x%lx)\n", __func__, PCI_DEV(bdf), PCI_FUNC(bdf), vendor, device);
 	*devp = NULL;
 	struct pci_device *dev = AllocMem(sizeof(struct pci_device), MEMF_CLEAR);

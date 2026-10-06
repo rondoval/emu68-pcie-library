@@ -4,6 +4,8 @@
  * Written by Simon Glass <sjg@chromium.org>
  */
 
+#define __NOLIBBASE__
+#define EXEC_BASE_NAME SysBase /* a local in every function, from its context's sysBase */
 #include <pci.h>
 #include <debug.h>
 #include <errors.h>
@@ -48,12 +50,6 @@ s32 pci_get_bus_max(const struct pci_controller *controller)
 BOOL pci_is_root_bus(const struct pci_bus *bus)
 {
 	return bus->parent == NULL;
-}
-
-struct pci_controller *pci_get_controller(const struct pci_bus *bus)
-{
-	/* we're copying the controller from the parent bus on bind */
-	return bus->controller;
 }
 
 u32 pci_get_ff(enum pci_size_t size)

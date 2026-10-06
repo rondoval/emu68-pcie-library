@@ -15,8 +15,8 @@
 #include <timing.h>
 #include <debug.h>
 
-LONG __attribute__((used, no_reorder)) doNotExecute(void);
-LONG __attribute__((used, no_reorder)) doNotExecute(void)
+LONG __attribute__((used, section(".text.entry"))) doNotExecute(void);
+LONG __attribute__((used, section(".text.entry"))) doNotExecute(void)
 {
     return -1;
 }
@@ -26,7 +26,7 @@ static const char libraryName[] = LIBRARY_NAME;
 static const char libraryIdString[] = LIBRARY_IDSTRING;
 static const APTR initTable[4];
 
-const struct Resident pcieResident __attribute__((used)) = {
+const struct Resident pcieResident __attribute__((used, section(".text.modhdr"))) = {
     RTC_MATCHWORD,
     (struct Resident *)&pcieResident,
     (APTR)&endOfCode,
@@ -57,7 +57,7 @@ const struct Resident pcieResident __attribute__((used)) = {
  *
  * Returns the allocated pdev on success, NULL on allocation failure.
  */
-static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
+static struct pci_dev *pcie_make_pdev(struct ExecBase *SysBase, struct pci_device *idev)
 {
     struct pci_dev *pdev = AllocMem(sizeof(*pdev), MEMF_CLEAR | MEMF_PUBLIC);
     if (!pdev)
@@ -94,6 +94,7 @@ static struct pci_dev *pcie_make_pdev(struct pci_device *idev)
  */
 static s32 pcie_build_dev_list(struct PCIELibBase *base)
 {
+    struct ExecBase *SysBase = base->sysBase;
     KprintfT("[pcie] Building device list...\n");
     struct pci_dev *prev = NULL;
     s32 bus_max = pci_get_bus_max(base->ctrl);
@@ -112,7 +113,7 @@ static s32 pcie_build_dev_list(struct PCIELibBase *base)
                     (ULONG)idev->vendor, (ULONG)idev->device,
                     (ULONG)bus_index, (ULONG)PCI_DEV(idev->devfn), (ULONG)PCI_FUNC(idev->devfn));
 
-            struct pci_dev *pdev = pcie_make_pdev(idev);
+            struct pci_dev *pdev = pcie_make_pdev(SysBase, idev);
             if (!pdev)
             {
                 Kprintf("[pcie] %s: out of memory building device list\n", __func__);
@@ -141,6 +142,7 @@ static s32 pcie_build_dev_list(struct PCIELibBase *base)
  */
 static void pcie_free_dev_list(struct PCIELibBase *base)
 {
+    struct ExecBase *SysBase = base->sysBase;
     struct pci_dev *cur = base->devListHead;
     while (cur != NULL)
     {
@@ -158,12 +160,14 @@ static void pcie_free_dev_list(struct PCIELibBase *base)
  */
 static s32 pcie_hw_init(struct PCIELibBase *base)
 {
+    struct ExecBase *SysBase = base->sysBase;
     base->ctrl = AllocMem(sizeof(*base->ctrl), MEMF_CLEAR | MEMF_PUBLIC);
     if (!base->ctrl)
     {
         Kprintf("[pcie] %s: out of memory for pci_controller\n", __func__);
         return -1;
     }
+    base->ctrl->sysBase = base->sysBase;
     _NewMinList(&base->ctrl->buses);
 
     s32 res = brcm_pcie_probe(base->ctrl, 0);
@@ -182,9 +186,10 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     }
     _NewMinList(&base->rootBus->devices);
     base->rootBus->controller = base->ctrl;
+    base->rootBus->sysBase = base->ctrl->sysBase;
     base->rootBus->parent = NULL;
     base->rootBus->pci_bridge = NULL;
-    CopyMem((APTR) "pcie0", base->rootBus->name, 6);
+    memcpy(base->rootBus->name, "pcie0", 6);
     base->rootBus->bus_number = 0;
     AddTailMinList(&base->ctrl->buses, (struct MinNode *)base->rootBus);
     KprintfT("[pcie] %s: root bus initialized\n", __func__);
@@ -205,7 +210,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     }
     Kprintf("[pcie] %s: devices auto-configured successfully\n", __func__);
 
-    (void)bcm2711_reload_vl805_firmware();
+    (void)bcm2711_reload_vl805_firmware(SysBase);
     delay_ms(1);
     KprintfT("[pcie] %s: VL805 firmware reloaded\n", __func__);
 
@@ -219,7 +224,7 @@ static s32 pcie_hw_init(struct PCIELibBase *base)
     /* DMA buffers handed to clients must live in Emu68 (Pi-DRAM) RAM the PCIe engine
      * can reach, so the pool is region-restricted; with no device tree there is no
      * reachable region and we refuse to come up. */
-    dma_mem_init(&base->dma_ctx);
+    dma_mem_init(&base->dma_ctx, SysBase);
     base->dmaPool = dma_pool_create(&base->dma_ctx);
     if (!base->dmaPool)
     {
@@ -250,6 +255,7 @@ err_probe:
  */
 static void pcie_hw_shutdown(struct PCIELibBase *base)
 {
+    struct ExecBase *SysBase = base->sysBase;
     pcie_free_dev_list(base);
     brcm_pcie_remove(base->ctrl);
     FreeMem(base->rootBus, sizeof(*base->rootBus));
@@ -271,6 +277,7 @@ static void pcie_hw_shutdown(struct PCIELibBase *base)
 
 static ULONG LibExpunge(struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     ULONG segList = base->segList;
 
     if (base->libNode.lib_OpenCnt > 0)
@@ -289,10 +296,10 @@ static ULONG LibExpunge(struct PCIELibBase *base asm("a6"))
     return segList;
 }
 
-static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist asm("a0"), struct ExecBase *execBase asm("a6"))
+static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist asm("a0"), struct ExecBase *SysBase asm("a6"))
 {
     struct PCIELibBase *base = (struct PCIELibBase *)libBase;
-    (void)execBase;
+    base->sysBase = SysBase;
 
     base->segList = seglist;
     base->libNode.lib_Revision = (UWORD)LIBRARY_REVISION;
@@ -308,6 +315,7 @@ static struct Library *LibInit(struct Library *libBase asm("d0"), ULONG seglist 
 
 static struct PCIELibBase *LibOpen(ULONG version asm("d0"), struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     (void)version;
 
     ObtainSemaphore(&base->semaphore);
@@ -330,6 +338,7 @@ static struct PCIELibBase *LibOpen(ULONG version asm("d0"), struct PCIELibBase *
 
 static ULONG LibClose(struct PCIELibBase *base asm("a6"))
 {
+    struct ExecBase *SysBase = base->sysBase;
     ObtainSemaphore(&base->semaphore);
 
     base->libNode.lib_OpenCnt--;
