@@ -47,7 +47,7 @@ are configured at `/work` inside the toolchain container), from the
 
 Debug backend: `EMU68_CONFIGURE_ARGS="-DEMU68_DEBUG_BACKEND=serial" ./scripts/docker-build.sh` (default `pistorm` | `serial` | `off`). Selected stack-wide via `emu68-common`; `serial` links `debug.lib` and is not ROM-able.
 
-SFD headers are generated at build time by `cmake/GenerateSfdHeaders.cmake` (target `pcie_library_sfd_headers`) from `sfd/bcmpcie.sfd` into `build/bcmpcie.library/generated/include`.
+SFD headers are generated at build time by emu68-common's `emu68_sfd_headers()` (`Emu68CommonSfd.cmake`; target `pcie_library_sfd_headers`) from `sfd/bcmpcie.sfd` into `build/bcmpcie.library/generated/include`.
 
 ## SFD and Jump Table Discipline
 

@@ -9,43 +9,17 @@ endif()
 set(VERSTRING "$VER: ${PROJECT_NAME} ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR} ${CURRENT_DATE}")
 string(REGEX REPLACE "\\.library$" "" LIBRARY_BASENAME "${PROJECT_NAME}")
 
-# Find SFDC tool
-find_program(SFDC_EXECUTABLE
-    NAMES sfdc
-    HINTS /opt/m68k-amigaos/bin
-    REQUIRED
-)
-
-# SFD header generation
-set(PCIE_GENERATED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/include)
-set(PCIE_SFD_FILE ${CMAKE_SOURCE_DIR}/sfd/bcmpcie.sfd)
-set(PCIE_GENERATED_HEADERS
-    ${PCIE_GENERATED_INCLUDE_DIR}/clib/${LIBRARY_BASENAME}_protos.h
-    ${PCIE_GENERATED_INCLUDE_DIR}/inline/${LIBRARY_BASENAME}.h
-    ${PCIE_GENERATED_INCLUDE_DIR}/pragmas/${LIBRARY_BASENAME}_pragmas.h
-    ${PCIE_GENERATED_INCLUDE_DIR}/proto/${LIBRARY_BASENAME}.h
-)
-
-add_custom_command(
-    OUTPUT ${PCIE_GENERATED_HEADERS}
-    COMMAND ${CMAKE_COMMAND}
-        -DSFDC_EXECUTABLE=${SFDC_EXECUTABLE}
-        -DSFD_FILE=${PCIE_SFD_FILE}
-        -DOUTPUT_DIR=${PCIE_GENERATED_INCLUDE_DIR}
-        -DOUTPUT_BASENAME=${LIBRARY_BASENAME}
-        -P ${CMAKE_SOURCE_DIR}/cmake/GenerateSfdHeaders.cmake
-    DEPENDS
-        ${PCIE_SFD_FILE}
-        ${CMAKE_SOURCE_DIR}/cmake/GenerateSfdHeaders.cmake
-    VERBATIM
-)
-
-add_custom_target(pcie_library_sfd_headers ALL DEPENDS ${PCIE_GENERATED_HEADERS})
-
 # Dependencies
 find_package(Emu68Common CONFIG REQUIRED)
 find_package(GIC400 CONFIG REQUIRED)
 find_package(mailbox CONFIG REQUIRED)
+
+# SFD -> clib/inline/pragmas/proto headers (emu68-common's emu68_sfd_headers)
+set(PCIE_GENERATED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/include)
+emu68_sfd_headers(pcie_library_sfd_headers ALL
+    OUTPUT_DIR ${PCIE_GENERATED_INCLUDE_DIR}
+    SFD ${CMAKE_SOURCE_DIR}/sfd/bcmpcie.sfd
+)
 
 # Compile definitions and options
 add_compile_definitions(
