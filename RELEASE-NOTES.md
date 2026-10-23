@@ -16,8 +16,11 @@ None.
   library's own `GenerateSfdHeaders.cmake` is gone.
 - `find_package()` names the oldest version of each dependency the library
   builds against: emu68-common 2.1 (for `emu68_sfd_headers()`),
-  gic400.library 1.3, mailbox.resource 1.1. An older one now fails at
-  configure instead of mid-build.
+  gic400.library 1.3. An older one now fails at configure instead of
+  mid-build.
+- The `mailbox.resource` client headers come with the toolchain image
+  (amiga-build-container); the library no longer finds a `mailbox` CMake
+  package.
 
 ---
 

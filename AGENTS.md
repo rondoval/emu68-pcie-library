@@ -35,7 +35,7 @@
 
 ## Build Commands
 
-Required installed dependencies: `emu68-common`, `emu68-gic400-library`, and `mailbox` (the library links `mailbox.resource` for VL805 firmware reload). The top-level project builds three targets: `pcie_library` (output `bcmpcie.library`), `openpci_library` (output `openpci.library`), and `lspci`.
+Required installed dependencies: `emu68-common` and `emu68-gic400-library`. The `mailbox.resource` client headers (VL805 firmware reload) come with the toolchain image. The top-level project builds three targets: `pcie_library` (output `bcmpcie.library`), `openpci_library` (output `openpci.library`), and `lspci`.
 
 Build through the superbuild's container wrapper — never host `cmake` (build trees
 are configured at `/work` inside the toolchain container), from the

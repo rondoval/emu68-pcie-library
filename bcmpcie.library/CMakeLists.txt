@@ -12,7 +12,6 @@ string(REGEX REPLACE "\\.library$" "" LIBRARY_BASENAME "${PROJECT_NAME}")
 # Dependencies
 find_package(Emu68Common 2.1 CONFIG REQUIRED) # 2.1: emu68_sfd_headers()
 find_package(GIC400 1.3 CONFIG REQUIRED)
-find_package(mailbox 1.1 CONFIG REQUIRED)
 
 # SFD -> clib/inline/pragmas/proto headers (emu68-common's emu68_sfd_headers)
 set(PCIE_GENERATED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/include)
@@ -91,7 +90,6 @@ target_include_directories(pcie_library SYSTEM
 target_include_directories(pcie_library
     PRIVATE
         ${PCIE_GENERATED_INCLUDE_DIR}
-        $<TARGET_PROPERTY:mailbox::mailbox,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 add_dependencies(pcie_library pcie_library_sfd_headers)
