@@ -1,3 +1,26 @@
+# Release notes - bcmpcie.library 2.6
+
+Changes since v2.5.
+
+---
+
+## Breaking changes
+
+None.
+
+---
+
+## Build & tooling
+
+- The SFD headers come from emu68-common's `emu68_sfd_headers()`; the
+  library's own `GenerateSfdHeaders.cmake` is gone.
+- `find_package()` names the oldest version of each dependency the library
+  builds against: emu68-common 2.1 (for `emu68_sfd_headers()`),
+  gic400.library 1.3, mailbox.resource 1.1. An older one now fails at
+  configure instead of mid-build.
+
+---
+
 # Release notes — bcmpcie.library 2.5
 
 Changes since v2.4.

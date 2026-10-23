@@ -10,9 +10,9 @@ set(VERSTRING "$VER: ${PROJECT_NAME} ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_
 string(REGEX REPLACE "\\.library$" "" LIBRARY_BASENAME "${PROJECT_NAME}")
 
 # Dependencies
-find_package(Emu68Common CONFIG REQUIRED)
-find_package(GIC400 CONFIG REQUIRED)
-find_package(mailbox CONFIG REQUIRED)
+find_package(Emu68Common 2.1 CONFIG REQUIRED) # 2.1: emu68_sfd_headers()
+find_package(GIC400 1.3 CONFIG REQUIRED)
+find_package(mailbox 1.1 CONFIG REQUIRED)
 
 # SFD -> clib/inline/pragmas/proto headers (emu68-common's emu68_sfd_headers)
 set(PCIE_GENERATED_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/include)

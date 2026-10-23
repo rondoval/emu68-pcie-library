@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(emu68-pcie-library VERSION 2.5)
+project(emu68-pcie-library VERSION 2.6)
 
 # Dependencies
-find_package(Emu68Common REQUIRED)
-find_package(GIC400 REQUIRED)
+find_package(Emu68Common 2.1 REQUIRED) # 2.1: emu68_sfd_headers()
+find_package(GIC400 1.3 REQUIRED)
 
 # Set default install prefix to ./install subdirectory
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
