@@ -192,9 +192,10 @@ lspci/              Standalone AmigaOS CLI diagnostic tool
 |---|---|---|
 | `Emu68Common` | `emu68-common` | Pool allocators, `_SNPrintf`, shared utilities |
 | `GIC400` | `emu68-gic400-library` | ARM GIC-400 interrupt controller – required for MSI |
-| `mailbox` | `mailbox.resource` | Mailbox proto headers used by the VL805 firmware reload helper |
 
-All listed dependencies must be installed before building this project.
+All listed dependencies must be installed before building this project. The `mailbox.resource`
+client headers the VL805 firmware reload helper uses (`<proto/mailbox.h>`) come with the toolchain
+image (amiga-build-container).
 
 ---
 
@@ -211,9 +212,9 @@ cmake --install build
 
 Debug backend: append `-DEMU68_DEBUG_BACKEND=serial` (default `pistorm` | `serial` | `off`) — selected stack-wide via `emu68-common`. `serial` routes debug to the AmigaOS serial console (`debug.lib`) and is not ROM-able; `off` compiles debug out.
 
-Recommended workflow: install `devicetree.resource`, `mailbox.resource`, `emu68-common`, `emu68-gic400-library`, and this package into the same prefix.
+Recommended workflow: install `emu68-common`, `emu68-gic400-library`, and this package into the same prefix.
 
-If you keep dependencies in separate install trees instead, set `CMAKE_PREFIX_PATH` to the `mailbox.resource`, `emu68-common`, and `emu68-gic400-library` install prefixes.
+If you keep dependencies in separate install trees instead, set `CMAKE_PREFIX_PATH` to the `emu68-common` and `emu68-gic400-library` install prefixes.
 
 The CMake package `Emu68PCIe` is then importable by downstream projects:
 
