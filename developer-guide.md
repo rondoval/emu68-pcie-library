@@ -369,9 +369,9 @@ pci_set_master(pd);   /* LVO -144 */
 The driver chooses the interrupt type and how many vectors it wants.  `AllocIntVectors()`
 reserves vectors of the **best allowed type in priority order MSI-X → MSI → INTx**, where
 `flags` is any combination of `PCI_IRQ_MSIX`, `PCI_IRQ_MSI`, `PCI_IRQ_INTX` (or
-`PCI_IRQ_ALL_TYPES`) from `<libraries/pci_constants.h>`.  A type is attempted only when its
-bit is set, so omitting a bit disables it — e.g. drop `PCI_IRQ_MSIX` to forbid MSI-X, or
-pass `PCI_IRQ_INTX` alone to force the legacy line.  It returns the number of vectors
+`PCI_IRQ_ALL_TYPES`) from `<libraries/bcmpcie.h>`, which `proto/bcmpcie.h` includes.  A
+type is attempted only when its bit is set, so omitting a bit disables it — e.g. drop
+`PCI_IRQ_MSIX` to forbid MSI-X, or pass `PCI_IRQ_INTX` alone to force the legacy line.  It returns the number of vectors
 actually reserved (≥ `min`), or a negative `PCIE_ERR_*` code on failure (see *Error codes*
 below).
 
@@ -797,8 +797,8 @@ target_link_libraries(my_driver PRIVATE Emu68PCIe::pcie_headers)
 ```
 
 The `pcie_headers` target provides the public header search paths
-(`<libraries/openpci.h>`, `<libraries/pcitags.h>`, `<libraries/pci_constants.h>`,
-`<libraries/pci_ids.h>`, generated proto/clib/inline headers).
+(`<libraries/bcmpcie.h>`, `<libraries/openpci.h>`, `<libraries/pcitags.h>`,
+`<libraries/pci_constants.h>`, `<libraries/pci_ids.h>`, generated proto/clib/inline headers).
 
 The library itself is opened at runtime with `OpenLibrary()` — there is no import
 library to link against.

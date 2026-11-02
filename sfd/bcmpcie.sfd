@@ -11,6 +11,7 @@
 ==include <utility/hooks.h>
 ==include <libraries/openpci.h>
 ==include <libraries/bcmpcie_errors.h>
+==include <libraries/bcmpcie.h>
 * -30: Return the bus type found
 UWORD pci_bus() ()
 * -36..-66: Legacy PCI I/O port access (stubs; future work)
@@ -104,7 +105,7 @@ void MaskMSI(struct pci_dev *dev) (A0)
 void UnmaskMSI(struct pci_dev *dev) (A0)
 BOOL CheckSetINTxMask(struct pci_dev *dev, BOOL mask) (A0,D0)
 * -342: Typed, multi-vector interrupt API (preferred over EnableMSI/pci_add_intserver).
-* flags is a mask of PCI_IRQ_INTX | PCI_IRQ_MSI | PCI_IRQ_MSIX (see pci_constants.h);
+* flags is a mask of PCI_IRQ_INTX | PCI_IRQ_MSI | PCI_IRQ_MSIX (libraries/bcmpcie.h);
 * AllocIntVectors picks the best allowed type MSI-X -> MSI -> INTx and returns the
 * number of vectors reserved.  AddIntVectorServer/RemIntVectorServer attach and detach
 * a vector's interrupt server (one per vector; RemIntVectorServer ignores an isr that

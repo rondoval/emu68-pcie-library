@@ -157,7 +157,7 @@ Use `lspci` to verify that:
 
 ```
 bcmpcie.library/    Full bcmpcie.library implementation
-  include/          Public headers (openpci.h, pcitags.h, pci_constants.h, pci_ids.h)
+  include/          Public headers (bcmpcie.h, openpci.h, pcitags.h, pci_constants.h, pci_ids.h)
   src/              Library source (lifecycle, API dispatch, region/interrupt/DMA helpers)
 
 openpci.library/    Compatibility shim: forwards openpci API to bcmpcie.library

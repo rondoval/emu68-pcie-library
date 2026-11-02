@@ -25,7 +25,7 @@
 #include <exec/interrupts.h>
 #include <types.h>
 #include <bits.h>
-#include <libraries/pci_constants.h> /* PCI_IRQ_*: the values of pci_device.active.mode */
+#include <libraries/bcmpcie.h> /* PCI_IRQ_*: the values of pci_device.active.mode */
 
 #if defined(__INTELLISENSE__)
 #define asm(x)

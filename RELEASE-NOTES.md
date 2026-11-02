@@ -24,6 +24,16 @@ None.
 
 ---
 
+## For developers
+
+- The interrupt-type flags `PCI_IRQ_INTX`, `PCI_IRQ_MSI`, `PCI_IRQ_MSIX` and
+  `PCI_IRQ_ALL_TYPES` move to a new public header, `<libraries/bcmpcie.h>`,
+  which `proto/bcmpcie.h` includes: a driver no longer needs
+  `pci_constants.h` for `AllocIntVectors()`. `pci_constants.h` includes the
+  new header, so existing code builds unchanged.
+
+---
+
 # Release notes — bcmpcie.library 2.5
 
 Changes since v2.4.

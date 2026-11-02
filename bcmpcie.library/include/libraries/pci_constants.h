@@ -13,6 +13,7 @@
 
 #include <types.h>
 #include <bits.h>
+#include <libraries/bcmpcie.h> /* PCI_IRQ_*, AllocIntVectors's flags */
 
 #define PCI_DEVFN(slot, func) ((((slot) & 0x1f) << 3) | ((func) & 0x07))
 #define PCI_SLOT(devfn) (((devfn) >> 3) & 0x1f)
@@ -320,16 +321,6 @@
 #define PCI_MSIX_PBA 0x08				 /* Pending bit array offset / BIR */
 #define PCI_MSIX_PBA_BIR 0x00000007		 /* BAR index holding the PBA */
 #define PCI_MSIX_PBA_OFFSET 0xfffffff8	 /* Offset into the BAR */
-
-/*
- * Interrupt-type selector flags for AllocIntVectors().  A type is attempted
- * only when its bit is set, in priority order MSI-X -> MSI -> INTx.  Omit a bit
- * to forbid that type (e.g. drop PCI_IRQ_MSIX to disable MSI-X).
- */
-#define PCI_IRQ_INTX BIT(0) /* legacy INTx pin */
-#define PCI_IRQ_MSI BIT(1)	/* message-signalled interrupts */
-#define PCI_IRQ_MSIX BIT(2) /* extended message-signalled interrupts */
-#define PCI_IRQ_ALL_TYPES (PCI_IRQ_INTX | PCI_IRQ_MSI | PCI_IRQ_MSIX)
 
 /* MSI-X table entry layout (16 bytes per vector, in device memory / a BAR) */
 #define PCI_MSIX_ENTRY_SIZE 16
