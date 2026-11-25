@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14.0)
-project(emu68-pcie-library VERSION 2.6)
+project(emu68-pcie-library VERSION 2.7)
 
 # Dependencies
 find_package(Emu68Common 2.5 REQUIRED) # 2.5: be32(), __be32; 2.1: emu68_sfd_headers()

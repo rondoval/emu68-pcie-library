@@ -1,3 +1,21 @@
+# Release notes - bcmpcie.library 2.7
+
+Changes since v2.6.
+
+Nothing changes for users: the library finds the PCIe bus and its devices as 2.6
+did.
+
+---
+
+## Build & tooling
+
+- The controller's device-tree cells (its MMIO window, the interrupt map and
+  its phandles) are read with emu68-common's `be32()`, as device-tree cells are
+  big-endian. On m68k the code is the same as before.
+- `find_package()` asks for emu68-common 2.5, the first with `be32()`.
+
+---
+
 # Release notes - bcmpcie.library 2.6
 
 Changes since v2.5.
@@ -15,9 +33,9 @@ None.
 - The SFD headers come from emu68-common's `emu68_sfd_headers()`; the
   library's own `GenerateSfdHeaders.cmake` is gone.
 - `find_package()` names the oldest version of each dependency the library
-  builds against: emu68-common 2.5 (for `be32()`, which reads the device
-  tree's big-endian cells), gic400.library 1.3. An older one now fails at
-  configure instead of mid-build.
+  builds against: emu68-common 2.1 (for `emu68_sfd_headers()`),
+  gic400.library 1.3. An older one now fails at configure instead of
+  mid-build.
 - The `mailbox.resource` client headers come with the toolchain image
   (amiga-build-container); the library no longer finds a `mailbox` CMake
   package.
