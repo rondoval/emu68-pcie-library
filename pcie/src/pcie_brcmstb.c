@@ -25,6 +25,7 @@
 #include <pci.h>
 #include <debug.h>
 #include <pci_util.h>
+#include <byteorder.h>
 #include <devtree.h>
 #include <errors.h>
 #include <iomem.h>
@@ -451,7 +452,7 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		DT_CloseKey(key);
 		return -EINVAL;
 	}
-	u32 mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(u32);
+	u32 mmio_window_phys_cells = DT_GetPropLen(mmio_window_phys_prop) / sizeof(__be32);
 	ctrl->mmio_window_phys = DT_GetNumber(DT_GetPropValue(mmio_window_phys_prop), mmio_window_phys_cells);
 	ctrl->mmio_window_virtual = (u8 *)DT_GetPropertyValueULONG(DeviceTreeBase, key, "emu68,pci-mmio-virt", 0);
 	ctrl->mmio_window_size = DT_GetPropertyValueULONG(DeviceTreeBase, key, "emu68,pci-mmio-size", SZ_64M);
@@ -475,14 +476,14 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 		const u32 child_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#address-cells", 2);
 		const u32 child_int_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#interrupt-cells", 1);
 		const u32 child_cells = child_addr_cells + child_int_cells + 1; /* up to and including the phandle */
-		const u32 *entry = DT_GetPropValue(int_map_prop);
-		u32 cells_left = DT_GetPropLen(int_map_prop) / sizeof(u32);
+		const __be32 *entry = DT_GetPropValue(int_map_prop);
+		u32 cells_left = DT_GetPropLen(int_map_prop) / sizeof(__be32);
 		APTR root = DT_OpenKey((CONST_STRPTR) "/");
 
 		while (cells_left >= child_cells)
 		{
 			const u32 pin = (u32)DT_GetNumber(entry + child_addr_cells, child_int_cells);
-			const u32 phandle = entry[child_cells - 1];
+			const u32 phandle = be32(entry[child_cells - 1]);
 			APTR parent = DT_FindByPHandle(DeviceTreeBase, root, phandle); /* NULL reads as the defaults below */
 			const u32 parent_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, parent, "#address-cells", 0);
 			const u32 parent_int_cells = DT_GetPropertyValueULONG(DeviceTreeBase, parent, "#interrupt-cells", 0);
@@ -493,11 +494,11 @@ static s32 brcm_devtree_parse(struct pci_controller *ctrl)
 				break;
 			}
 
-			const u32 *irq = entry + child_cells + parent_addr_cells;
+			const __be32 *irq = entry + child_cells + parent_addr_cells;
 			KprintfT("[pcie] %s: interrupt-map: pin %ld -> phandle %ld, type %ld, number %ld\n",
-					 __func__, pin, phandle, irq[0], irq[1]);
-			if (pin >= 1 && pin <= 4 && irq[0] == 0 /* GIC_SPI */)
-				ctrl->INT_x_mapping[pin - 1] = (s32)(irq[1] + 32);
+					 __func__, pin, phandle, be32(irq[0]), be32(irq[1]));
+			if (pin >= 1 && pin <= 4 && be32(irq[0]) == 0 /* GIC_SPI */)
+				ctrl->INT_x_mapping[pin - 1] = (s32)(be32(irq[1]) + 32);
 
 			entry += entry_cells;
 			cells_left -= entry_cells;
@@ -564,14 +565,14 @@ struct dt_pci_range
 	u32 attr; /* the PCI address's attribute cell */
 	u64 bus;  /* the PCI address */
 	u64 cpu;  /* the CPU address */
-	u64 size;
+	u64 size; /* the window's length in bytes */
 };
 
 /* A walk over the records of one such property */
 struct dt_pci_ranges
 {
-	const u32 *next;
-	u32 cells_left;
+	const __be32 *next; /* the next record's first cell */
+	u32 cells_left;     /* cells from next to the property's end */
 	u32 pci_addr_cells; /* #address-cells of the PCI node */
 	u32 cpu_addr_cells; /* #address-cells of its parent */
 	u32 size_cells;		/* #size-cells of the PCI node */
@@ -604,7 +605,7 @@ static s32 dt_pci_ranges_open(struct pci_controller *ctlr, const char *propname,
 	}
 
 	it->next = DT_GetPropValue(prop); /* property values outlive the key */
-	it->cells_left = DT_GetPropLen(prop) / sizeof(u32);
+	it->cells_left = DT_GetPropLen(prop) / sizeof(__be32);
 	it->pci_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#address-cells", 0);
 	it->cpu_addr_cells = DT_GetPropertyValueULONG(DeviceTreeBase, DT_GetParent(key), "#address-cells", 2);
 	it->size_cells = DT_GetPropertyValueULONG(DeviceTreeBase, key, "#size-cells", 1);
@@ -629,8 +630,8 @@ static BOOL dt_pci_ranges_next(struct dt_pci_ranges *it, struct dt_pci_range *r)
 	if (it->cells_left < it->record_cells)
 		return FALSE;
 
-	const u32 *rec = it->next;
-	r->attr = rec[0];
+	const __be32 *rec = it->next;
+	r->attr = be32(rec[0]);
 	r->bus = DT_GetNumber(rec + DT_PCI_ATTR_CELLS, it->pci_addr_cells - DT_PCI_ATTR_CELLS);
 	r->cpu = DT_GetNumber(rec + it->pci_addr_cells, it->cpu_addr_cells);
 	r->size = DT_GetNumber(rec + it->pci_addr_cells + it->cpu_addr_cells, it->size_cells);

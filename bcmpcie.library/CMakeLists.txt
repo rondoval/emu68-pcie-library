@@ -10,7 +10,7 @@ set(VERSTRING "$VER: ${PROJECT_NAME} ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_
 string(REGEX REPLACE "\\.library$" "" LIBRARY_BASENAME "${PROJECT_NAME}")
 
 # Dependencies
-find_package(Emu68Common 2.1 CONFIG REQUIRED) # 2.1: emu68_sfd_headers()
+find_package(Emu68Common 2.5 CONFIG REQUIRED) # 2.5: be32(), __be32; 2.1: emu68_sfd_headers()
 find_package(GIC400 1.3 CONFIG REQUIRED)
 
 # SFD -> clib/inline/pragmas/proto headers (emu68-common's emu68_sfd_headers)

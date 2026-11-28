@@ -1,3 +1,21 @@
+# Release notes - bcmpcie.library 2.7
+
+Changes since v2.6.
+
+Nothing changes for users: the library finds the PCIe bus and its devices as 2.6
+did.
+
+---
+
+## Build & tooling
+
+- The controller's device-tree cells (its MMIO window, the interrupt map and
+  its phandles) are read with emu68-common's `be32()`, as device-tree cells are
+  big-endian. On m68k the code is the same as before.
+- `find_package()` asks for emu68-common 2.5, the first with `be32()`.
+
+---
+
 # Release notes - bcmpcie.library 2.6
 
 Changes since v2.5.
